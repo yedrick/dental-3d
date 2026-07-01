@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,8 +70,8 @@ function RolesPage() {
           </TableHeader>
           <TableBody>
             {Object.entries(grouped).map(([cat, list]) => (
-              <>
-                <TableRow key={`h-${cat}`} className="bg-muted/40">
+              <Fragment key={cat}>
+                <TableRow className="bg-muted/40">
                   <TableCell colSpan={1 + ROLES.length} className="font-semibold uppercase text-xs tracking-wider">
                     <Badge variant="outline">{cat}</Badge>
                   </TableCell>
@@ -92,7 +93,7 @@ function RolesPage() {
                     ))}
                   </TableRow>
                 ))}
-              </>
+              </Fragment>
             ))}
           </TableBody>
         </Table>
