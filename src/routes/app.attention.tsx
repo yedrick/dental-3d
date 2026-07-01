@@ -474,6 +474,7 @@ function EntregasTab() {
         patient_name: g.patient.full_name,
         delivered_count: pending.length,
         delivered_ids: ids,
+        study_ids: pending.map((it) => it.study_id),
         balance_before: Math.round(g.debt * 100) / 100,
         balance_after: Math.round(g.debt * 100) / 100,
         total_paid: Math.round(g.paid * 100) / 100,
