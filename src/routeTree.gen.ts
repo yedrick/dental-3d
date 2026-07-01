@@ -22,6 +22,7 @@ import { Route as AppPatientsRouteImport } from './routes/app.patients'
 import { Route as AppParamsRouteImport } from './routes/app.params'
 import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
 import { Route as AppDepositsRouteImport } from './routes/app.deposits'
+import { Route as AppDeliveryRouteImport } from './routes/app.delivery'
 import { Route as AppCommissionsRouteImport } from './routes/app.commissions'
 import { Route as AppCashboxRouteImport } from './routes/app.cashbox'
 import { Route as AppAuditRouteImport } from './routes/app.audit'
@@ -92,6 +93,11 @@ const AppDepositsRoute = AppDepositsRouteImport.update({
   path: '/deposits',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDeliveryRoute = AppDeliveryRouteImport.update({
+  id: '/delivery',
+  path: '/delivery',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCommissionsRoute = AppCommissionsRouteImport.update({
   id: '/commissions',
   path: '/commissions',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
     | '/app/params'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
     | '/app/params'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
     | '/app/params'
@@ -328,6 +340,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDepositsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/delivery': {
+      id: '/app/delivery'
+      path: '/delivery'
+      fullPath: '/app/delivery'
+      preLoaderRoute: typeof AppDeliveryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/commissions': {
       id: '/app/commissions'
       path: '/commissions'
@@ -364,6 +383,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppCashboxRoute: typeof AppCashboxRoute
   AppCommissionsRoute: typeof AppCommissionsRoute
+  AppDeliveryRoute: typeof AppDeliveryRoute
   AppDepositsRoute: typeof AppDepositsRoute
   AppDoctorsRoute: typeof AppDoctorsRoute
   AppParamsRoute: typeof AppParamsRoute
@@ -381,6 +401,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppCashboxRoute: AppCashboxRoute,
   AppCommissionsRoute: AppCommissionsRoute,
+  AppDeliveryRoute: AppDeliveryRoute,
   AppDepositsRoute: AppDepositsRoute,
   AppDoctorsRoute: AppDoctorsRoute,
   AppParamsRoute: AppParamsRoute,
