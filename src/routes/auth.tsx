@@ -34,7 +34,7 @@ type PasswordChecks = {
   lower: boolean;
   num: boolean;
   sym: boolean;
-  notCommon: boolean;
+  
 };
 
 function Req({ ok, children }: { ok: boolean; children: ReactNode }) {
