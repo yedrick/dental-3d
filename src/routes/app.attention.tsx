@@ -337,21 +337,74 @@ function RegistroTab() {
 // ============================================================
 // ENTREGAS TAB — search by patient, aggregated pending amounts
 // ============================================================
+function printDeliveryTicket(opts: {
+  patient: any;
+  studies: { name: string; price: number; has_report: boolean; with_invoice: boolean }[];
+  totalPaid: number;
+  totalDebt: number;
+}) {
+  const { patient, studies, totalPaid, totalDebt } = opts;
+  const now = new Date();
+  const fecha = now.toLocaleString("es-BO");
+  const rows = studies.map((s) => `
+    <tr>
+      <td>${s.name}${s.has_report ? " (c/inf.)" : ""}${s.with_invoice ? " *Fact." : ""}</td>
+      <td style="text-align:right">${s.price.toFixed(2)}</td>
+    </tr>`).join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Entrega ${patient.full_name}</title>
+    <style>
+      @page { size: 80mm auto; margin: 4mm; }
+      body { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #000; margin: 0; padding: 4px; }
+      h1 { font-size: 13px; text-align: center; margin: 0 0 4px; }
+      .muted { color: #444; font-size: 10px; text-align: center; }
+      hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 1px 0; vertical-align: top; }
+      .tot { font-weight: 700; font-size: 12px; }
+      .foot { text-align: center; margin-top: 8px; font-size: 10px; }
+    </style></head><body>
+    <h1>DENTAL-3D</h1>
+    <div class="muted">Comprobante de entrega</div>
+    <div class="muted">${fecha}</div>
+    <hr>
+    <div><b>Paciente:</b> ${patient.full_name}</div>
+    <div>Cel: ${patient.phone || "—"}</div>
+    <hr>
+    <table>${rows}</table>
+    <hr>
+    <table>
+      <tr><td>Pagado</td><td style="text-align:right">${totalPaid.toFixed(2)} Bs</td></tr>
+      <tr class="tot"><td>Saldo</td><td style="text-align:right">${totalDebt.toFixed(2)} Bs</td></tr>
+    </table>
+    <div class="foot">Gracias por su preferencia</div>
+    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+  </body></html>`;
+  const w = window.open("", "_blank", "width=380,height=640");
+  if (!w) { toast.error("Habilita ventanas emergentes para imprimir"); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 function EntregasTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const { data: rows = [] } = useList<any>("patient_studies");
   const { data: patients = [] } = useList<any>("patients", "full_name", true);
+  const { data: studies = [] } = useList<any>("studies", "name", true);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
 
   const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
+  const studyMap = new Map((studies as any[]).map((s) => [s.id, s]));
 
   const grouped = useMemo(() => {
-    const map = new Map<string, { patient: any; total: number; paid: number; debt: number; pendingDelivery: number; lastDate: string }>();
+    const map = new Map<string, { patient: any; items: any[]; total: number; paid: number; debt: number; pendingDelivery: number; lastDate: string }>();
     (rows as any[]).forEach((r) => {
       const p = patMap.get(r.patient_id); if (!p) return;
       const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
       const paid = Number(r.amount_paid ?? 0);
       const debt = Math.max(0, total - paid);
-      const g = map.get(r.patient_id) ?? { patient: p, total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
+      const g = map.get(r.patient_id) ?? { patient: p, items: [] as any[], total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
+      g.items.push({ ...r, _total: total, _debt: debt });
       g.total += total; g.paid += paid; g.debt += debt;
       if (!r.delivered_at && !r.is_voucher) g.pendingDelivery += 1;
       if (r.created_at > g.lastDate) g.lastDate = r.created_at;
@@ -365,6 +418,49 @@ function EntregasTab() {
     const s = q.toLowerCase();
     return (g.patient.full_name ?? "").toLowerCase().includes(s) || (g.patient.phone ?? "").includes(q);
   }).sort((a, b) => b.debt - a.debt);
+
+  const collectAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (g.debt <= 0.009) return;
+    if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
+    setBusy(g.patient.id);
+    for (const it of g.items) {
+      if (it._debt <= 0.009) continue;
+      const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
+      const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
+      if (error) { toast.error(error.message); setBusy(null); return; }
+    }
+    toast.success("Saldo cobrado");
+    setBusy(null);
+    qc.invalidateQueries({ queryKey: ["patient_studies"] });
+  };
+
+  const deliverAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const pending = g.items.filter((it) => !it.delivered_at && !it.is_voucher);
+    if (pending.length === 0) { toast.info("Nada por entregar"); return; }
+    setBusy(g.patient.id);
+    const ids = pending.map((it) => it.id);
+    const { error } = await supabase.from("patient_studies")
+      .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
+      .in("id", ids);
+    if (error) { toast.error(error.message); setBusy(null); return; }
+    // Print ticket
+    printDeliveryTicket({
+      patient: g.patient,
+      studies: pending.map((it) => ({
+        name: (studyMap.get(it.study_id) as any)?.name ?? "Estudio",
+        price: Number(it.price ?? 0) + Number(it.invoice_surcharge ?? 0) - Number(it.discount ?? 0),
+        has_report: !!it.has_report,
+        with_invoice: !!it.with_invoice,
+      })),
+      totalPaid: g.paid,
+      totalDebt: g.debt,
+    });
+    toast.success(`${pending.length} estudio(s) entregados`);
+    setBusy(null);
+    qc.invalidateQueries({ queryKey: ["patient_studies"] });
+  };
 
   return (
     <Card className="p-3 space-y-3">
@@ -380,31 +476,40 @@ function EntregasTab() {
       ) : (
         <div className="divide-y">
           {filtered.map((g) => (
-            <Link key={g.patient.id} to="/app/patients/$id" params={{ id: g.patient.id }}
-              className="flex items-center gap-3 py-2.5 px-1 hover:bg-accent rounded-md transition-colors">
-              <div className="flex-1 min-w-0">
+            <div key={g.patient.id} className="flex items-center gap-3 py-2.5 px-1 hover:bg-accent/50 rounded-md transition-colors">
+              <Link to="/app/patients/$id" params={{ id: g.patient.id }} className="flex-1 min-w-0">
                 <div className="font-medium truncate">{g.patient.full_name}</div>
                 <div className="text-[11px] text-muted-foreground truncate">
                   Cel: {g.patient.phone || "—"} · Última: {formatDate(g.lastDate)}
                 </div>
-              </div>
+              </Link>
               <div className="text-right shrink-0">
                 {g.debt > 0.009 ? (
                   <div className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatMoney(g.debt)}</div>
                 ) : (
                   <Badge variant="secondary">Al día</Badge>
                 )}
-                <div className="flex gap-1 justify-end mt-0.5">
-                  {g.pendingDelivery > 0 && <Badge variant="outline" className="text-[10px]">{g.pendingDelivery} x entregar</Badge>}
-                </div>
+                {g.pendingDelivery > 0 && <div className="text-[10px] text-muted-foreground">{g.pendingDelivery} x entregar</div>}
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-            </Link>
+              <div className="flex gap-1 shrink-0">
+                {g.debt > 0.009 && (
+                  <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => collectAll(g, e)}>
+                    <Wallet className="h-3.5 w-3.5 mr-1" />Cobrar
+                  </Button>
+                )}
+                {g.pendingDelivery > 0 && (
+                  <Button size="sm" disabled={busy === g.patient.id || g.debt > 0.009} onClick={(e) => deliverAll(g, e)} title={g.debt > 0.009 ? "Cobrar saldo antes de entregar" : "Entregar e imprimir"}>
+                    Entregar
+                  </Button>
+                )}
+              </div>
+              <Link to="/app/patients/$id" params={{ id: g.patient.id }}><ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /></Link>
+            </div>
           ))}
         </div>
       )}
       <div className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1 border-t">
-        <Wallet className="h-3 w-3" /> Toca un paciente para ver su perfil, pagos y tratamientos.
+        <Wallet className="h-3 w-3" /> "Cobrar" salda la deuda; "Entregar" marca los estudios como entregados e imprime el comprobante.
       </div>
     </Card>
   );
