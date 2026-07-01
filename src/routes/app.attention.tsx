@@ -437,6 +437,7 @@ function EntregasTab() {
 
   const deliverAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
+    if (g.debt > 0.009) { toast.error(`No se puede entregar: saldo pendiente ${formatMoney(g.debt)}. Cobre primero.`); return; }
     const pending = g.items.filter((it) => !it.delivered_at && !it.is_voucher);
     if (pending.length === 0) { toast.info("Nada por entregar"); return; }
     setBusy(g.patient.id);
