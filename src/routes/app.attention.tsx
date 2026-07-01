@@ -403,7 +403,7 @@ function EntregasTab() {
       const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
       const paid = Number(r.amount_paid ?? 0);
       const debt = Math.max(0, total - paid);
-      const g = map.get(r.patient_id) ?? { patient: p, items: [], total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
+      const g = map.get(r.patient_id) ?? { patient: p, items: [] as any[], total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
       g.items.push({ ...r, _total: total, _debt: debt });
       g.total += total; g.paid += paid; g.debt += debt;
       if (!r.delivered_at && !r.is_voucher) g.pendingDelivery += 1;
