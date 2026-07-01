@@ -92,12 +92,12 @@ function DoctorsPage() {
         <Table>
           <TableHeader><TableRow>
             <TableHead>Nombre</TableHead><TableHead>Teléfono</TableHead><TableHead>Email</TableHead>
-            <TableHead>% Comisión</TableHead><TableHead>Estado</TableHead>
+            <TableHead>% Comisión</TableHead><TableHead>% Desc. convenio</TableHead><TableHead>Estado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={6}>Cargando…</TableCell></TableRow>}
-            {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
+            {isLoading && <TableRow><TableCell colSpan={7}>Cargando…</TableCell></TableRow>}
+            {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
             {filtered.map((d: any) => (
               <TableRow key={d.id} className={!d.status ? "opacity-60" : ""}>
                 <TableCell className="font-medium">
@@ -107,6 +107,7 @@ function DoctorsPage() {
                 <TableCell className="text-sm">{d.phone || "—"}</TableCell>
                 <TableCell className="text-sm">{d.email || "—"}</TableCell>
                 <TableCell className="text-sm">{d.default_commission_pct}%</TableCell>
+                <TableCell className="text-sm">{Number(d.agreement_discount_pct ?? 0)}%</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch checked={d.status} disabled={!canEdit} onCheckedChange={(v) => toggle(d, v)} />
