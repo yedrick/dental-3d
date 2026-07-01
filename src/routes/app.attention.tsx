@@ -167,7 +167,7 @@ function RegistroTab() {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       {/* LEFT: compact summary / total */}
-      <aside className="order-2 lg:order-1">
+      <aside className="order-2">
         <Card className="p-3 lg:sticky lg:top-3 space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumen</div>
           <dl className="text-xs space-y-1">
