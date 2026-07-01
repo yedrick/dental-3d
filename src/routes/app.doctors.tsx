@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -8,30 +8,70 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableHead, TableHeader, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsPage });
 
+type DForm = { id?: string; full_name: string; clinic_address: string; phone: string; email: string; bank_account: string; default_commission_pct: number; status: boolean };
+const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, status: true };
+
 function DoctorsPage() {
-  const { user, hasAny } = useAuth();
-  const canEdit = hasAny(["ADMIN", "RECEPCION"]);
+  const { user, hasAny, can } = useAuth();
+  const canCreate = hasAny(["ADMIN", "RECEPCION"]);
+  const canEdit = can("doctors.edit") || hasAny(["ADMIN"]);
+  const canDelete = can("doctors.delete") || hasAny(["ADMIN"]);
   const qc = useQueryClient();
   const { data = [], isLoading } = useList<any>("doctors");
+  const [q, setQ] = useState("");
+  const [form, setForm] = useState<DForm>(empty);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>({ full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, status: true });
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return data;
+    return (data as any[]).filter((d) => d.full_name?.toLowerCase().includes(s) || d.phone?.includes(s) || d.email?.toLowerCase().includes(s));
+  }, [data, q]);
+
+  const openNew = () => { setForm(empty); setOpen(true); };
+  const openEdit = (d: any) => {
+    setForm({ id: d.id, full_name: d.full_name, clinic_address: d.clinic_address || "", phone: d.phone || "", email: d.email || "", bank_account: d.bank_account || "", default_commission_pct: Number(d.default_commission_pct ?? 20), status: d.status });
+    setOpen(true);
+  };
 
   const save = async () => {
-    const payload = { ...form, created_by: user!.id };
-    const { error } = await supabase.from("doctors").insert(payload);
-    if (error) return toast.error(error.message);
-    toast.success("Doctor registrado");
+    if (!form.full_name) return toast.error("Nombre requerido");
+    const payload: any = { ...form };
+    delete payload.id;
+    if (form.id) {
+      const { error } = await supabase.from("doctors").update(payload).eq("id", form.id);
+      if (error) return toast.error(error.message);
+      toast.success("Doctor actualizado");
+    } else {
+      payload.created_by = user!.id;
+      const { error } = await supabase.from("doctors").insert(payload);
+      if (error) return toast.error(error.message);
+      toast.success("Doctor registrado");
+    }
     setOpen(false);
-    setForm({ full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, status: true });
+    qc.invalidateQueries({ queryKey: ["doctors"] });
+  };
+
+  const del = async (d: any) => {
+    if (!confirm(`¿Eliminar doctor "${d.full_name}"? Los pacientes vinculados quedarán sin doctor y podría fallar si tiene registros históricos.`)) return;
+    const { error } = await supabase.from("doctors").delete().eq("id", d.id);
+    if (error) return toast.error("No se puede eliminar: " + error.message);
+    toast.success("Doctor eliminado");
+    qc.invalidateQueries({ queryKey: ["doctors"] });
+  };
+
+  const toggle = async (d: any, v: boolean) => {
+    await supabase.from("doctors").update({ status: v }).eq("id", d.id);
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
@@ -39,55 +79,73 @@ function DoctorsPage() {
     <div>
       <PageHeader
         title="Doctores remitentes"
-        description="Gestión de doctores. Todo paciente debe estar vinculado a uno."
-        action={canEdit && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button><Plus className="mr-1 h-4 w-4" />Nuevo doctor</Button></DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Nuevo doctor</DialogTitle></DialogHeader>
-              <div className="grid gap-3">
-                <div><Label>Nombre completo *</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-                  <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                </div>
-                <div><Label>Dirección consultorio</Label><Input value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Cuenta bancaria</Label><Input value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
-                  <div><Label>% Comisión</Label><Input type="number" step="0.01" value={form.default_commission_pct} onChange={(e) => setForm({ ...form, default_commission_pct: Number(e.target.value) })} /></div>
-                </div>
-              </div>
-              <DialogFooter><Button onClick={save} disabled={!form.full_name}>Guardar</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+        description="Gestión completa: editar, activar/desactivar, eliminar."
+        action={canCreate && <Button onClick={openNew}><Plus className="mr-1 h-4 w-4" />Nuevo doctor</Button>}
       />
+
+      <div className="mb-3 relative max-w-md">
+        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input className="pl-8" placeholder="Buscar por nombre, teléfono o email…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+
       <Card>
         <Table>
           <TableHeader><TableRow>
             <TableHead>Nombre</TableHead><TableHead>Teléfono</TableHead><TableHead>Email</TableHead>
             <TableHead>% Comisión</TableHead><TableHead>Estado</TableHead>
+            <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={5}>Cargando…</TableCell></TableRow>}
-            {!isLoading && data.length === 0 && <TableRow><TableCell colSpan={5} className="text-muted-foreground">Sin doctores registrados.</TableCell></TableRow>}
-            {data.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.full_name}</TableCell>
-                <TableCell>{d.phone || "-"}</TableCell>
-                <TableCell>{d.email || "-"}</TableCell>
-                <TableCell>{d.default_commission_pct}%</TableCell>
+            {isLoading && <TableRow><TableCell colSpan={6}>Cargando…</TableCell></TableRow>}
+            {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
+            {filtered.map((d: any) => (
+              <TableRow key={d.id} className={!d.status ? "opacity-60" : ""}>
+                <TableCell className="font-medium">
+                  {d.full_name}
+                  {d.clinic_address && <div className="text-[11px] text-muted-foreground">{d.clinic_address}</div>}
+                </TableCell>
+                <TableCell className="text-sm">{d.phone || "—"}</TableCell>
+                <TableCell className="text-sm">{d.email || "—"}</TableCell>
+                <TableCell className="text-sm">{d.default_commission_pct}%</TableCell>
                 <TableCell>
-                  <Switch checked={d.status} disabled={!canEdit} onCheckedChange={async (v) => {
-                    await supabase.from("doctors").update({ status: v }).eq("id", d.id);
-                    qc.invalidateQueries({ queryKey: ["doctors"] });
-                  }} />
+                  <div className="flex items-center gap-2">
+                    <Switch checked={d.status} disabled={!canEdit} onCheckedChange={(v) => toggle(d, v)} />
+                    <Badge variant={d.status ? "secondary" : "outline"} className="text-[10px]">{d.status ? "Activo" : "Inactivo"}</Badge>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex gap-1 justify-end">
+                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(d)} title="Editar"><Pencil className="h-4 w-4" /></Button>}
+                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(d)} title="Eliminar" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{form.id ? "Editar doctor" : "Nuevo doctor"}</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div><Label>Nombre completo *</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            </div>
+            <div><Label>Dirección consultorio</Label><Input value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Cuenta bancaria</Label><Input value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
+              <div><Label>% Comisión</Label><Input type="number" step="0.01" value={form.default_commission_pct} onChange={(e) => setForm({ ...form, default_commission_pct: Number(e.target.value) })} /></div>
+            </div>
+            {form.id && (
+              <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
+            )}
+          </div>
+          <DialogFooter><Button onClick={save}>{form.id ? "Actualizar" : "Guardar"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
