@@ -18,8 +18,8 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsPage });
 
-type DForm = { id?: string; full_name: string; clinic_address: string; phone: string; email: string; bank_account: string; default_commission_pct: number; status: boolean };
-const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, status: true };
+type DForm = { id?: string; full_name: string; clinic_address: string; phone: string; email: string; bank_account: string; default_commission_pct: number; agreement_discount_pct: number; status: boolean };
+const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, agreement_discount_pct: 0, status: true };
 
 function DoctorsPage() {
   const { user, hasAny, can } = useAuth();
