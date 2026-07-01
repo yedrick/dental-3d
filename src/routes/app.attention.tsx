@@ -484,22 +484,25 @@ function EntregasTab() {
                   Cel: {g.patient.phone || "—"} · Última: {formatDate(g.lastDate)}
                 </div>
               </Link>
-              <div className="text-right shrink-0">
+              <div className="text-right shrink-0 min-w-[110px]">
                 {g.debt > 0.009 ? (
-                  <div className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatMoney(g.debt)}</div>
+                  <>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</div>
+                    <div className="font-mono font-bold text-amber-600 dark:text-amber-400">{formatMoney(g.debt)}</div>
+                  </>
                 ) : (
-                  <Badge variant="secondary">Al día</Badge>
+                  <Badge variant="secondary" className="gap-1"><Wallet className="h-3 w-3" />Saldo 0</Badge>
                 )}
-                {g.pendingDelivery > 0 && <div className="text-[10px] text-muted-foreground">{g.pendingDelivery} x entregar</div>}
+                {g.pendingDelivery > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{g.pendingDelivery} x entregar</div>}
               </div>
               <div className="flex gap-1 shrink-0">
                 {g.debt > 0.009 && (
                   <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => collectAll(g, e)}>
-                    <Wallet className="h-3.5 w-3.5 mr-1" />Cobrar
+                    <Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(g.debt)}
                   </Button>
                 )}
                 {g.pendingDelivery > 0 && (
-                  <Button size="sm" disabled={busy === g.patient.id || g.debt > 0.009} onClick={(e) => deliverAll(g, e)} title={g.debt > 0.009 ? "Cobrar saldo antes de entregar" : "Entregar e imprimir"}>
+                  <Button size="sm" disabled={busy === g.patient.id || g.debt > 0.009} onClick={(e) => deliverAll(g, e)} title={g.debt > 0.009 ? `Cobre el saldo pendiente (${formatMoney(g.debt)}) antes de entregar` : "Entregar e imprimir"}>
                     Entregar
                   </Button>
                 )}
