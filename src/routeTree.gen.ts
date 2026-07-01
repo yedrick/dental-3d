@@ -27,6 +27,7 @@ import { Route as AppCommissionsRouteImport } from './routes/app.commissions'
 import { Route as AppCashboxRouteImport } from './routes/app.cashbox'
 import { Route as AppAuditRouteImport } from './routes/app.audit'
 import { Route as AppAttentionRouteImport } from './routes/app.attention'
+import { Route as AppAppointmentsRouteImport } from './routes/app.appointments'
 import { Route as AppPatientsIdRouteImport } from './routes/app.patients.$id'
 
 const AuthRoute = AuthRouteImport.update({
@@ -119,6 +120,11 @@ const AppAttentionRoute = AppAttentionRouteImport.update({
   path: '/attention',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAppointmentsRoute = AppAppointmentsRouteImport.update({
+  id: '/appointments',
+  path: '/appointments',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPatientsIdRoute = AppPatientsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/app/appointments': typeof AppAppointmentsRoute
   '/app/attention': typeof AppAttentionRoute
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/app/appointments': typeof AppAppointmentsRoute
   '/app/attention': typeof AppAttentionRoute
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/app/appointments': typeof AppAppointmentsRoute
   '/app/attention': typeof AppAttentionRoute
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/app/appointments'
     | '/app/attention'
     | '/app/audit'
     | '/app/cashbox'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/app/appointments'
     | '/app/attention'
     | '/app/audit'
     | '/app/cashbox'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/app/appointments'
     | '/app/attention'
     | '/app/audit'
     | '/app/cashbox'
@@ -387,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAttentionRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/appointments': {
+      id: '/app/appointments'
+      path: '/appointments'
+      fullPath: '/app/appointments'
+      preLoaderRoute: typeof AppAppointmentsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/patients/$id': {
       id: '/app/patients/$id'
       path: '/$id'
@@ -410,6 +429,7 @@ const AppPatientsRouteWithChildren = AppPatientsRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAppointmentsRoute: typeof AppAppointmentsRoute
   AppAttentionRoute: typeof AppAttentionRoute
   AppAuditRoute: typeof AppAuditRoute
   AppCashboxRoute: typeof AppCashboxRoute
@@ -428,6 +448,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAppointmentsRoute: AppAppointmentsRoute,
   AppAttentionRoute: AppAttentionRoute,
   AppAuditRoute: AppAuditRoute,
   AppCashboxRoute: AppCashboxRoute,

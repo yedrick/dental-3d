@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Stethoscope, Users, TestTube2, ClipboardList, Percent,
   Wallet, Landmark, Receipt, BarChart3, ShieldCheck, UserCog, LogOut,
-  PackageCheck, KeyRound, Settings2,
+  PackageCheck, KeyRound, Settings2, CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ const nav: { label: string; items: Item[] }[] = [
     { title: "Pacientes", url: "/app/patients", icon: Users, perm: "view.patients" },
     { title: "Estudios y tarifas", url: "/app/studies", icon: TestTube2, perm: "view.studies" },
     { title: "Atenciones", url: "/app/attention", icon: ClipboardList, perm: "view.attention" },
+    { title: "Agenda de citas", url: "/app/appointments", icon: CalendarDays, perm: "view.appointments" },
     { title: "Entregas y cobros", url: "/app/delivery", icon: PackageCheck, perm: "view.delivery" },
   ]},
   { label: "Financiero", items: [
