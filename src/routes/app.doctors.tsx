@@ -18,8 +18,8 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsPage });
 
-type DForm = { id?: string; full_name: string; clinic_address: string; phone: string; email: string; bank_account: string; default_commission_pct: number; status: boolean };
-const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, status: true };
+type DForm = { id?: string; full_name: string; clinic_address: string; phone: string; email: string; bank_account: string; default_commission_pct: number; agreement_discount_pct: number; status: boolean };
+const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", default_commission_pct: 20, agreement_discount_pct: 0, status: true };
 
 function DoctorsPage() {
   const { user, hasAny, can } = useAuth();
@@ -40,7 +40,7 @@ function DoctorsPage() {
 
   const openNew = () => { setForm(empty); setOpen(true); };
   const openEdit = (d: any) => {
-    setForm({ id: d.id, full_name: d.full_name, clinic_address: d.clinic_address || "", phone: d.phone || "", email: d.email || "", bank_account: d.bank_account || "", default_commission_pct: Number(d.default_commission_pct ?? 20), status: d.status });
+    setForm({ id: d.id, full_name: d.full_name, clinic_address: d.clinic_address || "", phone: d.phone || "", email: d.email || "", bank_account: d.bank_account || "", default_commission_pct: Number(d.default_commission_pct ?? 20), agreement_discount_pct: Number(d.agreement_discount_pct ?? 0), status: d.status });
     setOpen(true);
   };
 
@@ -92,12 +92,12 @@ function DoctorsPage() {
         <Table>
           <TableHeader><TableRow>
             <TableHead>Nombre</TableHead><TableHead>Teléfono</TableHead><TableHead>Email</TableHead>
-            <TableHead>% Comisión</TableHead><TableHead>Estado</TableHead>
+            <TableHead>% Comisión</TableHead><TableHead>% Desc. convenio</TableHead><TableHead>Estado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={6}>Cargando…</TableCell></TableRow>}
-            {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
+            {isLoading && <TableRow><TableCell colSpan={7}>Cargando…</TableCell></TableRow>}
+            {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
             {filtered.map((d: any) => (
               <TableRow key={d.id} className={!d.status ? "opacity-60" : ""}>
                 <TableCell className="font-medium">
@@ -107,6 +107,7 @@ function DoctorsPage() {
                 <TableCell className="text-sm">{d.phone || "—"}</TableCell>
                 <TableCell className="text-sm">{d.email || "—"}</TableCell>
                 <TableCell className="text-sm">{d.default_commission_pct}%</TableCell>
+                <TableCell className="text-sm">{Number(d.agreement_discount_pct ?? 0)}%</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch checked={d.status} disabled={!canEdit} onCheckedChange={(v) => toggle(d, v)} />
@@ -135,9 +136,14 @@ function DoctorsPage() {
               <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             </div>
             <div><Label>Dirección consultorio</Label><Input value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div><Label>Cuenta bancaria</Label><Input value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
               <div><Label>% Comisión</Label><Input type="number" step="0.01" value={form.default_commission_pct} onChange={(e) => setForm({ ...form, default_commission_pct: Number(e.target.value) })} /></div>
+              <div>
+                <Label>% Descuento convenio</Label>
+                <Input type="number" step="0.01" min="0" max="100" value={form.agreement_discount_pct} onChange={(e) => setForm({ ...form, agreement_discount_pct: Number(e.target.value) })} />
+                <p className="text-[10px] text-muted-foreground mt-1">Se aplica automático al paciente en cada estudio.</p>
+              </div>
             </div>
             {form.id && (
               <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
