@@ -14,16 +14,441 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_logs: {
+        Row: {
+          action: string
+          data: Json | null
+          id: number
+          record_id: string | null
+          table_name: string
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          data?: Json | null
+          id?: number
+          record_id?: string | null
+          table_name: string
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          data?: Json | null
+          id?: number
+          record_id?: string | null
+          table_name?: string
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      bank_deposits: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          deposit_date: string
+          id: string
+          reference: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          deposit_date: string
+          id?: string
+          reference?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          deposit_date?: string
+          id?: string
+          reference?: string | null
+        }
+        Relationships: []
+      }
+      cashbox: {
+        Row: {
+          balance: number
+          created_at: string
+          created_by: string
+          description: string
+          expense: number
+          id: string
+          income: number
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          created_by: string
+          description: string
+          expense?: number
+          id?: string
+          income?: number
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          created_by?: string
+          description?: string
+          expense?: number
+          id?: string
+          income?: number
+        }
+        Relationships: []
+      }
+      commissions: {
+        Row: {
+          commission_amount: number
+          created_at: string
+          doctor_id: string
+          id: string
+          patient_study_id: string
+          percentage: number
+        }
+        Insert: {
+          commission_amount: number
+          created_at?: string
+          doctor_id: string
+          id?: string
+          patient_study_id: string
+          percentage: number
+        }
+        Update: {
+          commission_amount?: number
+          created_at?: string
+          doctor_id?: string
+          id?: string
+          patient_study_id?: string
+          percentage?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_patient_study_id_fkey"
+            columns: ["patient_study_id"]
+            isOneToOne: false
+            referencedRelation: "patient_studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doctors: {
+        Row: {
+          bank_account: string | null
+          clinic_address: string | null
+          created_at: string
+          created_by: string
+          default_commission_pct: number
+          email: string | null
+          full_name: string
+          id: string
+          phone: string | null
+          status: boolean
+        }
+        Insert: {
+          bank_account?: string | null
+          clinic_address?: string | null
+          created_at?: string
+          created_by: string
+          default_commission_pct?: number
+          email?: string | null
+          full_name: string
+          id?: string
+          phone?: string | null
+          status?: boolean
+        }
+        Update: {
+          bank_account?: string | null
+          clinic_address?: string | null
+          created_at?: string
+          created_by?: string
+          default_commission_pct?: number
+          email?: string | null
+          full_name?: string
+          id?: string
+          phone?: string | null
+          status?: boolean
+        }
+        Relationships: []
+      }
+      patient_studies: {
+        Row: {
+          created_at: string
+          created_by: string
+          delivery_date: string | null
+          has_report: boolean
+          id: string
+          invoice_number: string | null
+          is_voucher: boolean
+          patient_id: string
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          price: number
+          study_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          delivery_date?: string | null
+          has_report?: boolean
+          id?: string
+          invoice_number?: string | null
+          is_voucher?: boolean
+          patient_id: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          price?: number
+          study_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          delivery_date?: string | null
+          has_report?: boolean
+          id?: string
+          invoice_number?: string | null
+          is_voucher?: boolean
+          patient_id?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          price?: number
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_studies_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_studies_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patients: {
+        Row: {
+          birth_date: string | null
+          created_at: string
+          created_by: string
+          doctor_id: string
+          full_name: string
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          birth_date?: string | null
+          created_at?: string
+          created_by: string
+          doctor_id: string
+          full_name: string
+          id?: string
+          phone?: string | null
+        }
+        Update: {
+          birth_date?: string | null
+          created_at?: string
+          created_by?: string
+          doctor_id?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          active: boolean
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          username: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          email: string
+          full_name: string
+          id: string
+          username: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      studies: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      study_prices: {
+        Row: {
+          created_at: string
+          effective_date: string
+          id: string
+          is_active: boolean
+          price_with_report: number
+          price_without_report: number
+          study_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          price_with_report: number
+          price_without_report: number
+          study_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          price_with_report?: number
+          price_without_report?: number
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_prices_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      third_party_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          payment_date: string
+          provider_name: string
+          service_date: string
+          service_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          payment_date: string
+          provider_name: string
+          service_date: string
+          service_type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          payment_date?: string
+          provider_name?: string
+          service_date?: string
+          service_type?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_any_role: {
+        Args: {
+          _roles: Database["public"]["Enums"]["app_role"][]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "ADMIN"
+        | "RECEPCION"
+        | "CAJA"
+        | "CONTABILIDAD"
+        | "DOCTOR"
+        | "AUDITOR"
+      payment_method: "cash" | "qr" | "card"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +575,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: [
+        "ADMIN",
+        "RECEPCION",
+        "CAJA",
+        "CONTABILIDAD",
+        "DOCTOR",
+        "AUDITOR",
+      ],
+      payment_method: ["cash", "qr", "card"],
+    },
   },
 } as const
