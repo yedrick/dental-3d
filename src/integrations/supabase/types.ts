@@ -44,6 +44,76 @@ export type Database = {
         }
         Relationships: []
       }
+      appointments: {
+        Row: {
+          created_at: string
+          created_by: string
+          doctor_id: string | null
+          duration_min: number
+          id: string
+          notes: string | null
+          patient_id: string | null
+          patient_name: string
+          patient_phone: string | null
+          starts_at: string
+          status: string
+          study_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          doctor_id?: string | null
+          duration_min?: number
+          id?: string
+          notes?: string | null
+          patient_id?: string | null
+          patient_name: string
+          patient_phone?: string | null
+          starts_at: string
+          status?: string
+          study_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          doctor_id?: string | null
+          duration_min?: number
+          id?: string
+          notes?: string | null
+          patient_id?: string | null
+          patient_name?: string
+          patient_phone?: string | null
+          starts_at?: string
+          status?: string
+          study_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -306,27 +376,36 @@ export type Database = {
           created_at: string
           created_by: string
           doctor_id: string
+          email: string | null
           full_name: string
           id: string
+          notes: string | null
           phone: string | null
+          status: boolean
         }
         Insert: {
           birth_date?: string | null
           created_at?: string
           created_by: string
           doctor_id: string
+          email?: string | null
           full_name: string
           id?: string
+          notes?: string | null
           phone?: string | null
+          status?: boolean
         }
         Update: {
           birth_date?: string | null
           created_at?: string
           created_by?: string
           doctor_id?: string
+          email?: string | null
           full_name?: string
           id?: string
+          notes?: string | null
           phone?: string | null
+          status?: boolean
         }
         Relationships: [
           {
