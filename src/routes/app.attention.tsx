@@ -424,15 +424,33 @@ function EntregasTab() {
     if (g.debt <= 0.009) return;
     if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
     setBusy(g.patient.id);
+    const balanceBefore = g.debt;
+    const chargedItems: { id: string; before: number; after: number; amount: number }[] = [];
     for (const it of g.items) {
       if (it._debt <= 0.009) continue;
       const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
       const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
       if (error) { toast.error(error.message); setBusy(null); return; }
+      chargedItems.push({ id: it.id, before: it._debt, after: 0, amount: it._debt });
     }
+    await supabase.from("audit_logs").insert({
+      user_id: user!.id,
+      action: "CHARGE",
+      table_name: "patient_studies",
+      record_id: g.patient.id,
+      data: {
+        patient_id: g.patient.id,
+        patient_name: g.patient.full_name,
+        amount_charged: Math.round(balanceBefore * 100) / 100,
+        balance_before: Math.round(balanceBefore * 100) / 100,
+        balance_after: 0,
+        items: chargedItems,
+      } as any,
+    });
     toast.success("Saldo cobrado");
     setBusy(null);
     qc.invalidateQueries({ queryKey: ["patient_studies"] });
+    qc.invalidateQueries({ queryKey: ["audit_logs"] });
   };
 
   const deliverAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
@@ -446,6 +464,21 @@ function EntregasTab() {
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .in("id", ids);
     if (error) { toast.error(error.message); setBusy(null); return; }
+    await supabase.from("audit_logs").insert({
+      user_id: user!.id,
+      action: "DELIVER",
+      table_name: "patient_studies",
+      record_id: g.patient.id,
+      data: {
+        patient_id: g.patient.id,
+        patient_name: g.patient.full_name,
+        delivered_count: pending.length,
+        delivered_ids: ids,
+        balance_before: Math.round(g.debt * 100) / 100,
+        balance_after: Math.round(g.debt * 100) / 100,
+        total_paid: Math.round(g.paid * 100) / 100,
+      } as any,
+    });
     // Print ticket
     printDeliveryTicket({
       patient: g.patient,
@@ -461,7 +494,9 @@ function EntregasTab() {
     toast.success(`${pending.length} estudio(s) entregados`);
     setBusy(null);
     qc.invalidateQueries({ queryKey: ["patient_studies"] });
+    qc.invalidateQueries({ queryKey: ["audit_logs"] });
   };
+
 
   return (
     <Card className="p-3 space-y-3">
