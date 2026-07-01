@@ -27,6 +27,7 @@ import { Route as AppCommissionsRouteImport } from './routes/app.commissions'
 import { Route as AppCashboxRouteImport } from './routes/app.cashbox'
 import { Route as AppAuditRouteImport } from './routes/app.audit'
 import { Route as AppAttentionRouteImport } from './routes/app.attention'
+import { Route as AppPatientsIdRouteImport } from './routes/app.patients.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -118,6 +119,11 @@ const AppAttentionRoute = AppAttentionRouteImport.update({
   path: '/attention',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPatientsIdRoute = AppPatientsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppPatientsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,13 +137,14 @@ export interface FileRoutesByFullPath {
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
-  '/app/patients': typeof AppPatientsRoute
+  '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
+  '/app/patients/$id': typeof AppPatientsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -150,13 +157,14 @@ export interface FileRoutesByTo {
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
-  '/app/patients': typeof AppPatientsRoute
+  '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
+  '/app/patients/$id': typeof AppPatientsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -171,13 +179,14 @@ export interface FileRoutesById {
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
-  '/app/patients': typeof AppPatientsRoute
+  '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
+  '/app/patients/$id': typeof AppPatientsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/app/third-party'
     | '/app/users'
     | '/app/'
+    | '/app/patients/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/app/third-party'
     | '/app/users'
     | '/app'
+    | '/app/patients/$id'
   id:
     | '__root__'
     | '/'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/app/third-party'
     | '/app/users'
     | '/app/'
+    | '/app/patients/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -375,8 +387,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAttentionRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/patients/$id': {
+      id: '/app/patients/$id'
+      path: '/$id'
+      fullPath: '/app/patients/$id'
+      preLoaderRoute: typeof AppPatientsIdRouteImport
+      parentRoute: typeof AppPatientsRoute
+    }
   }
 }
+
+interface AppPatientsRouteChildren {
+  AppPatientsIdRoute: typeof AppPatientsIdRoute
+}
+
+const AppPatientsRouteChildren: AppPatientsRouteChildren = {
+  AppPatientsIdRoute: AppPatientsIdRoute,
+}
+
+const AppPatientsRouteWithChildren = AppPatientsRoute._addFileChildren(
+  AppPatientsRouteChildren,
+)
 
 interface AppRouteChildren {
   AppAttentionRoute: typeof AppAttentionRoute
@@ -387,7 +418,7 @@ interface AppRouteChildren {
   AppDepositsRoute: typeof AppDepositsRoute
   AppDoctorsRoute: typeof AppDoctorsRoute
   AppParamsRoute: typeof AppParamsRoute
-  AppPatientsRoute: typeof AppPatientsRoute
+  AppPatientsRoute: typeof AppPatientsRouteWithChildren
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppStudiesRoute: typeof AppStudiesRoute
@@ -405,7 +436,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDepositsRoute: AppDepositsRoute,
   AppDoctorsRoute: AppDoctorsRoute,
   AppParamsRoute: AppParamsRoute,
-  AppPatientsRoute: AppPatientsRoute,
+  AppPatientsRoute: AppPatientsRouteWithChildren,
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
   AppStudiesRoute: AppStudiesRoute,

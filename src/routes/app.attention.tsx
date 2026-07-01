@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, UserPlus, Plus, Trash2, X } from "lucide-react";
+import { Search, UserPlus, Plus, Trash2, X, ChevronRight, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/attention")({ component: AttentionPage });
@@ -24,6 +24,25 @@ type SelectedStudy = { study_id: string; has_report: boolean; is_voucher: boolea
 type PayMode = "full" | "advance" | "pending";
 
 function AttentionPage() {
+  return (
+    <div>
+      <PageHeader title="Atención" description="Registro rápido y entregas / cobros de saldos pendientes." />
+      <Tabs defaultValue="registro">
+        <TabsList className="mb-3">
+          <TabsTrigger value="registro">Registro</TabsTrigger>
+          <TabsTrigger value="entregas">Entregas</TabsTrigger>
+        </TabsList>
+        <TabsContent value="registro"><RegistroTab /></TabsContent>
+        <TabsContent value="entregas"><EntregasTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ============================================================
+// REGISTRO TAB
+// ============================================================
+function RegistroTab() {
   const { user, can } = useAuth();
   const canCreate = can("attention.create");
   const qc = useQueryClient();
@@ -49,7 +68,6 @@ function AttentionPage() {
     return Number(withReport ? p.price_with_report : p.price_without_report) || 0;
   };
 
-  // ---- Search & selection state ----
   const [query, setQuery] = useState("");
   const [patient, setPatient] = useState<any | null>(null);
   const filtered = useMemo(() => {
@@ -57,10 +75,9 @@ function AttentionPage() {
     const q = query.toLowerCase();
     return (patients as any[])
       .filter((p) => p.full_name?.toLowerCase().includes(q) || (p.phone ?? "").includes(query))
-      .slice(0, 8);
+      .slice(0, 6);
   }, [patients, query]);
 
-  // ---- Quick-create patient dialog ----
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState({ full_name: "", phone: "", doctor_id: "" });
   const createQuickPatient = async () => {
@@ -71,14 +88,11 @@ function AttentionPage() {
     }).select().single();
     if (error) return toast.error(error.message);
     toast.success("Paciente creado");
-    setPatient(data);
-    setQuery(data.full_name);
-    setQuickOpen(false);
-    setQuick({ full_name: "", phone: "", doctor_id: "" });
+    setPatient(data); setQuery(data.full_name);
+    setQuickOpen(false); setQuick({ full_name: "", phone: "", doctor_id: "" });
     qc.invalidateQueries({ queryKey: ["patients"] });
   };
 
-  // ---- Attention form state ----
   const [items, setItems] = useState<SelectedStudy[]>([]);
   const [doctorId, setDoctorId] = useState<string>("");
   const [clinic, setClinic] = useState<string>("");
@@ -123,7 +137,6 @@ function AttentionPage() {
     if (items.some((it) => !it.study_id)) return toast.error("Elige el estudio en cada fila");
     if (payMode === "advance" && (paid <= 0 || paid > totals.total)) return toast.error("Monto adelantado inválido");
 
-    // Distribute paid amount across studies in order (fully cover first ones)
     let remainingPaid = paid;
     const rows = items.map((it) => {
       const base = it.is_voucher ? 0 : activePrice(it.study_id, it.has_report);
@@ -132,12 +145,9 @@ function AttentionPage() {
       const rowPaid = Math.min(remainingPaid, total);
       remainingPaid -= rowPaid;
       return {
-        patient_id: patient.id,
-        study_id: it.study_id,
-        doctor_id: doctorId || null,
-        clinic_name: clinic || null,
-        has_report: it.has_report,
-        is_voucher: it.is_voucher,
+        patient_id: patient.id, study_id: it.study_id,
+        doctor_id: doctorId || null, clinic_name: clinic || null,
+        has_report: it.has_report, is_voucher: it.is_voucher,
         with_invoice: !it.is_voucher && withInvoice,
         invoice_number: invoiceNumber || null,
         payment_method: it.is_voucher ? null : paymentMethod,
@@ -148,209 +158,161 @@ function AttentionPage() {
 
     const { error } = await supabase.from("patient_studies").insert(rows as any);
     if (error) return toast.error(error.message);
-    toast.success(`Atención registrada. ${debt > 0 ? `Deuda pendiente: ${formatMoney(debt)}` : "Pagado."}`);
-    resetForm();
-    qc.invalidateQueries();
+    toast.success(`Atención registrada.${debt > 0 ? ` Deuda: ${formatMoney(debt)}` : ""}`);
+    resetForm(); qc.invalidateQueries();
   };
 
-  // ---- Patient history preview ----
-  const { data: history = [] } = useQuery({
-    queryKey: ["patient_history", patient?.id],
-    enabled: !!patient?.id,
-    queryFn: async () => {
-      const { data } = await supabase.from("patient_studies").select("*").eq("patient_id", patient!.id).order("created_at", { ascending: false }).limit(10);
-      return data ?? [];
-    },
-  });
-  const studyName = (id: string) => (studies as any[]).find((s) => s.id === id)?.name ?? "-";
-
-  if (!canCreate) return <div><PageHeader title="Atención" /><Card className="p-6 text-sm text-muted-foreground">No tienes permiso <code>attention.create</code>.</Card></div>;
+  if (!canCreate) return <Card className="p-6 text-sm text-muted-foreground">Sin permiso <code>attention.create</code>.</Card>;
 
   return (
-    <div>
-      <PageHeader title="Atención rápida" description="Busca un paciente por nombre o celular, o créalo al vuelo, luego registra sus estudios y el cobro." />
+    <div className="grid gap-3 lg:grid-cols-[260px,1fr]">
+      {/* LEFT: compact summary / total */}
+      <aside className="order-2 lg:order-1">
+        <Card className="p-3 lg:sticky lg:top-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumen</div>
+          <dl className="text-xs space-y-1">
+            <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-mono">{formatMoney(totals.base)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted-foreground">Recargo</dt><dd className="font-mono">{formatMoney(totals.surcharge)}</dd></div>
+            <div className="flex justify-between border-t pt-1"><dt className="font-semibold">Total</dt><dd className="font-mono font-bold text-base">{formatMoney(totals.total)}</dd></div>
+            <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><dt>Pagado</dt><dd className="font-mono">{formatMoney(paid)}</dd></div>
+            <div className={"flex justify-between " + (debt > 0 ? "text-amber-600 dark:text-amber-400 font-semibold" : "")}><dt>Deuda</dt><dd className="font-mono">{formatMoney(debt)}</dd></div>
+          </dl>
+          <Button size="sm" className="w-full" onClick={save} disabled={!patient || items.length === 0}>Registrar</Button>
+          {patient && (
+            <div className="pt-2 border-t text-[11px] text-muted-foreground">
+              <div className="font-medium text-foreground truncate">{patient.full_name}</div>
+              <div>Cel: {patient.phone || "—"}</div>
+              <Link to="/app/patients/$id" params={{ id: patient.id }} className="text-primary hover:underline inline-flex items-center gap-0.5 mt-1">Ver perfil <ChevronRight className="h-3 w-3" /></Link>
+            </div>
+          )}
+        </Card>
+      </aside>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr,380px]">
-        {/* Left: main form */}
-        <div className="space-y-4">
-          {/* Patient search */}
-          <Card className="p-4">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">1. Paciente</Label>
-            {patient ? (
-              <div className="mt-2 flex items-center justify-between rounded-md border bg-muted/40 p-3">
-                <div>
-                  <div className="font-semibold">{patient.full_name}</div>
-                  <div className="text-xs text-muted-foreground">Cel: {patient.phone || "—"} · Doctor: {(doctors as any[]).find((d)=>d.id===patient.doctor_id)?.full_name || "—"}</div>
+      {/* RIGHT: form */}
+      <div className="order-1 lg:order-2 space-y-3 min-w-0">
+        {/* Patient */}
+        <Card className="p-3">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">1. Paciente</Label>
+          {patient ? (
+            <div className="mt-1.5 flex items-center justify-between rounded-md border bg-muted/40 p-2 text-sm">
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{patient.full_name}</div>
+                <div className="text-[11px] text-muted-foreground truncate">Cel: {patient.phone || "—"}</div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { setPatient(null); setQuery(""); }}><X className="h-3 w-3 mr-1" />Cambiar</Button>
+            </div>
+          ) : (
+            <div className="mt-1.5 space-y-1.5">
+              <div className="flex gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input autoFocus placeholder="Nombre o celular…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8 h-9" />
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => { setPatient(null); setQuery(""); }}>
-                  <X className="h-4 w-4 mr-1" />Cambiar
+                <Button variant="outline" size="sm" onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }}>
+                  <UserPlus className="h-4 w-4 mr-1" />Nuevo
                 </Button>
               </div>
-            ) : (
-              <div className="mt-2 space-y-2">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input autoFocus placeholder="Buscar por nombre o celular…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8" />
-                  </div>
-                  <Button variant="outline" onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }}>
-                    <UserPlus className="h-4 w-4 mr-1" />Nuevo
-                  </Button>
-                </div>
-                {filtered.length > 0 && (
-                  <div className="rounded-md border divide-y max-h-64 overflow-auto">
-                    {filtered.map((p) => (
-                      <button key={p.id} onClick={() => selectPatient(p)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent">
-                        <span className="font-medium">{p.full_name}</span>
-                        <span className="text-xs text-muted-foreground">{p.phone || "—"}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {query && filtered.length === 0 && (
-                  <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                    Sin resultados. <button onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }} className="text-primary underline">Crear paciente</button>.
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-
-          {/* Studies */}
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">2. Estudios</Label>
-              <Button size="sm" variant="outline" onClick={addStudy}><Plus className="h-4 w-4 mr-1" />Agregar</Button>
-            </div>
-            {items.length === 0 && <div className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-md">Sin estudios. Pulsa "Agregar".</div>}
-            <div className="space-y-2">
-              {items.map((it, i) => {
-                const base = it.is_voucher ? 0 : activePrice(it.study_id, it.has_report);
-                const surcharge = it.is_voucher || !withInvoice ? 0 : base * (invoicePct / 100);
-                return (
-                  <div key={i} className="grid grid-cols-[1fr,auto,auto,auto,auto] items-center gap-2 rounded-md border p-2">
-                    <Select value={it.study_id} onValueChange={(v) => updateItem(i, { study_id: v })}>
-                      <SelectTrigger><SelectValue placeholder="Elegir estudio" /></SelectTrigger>
-                      <SelectContent>{(studies as any[]).filter((s) => s.active).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <div className="flex items-center gap-1 text-xs"><Switch checked={it.has_report} onCheckedChange={(v) => updateItem(i, { has_report: v })} /><span>Informe</span></div>
-                    <div className="flex items-center gap-1 text-xs"><Switch checked={it.is_voucher} onCheckedChange={(v) => updateItem(i, { is_voucher: v })} /><span>Vale</span></div>
-                    <div className="text-sm font-mono w-28 text-right">{formatMoney(base + surcharge)}</div>
-                    <Button size="icon" variant="ghost" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          {/* Referral & invoice */}
-          <Card className="p-4 grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Doctor referente</Label>
-              <Select value={doctorId} onValueChange={setDoctorId}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Clínica</Label>
-              <Input value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Opcional" />
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <Switch checked={withInvoice} onCheckedChange={setWithInvoice} />
-              <Label>Con factura ({invoicePct}% recargo)</Label>
-            </div>
-            {withInvoice && (
-              <div>
-                <Label>N° Factura</Label>
-                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-              </div>
-            )}
-          </Card>
-
-          {/* Payment */}
-          <Card className="p-4">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">3. Cobro</Label>
-            <RadioGroup value={payMode} onValueChange={(v) => setPayMode(v as PayMode)} className="grid grid-cols-3 gap-2 mt-2">
-              <label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="full" /><span>Pago total</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="advance" /><span>Adelanto</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="pending" /><span>Cobrar en entrega</span>
-              </label>
-            </RadioGroup>
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              {payMode === "advance" && (
-                <div>
-                  <Label>Monto adelantado</Label>
-                  <Input type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+              {filtered.length > 0 && (
+                <div className="rounded-md border divide-y max-h-52 overflow-auto">
+                  {filtered.map((p) => (
+                    <button key={p.id} onClick={() => selectPatient(p)} className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-sm hover:bg-accent">
+                      <span className="font-medium truncate">{p.full_name}</span>
+                      <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{p.phone || "—"}</span>
+                    </button>
+                  ))}
                 </div>
               )}
-              {payMode !== "pending" && (
-                <div>
-                  <Label>Forma de pago</Label>
-                  <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Efectivo</SelectItem>
-                      <SelectItem value="qr">QR</SelectItem>
-                      <SelectItem value="card">Tarjeta</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {query && filtered.length === 0 && (
+                <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                  Sin resultados. <button onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }} className="text-primary underline">Crear</button>.
                 </div>
               )}
             </div>
-          </Card>
-        </div>
-
-        {/* Right: summary */}
-        <aside className="space-y-3">
-          <Card className="p-4 sticky top-4">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Resumen</div>
-            <dl className="grid grid-cols-2 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Subtotal</dt><dd className="text-right font-mono">{formatMoney(totals.base)}</dd>
-              <dt className="text-muted-foreground">Recargo factura</dt><dd className="text-right font-mono">{formatMoney(totals.surcharge)}</dd>
-              <dt className="font-semibold">Total</dt><dd className="text-right font-mono font-semibold">{formatMoney(totals.total)}</dd>
-              <dt className="text-emerald-600 dark:text-emerald-400">Pagado ahora</dt><dd className="text-right font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(paid)}</dd>
-              <dt className={debt > 0 ? "text-amber-600 dark:text-amber-400" : ""}>Deuda</dt>
-              <dd className={"text-right font-mono " + (debt > 0 ? "text-amber-600 dark:text-amber-400 font-semibold" : "")}>{formatMoney(debt)}</dd>
-            </dl>
-            <Button className="w-full mt-4" onClick={save} disabled={!patient || items.length === 0}>
-              Registrar atención
-            </Button>
-          </Card>
-
-          {patient && (
-            <Card className="p-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Historial reciente</div>
-              {history.length === 0 && <div className="text-sm text-muted-foreground">Sin atenciones previas.</div>}
-              <div className="space-y-2 max-h-72 overflow-auto">
-                {(history as any[]).map((h) => {
-                  const rowTotal = Number(h.price ?? 0) + Number(h.invoice_surcharge ?? 0);
-                  const rowDebt = Math.max(0, rowTotal - Number(h.amount_paid ?? 0));
-                  return (
-                    <div key={h.id} className="text-xs border-l-2 pl-2" style={{ borderColor: rowDebt > 0 ? "hsl(var(--warning, 45 90% 55%))" : "hsl(var(--muted))" }}>
-                      <div className="flex justify-between">
-                        <span className="font-medium">{studyName(h.study_id)}</span>
-                        <span className="font-mono">{formatMoney(rowTotal)}</span>
-                      </div>
-                      <div className="text-muted-foreground flex justify-between">
-                        <span>{formatDate(h.created_at)}</span>
-                        {rowDebt > 0 ? <Badge variant="outline" className="text-amber-600 border-amber-500">Debe {formatMoney(rowDebt)}</Badge> : <Badge variant="secondary">Pagado</Badge>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
           )}
-        </aside>
+        </Card>
+
+        {/* Studies */}
+        <Card className="p-3">
+          <div className="flex items-center justify-between mb-2">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">2. Estudios</Label>
+            <Button size="sm" variant="outline" onClick={addStudy} className="h-7"><Plus className="h-3.5 w-3.5 mr-1" />Agregar</Button>
+          </div>
+          {items.length === 0 && <div className="text-xs text-muted-foreground py-3 text-center border border-dashed rounded-md">Sin estudios.</div>}
+          <div className="space-y-1.5">
+            {items.map((it, i) => {
+              const base = it.is_voucher ? 0 : activePrice(it.study_id, it.has_report);
+              const surcharge = it.is_voucher || !withInvoice ? 0 : base * (invoicePct / 100);
+              return (
+                <div key={i} className="grid grid-cols-[1fr,auto,auto] sm:grid-cols-[1fr,auto,auto,auto,auto] items-center gap-1.5 rounded-md border p-1.5">
+                  <Select value={it.study_id} onValueChange={(v) => updateItem(i, { study_id: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Estudio" /></SelectTrigger>
+                    <SelectContent>{(studies as any[]).filter((s) => s.active).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <label className="flex items-center gap-1 text-[10px]"><Switch checked={it.has_report} onCheckedChange={(v) => updateItem(i, { has_report: v })} /><span>Inf.</span></label>
+                  <label className="flex items-center gap-1 text-[10px]"><Switch checked={it.is_voucher} onCheckedChange={(v) => updateItem(i, { is_voucher: v })} /><span>Vale</span></label>
+                  <div className="text-xs font-mono w-20 text-right col-span-2 sm:col-span-1">{formatMoney(base + surcharge)}</div>
+                  <Button size="icon" variant="ghost" onClick={() => removeItem(i)} className="h-7 w-7"><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* Referral + invoice */}
+        <Card className="p-3 grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs">Doctor referente</Label>
+            <Select value={doctorId} onValueChange={setDoctorId}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Clínica</Label>
+            <Input value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Opcional" className="h-9" />
+          </div>
+          <div className="flex items-center gap-2 sm:col-span-2">
+            <Switch checked={withInvoice} onCheckedChange={setWithInvoice} />
+            <Label className="text-xs">Con factura ({invoicePct}% recargo)</Label>
+            {withInvoice && (
+              <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="N° Factura" className="h-8 max-w-[180px] ml-auto" />
+            )}
+          </div>
+        </Card>
+
+        {/* Payment */}
+        <Card className="p-3">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">3. Cobro</Label>
+          <RadioGroup value={payMode} onValueChange={(v) => setPayMode(v as PayMode)} className="grid grid-cols-3 gap-1.5 mt-1.5">
+            <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="full" /><span>Total</span></label>
+            <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="advance" /><span>Adelanto</span></label>
+            <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="pending" /><span>En entrega</span></label>
+          </RadioGroup>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {payMode === "advance" && (
+              <div>
+                <Label className="text-xs">Monto adelantado</Label>
+                <Input type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-9" />
+              </div>
+            )}
+            {payMode !== "pending" && (
+              <div>
+                <Label className="text-xs">Forma de pago</Label>
+                <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Efectivo</SelectItem>
+                    <SelectItem value="qr">QR</SelectItem>
+                    <SelectItem value="card">Tarjeta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
 
-      {/* Quick-create patient dialog */}
+      {/* Quick-create dialog */}
       <Dialog open={quickOpen} onOpenChange={setQuickOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Crear paciente rápido</DialogTitle></DialogHeader>
@@ -368,50 +330,82 @@ function AttentionPage() {
           <DialogFooter><Button onClick={createQuickPatient}>Crear y seleccionar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Recent attentions table */}
-      <div className="mt-6">
-        <RecentAttentions />
-      </div>
     </div>
   );
 }
 
-function RecentAttentions() {
+// ============================================================
+// ENTREGAS TAB — search by patient, aggregated pending amounts
+// ============================================================
+function EntregasTab() {
   const { data: rows = [] } = useList<any>("patient_studies");
   const { data: patients = [] } = useList<any>("patients", "full_name", true);
-  const { data: studies = [] } = useList<any>("studies", "name", true);
-  const patMap = new Map((patients as any[]).map((p) => [p.id, p.full_name]));
-  const stMap = new Map((studies as any[]).map((s) => [s.id, s.name]));
+  const [q, setQ] = useState("");
+
+  const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { patient: any; total: number; paid: number; debt: number; pendingDelivery: number; lastDate: string }>();
+    (rows as any[]).forEach((r) => {
+      const p = patMap.get(r.patient_id); if (!p) return;
+      const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
+      const paid = Number(r.amount_paid ?? 0);
+      const debt = Math.max(0, total - paid);
+      const g = map.get(r.patient_id) ?? { patient: p, total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
+      g.total += total; g.paid += paid; g.debt += debt;
+      if (!r.delivered_at && !r.is_voucher) g.pendingDelivery += 1;
+      if (r.created_at > g.lastDate) g.lastDate = r.created_at;
+      map.set(r.patient_id, g);
+    });
+    return Array.from(map.values()).filter((g) => g.debt > 0.009 || g.pendingDelivery > 0);
+  }, [rows, patMap]);
+
+  const filtered = grouped.filter((g) => {
+    if (!q.trim()) return true;
+    const s = q.toLowerCase();
+    return (g.patient.full_name ?? "").toLowerCase().includes(s) || (g.patient.phone ?? "").includes(q);
+  }).sort((a, b) => b.debt - a.debt);
+
   return (
-    <Card>
-      <div className="p-3 border-b text-sm font-medium">Últimas atenciones</div>
-      <Table>
-        <TableHeader><TableRow>
-          <TableHead>Fecha</TableHead><TableHead>Paciente</TableHead><TableHead>Estudio</TableHead>
-          <TableHead>Total</TableHead><TableHead>Pagado</TableHead><TableHead>Deuda</TableHead>
-          <TableHead>Factura</TableHead><TableHead>Entrega</TableHead>
-        </TableRow></TableHeader>
-        <TableBody>
-          {(rows as any[]).slice(0, 20).map((r) => {
-            const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0);
-            const debt = Math.max(0, total - Number(r.amount_paid ?? 0));
-            return (
-              <TableRow key={r.id}>
-                <TableCell>{formatDate(r.created_at)}</TableCell>
-                <TableCell>{patMap.get(r.patient_id) || "-"}</TableCell>
-                <TableCell>{stMap.get(r.study_id) || "-"}</TableCell>
-                <TableCell className="font-mono">{formatMoney(total)}</TableCell>
-                <TableCell className="font-mono">{formatMoney(r.amount_paid)}</TableCell>
-                <TableCell className="font-mono">{debt > 0 ? <Badge variant="outline" className="text-amber-600 border-amber-500">{formatMoney(debt)}</Badge> : <Badge variant="secondary">—</Badge>}</TableCell>
-                <TableCell>{r.with_invoice ? (r.invoice_number || "Sí") : "—"}</TableCell>
-                <TableCell>{r.delivered_at ? formatDate(r.delivered_at) : <Badge variant="outline">Pendiente</Badge>}</TableCell>
-              </TableRow>
-            );
-          })}
-          {rows.length === 0 && <TableRow><TableCell colSpan={8} className="text-muted-foreground text-center">Sin atenciones registradas.</TableCell></TableRow>}
-        </TableBody>
-      </Table>
+    <Card className="p-3 space-y-3">
+      <div className="relative">
+        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input autoFocus placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center text-sm text-muted-foreground py-8">
+          {q ? "Sin resultados." : "Sin pacientes con pendientes."}
+        </div>
+      ) : (
+        <div className="divide-y">
+          {filtered.map((g) => (
+            <Link key={g.patient.id} to="/app/patients/$id" params={{ id: g.patient.id }}
+              className="flex items-center gap-3 py-2.5 px-1 hover:bg-accent rounded-md transition-colors">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{g.patient.full_name}</div>
+                <div className="text-[11px] text-muted-foreground truncate">
+                  Cel: {g.patient.phone || "—"} · Última: {formatDate(g.lastDate)}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                {g.debt > 0.009 ? (
+                  <div className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatMoney(g.debt)}</div>
+                ) : (
+                  <Badge variant="secondary">Al día</Badge>
+                )}
+                <div className="flex gap-1 justify-end mt-0.5">
+                  {g.pendingDelivery > 0 && <Badge variant="outline" className="text-[10px]">{g.pendingDelivery} x entregar</Badge>}
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </Link>
+          ))}
+        </div>
+      )}
+      <div className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1 border-t">
+        <Wallet className="h-3 w-3" /> Toca un paciente para ver su perfil, pagos y tratamientos.
+      </div>
     </Card>
   );
 }
