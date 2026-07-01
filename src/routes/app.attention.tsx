@@ -425,7 +425,7 @@ function EntregasTab() {
     if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
     setBusy(g.patient.id);
     const balanceBefore = g.debt;
-    const chargedItems: { id: string; before: number; after: number; amount: number }[] = [];
+    const chargedItems: { id: string; study_id: string; before: number; after: number; amount: number }[] = [];
     for (const it of g.items) {
       if (it._debt <= 0.009) continue;
       const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
