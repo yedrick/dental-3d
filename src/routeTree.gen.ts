@@ -9,38 +9,224 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppUsersRouteImport } from './routes/app.users'
+import { Route as AppThirdPartyRouteImport } from './routes/app.third-party'
+import { Route as AppStudiesRouteImport } from './routes/app.studies'
+import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppPatientsRouteImport } from './routes/app.patients'
+import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
+import { Route as AppDepositsRouteImport } from './routes/app.deposits'
+import { Route as AppCommissionsRouteImport } from './routes/app.commissions'
+import { Route as AppCashboxRouteImport } from './routes/app.cashbox'
+import { Route as AppAuditRouteImport } from './routes/app.audit'
+import { Route as AppAttentionRouteImport } from './routes/app.attention'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUsersRoute = AppUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppThirdPartyRoute = AppThirdPartyRouteImport.update({
+  id: '/third-party',
+  path: '/third-party',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStudiesRoute = AppStudiesRouteImport.update({
+  id: '/studies',
+  path: '/studies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPatientsRoute = AppPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDoctorsRoute = AppDoctorsRouteImport.update({
+  id: '/doctors',
+  path: '/doctors',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDepositsRoute = AppDepositsRouteImport.update({
+  id: '/deposits',
+  path: '/deposits',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCommissionsRoute = AppCommissionsRouteImport.update({
+  id: '/commissions',
+  path: '/commissions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCashboxRoute = AppCashboxRouteImport.update({
+  id: '/cashbox',
+  path: '/cashbox',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAttentionRoute = AppAttentionRouteImport.update({
+  id: '/attention',
+  path: '/attention',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/cashbox': typeof AppCashboxRoute
+  '/app/commissions': typeof AppCommissionsRoute
+  '/app/deposits': typeof AppDepositsRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/studies': typeof AppStudiesRoute
+  '/app/third-party': typeof AppThirdPartyRoute
+  '/app/users': typeof AppUsersRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/cashbox': typeof AppCashboxRoute
+  '/app/commissions': typeof AppCommissionsRoute
+  '/app/deposits': typeof AppDepositsRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/studies': typeof AppStudiesRoute
+  '/app/third-party': typeof AppThirdPartyRoute
+  '/app/users': typeof AppUsersRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/cashbox': typeof AppCashboxRoute
+  '/app/commissions': typeof AppCommissionsRoute
+  '/app/deposits': typeof AppDepositsRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/studies': typeof AppStudiesRoute
+  '/app/third-party': typeof AppThirdPartyRoute
+  '/app/users': typeof AppUsersRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/attention'
+    | '/app/audit'
+    | '/app/cashbox'
+    | '/app/commissions'
+    | '/app/deposits'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/reports'
+    | '/app/studies'
+    | '/app/third-party'
+    | '/app/users'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/app/attention'
+    | '/app/audit'
+    | '/app/cashbox'
+    | '/app/commissions'
+    | '/app/deposits'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/reports'
+    | '/app/studies'
+    | '/app/third-party'
+    | '/app/users'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/attention'
+    | '/app/audit'
+    | '/app/cashbox'
+    | '/app/commissions'
+    | '/app/deposits'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/reports'
+    | '/app/studies'
+    | '/app/third-party'
+    | '/app/users'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +234,129 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/users': {
+      id: '/app/users'
+      path: '/users'
+      fullPath: '/app/users'
+      preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/third-party': {
+      id: '/app/third-party'
+      path: '/third-party'
+      fullPath: '/app/third-party'
+      preLoaderRoute: typeof AppThirdPartyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/studies': {
+      id: '/app/studies'
+      path: '/studies'
+      fullPath: '/app/studies'
+      preLoaderRoute: typeof AppStudiesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/reports': {
+      id: '/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/patients': {
+      id: '/app/patients'
+      path: '/patients'
+      fullPath: '/app/patients'
+      preLoaderRoute: typeof AppPatientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/doctors': {
+      id: '/app/doctors'
+      path: '/doctors'
+      fullPath: '/app/doctors'
+      preLoaderRoute: typeof AppDoctorsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/deposits': {
+      id: '/app/deposits'
+      path: '/deposits'
+      fullPath: '/app/deposits'
+      preLoaderRoute: typeof AppDepositsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/commissions': {
+      id: '/app/commissions'
+      path: '/commissions'
+      fullPath: '/app/commissions'
+      preLoaderRoute: typeof AppCommissionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/cashbox': {
+      id: '/app/cashbox'
+      path: '/cashbox'
+      fullPath: '/app/cashbox'
+      preLoaderRoute: typeof AppCashboxRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/audit': {
+      id: '/app/audit'
+      path: '/audit'
+      fullPath: '/app/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/attention': {
+      id: '/app/attention'
+      path: '/attention'
+      fullPath: '/app/attention'
+      preLoaderRoute: typeof AppAttentionRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAttentionRoute: typeof AppAttentionRoute
+  AppAuditRoute: typeof AppAuditRoute
+  AppCashboxRoute: typeof AppCashboxRoute
+  AppCommissionsRoute: typeof AppCommissionsRoute
+  AppDepositsRoute: typeof AppDepositsRoute
+  AppDoctorsRoute: typeof AppDoctorsRoute
+  AppPatientsRoute: typeof AppPatientsRoute
+  AppReportsRoute: typeof AppReportsRoute
+  AppStudiesRoute: typeof AppStudiesRoute
+  AppThirdPartyRoute: typeof AppThirdPartyRoute
+  AppUsersRoute: typeof AppUsersRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAttentionRoute: AppAttentionRoute,
+  AppAuditRoute: AppAuditRoute,
+  AppCashboxRoute: AppCashboxRoute,
+  AppCommissionsRoute: AppCommissionsRoute,
+  AppDepositsRoute: AppDepositsRoute,
+  AppDoctorsRoute: AppDoctorsRoute,
+  AppPatientsRoute: AppPatientsRoute,
+  AppReportsRoute: AppReportsRoute,
+  AppStudiesRoute: AppStudiesRoute,
+  AppThirdPartyRoute: AppThirdPartyRoute,
+  AppUsersRoute: AppUsersRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
