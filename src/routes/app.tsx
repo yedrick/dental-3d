@@ -15,23 +15,15 @@ function GlobalLoader() {
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const active = fetching + mutating > 0;
+  if (!active) return null;
   return (
-    <>
-      <div
-        className={`pointer-events-none fixed left-0 right-0 top-0 z-50 h-0.5 overflow-hidden bg-transparent transition-opacity ${active ? "opacity-100" : "opacity-0"}`}
-      >
-        <div className="h-full w-1/3 animate-[loader_1s_ease-in-out_infinite] bg-primary" />
-      </div>
-      {active && (
-        <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Cargando…
-        </div>
-      )}
-      <style>{`@keyframes loader{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}`}</style>
-    </>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="text-sm font-medium text-foreground">Cargando…</div>
+    </div>
   );
 }
+
 
 function AppLayout() {
   const { user, loading } = useAuth();
