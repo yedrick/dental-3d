@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,8 +8,53 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth, type AppRole } from "@/lib/auth";
+import { Eye, Plus, Pencil, Trash2, DollarSign, PackageCheck, Settings2, UserCog, ShieldCheck, FileDown, type LucideIcon } from "lucide-react";
 
 const ROLES: AppRole[] = ["ADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
+
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  doctors: "Doctores",
+  patients: "Pacientes",
+  studies: "Estudios y tarifas",
+  attention: "Atención",
+  delivery: "Entregas y cobros",
+  cashbox: "Caja chica",
+  deposits: "Depósitos bancarios",
+  third_party: "Pagos a terceros",
+  commissions: "Comisiones",
+  reports: "Reportes",
+  audit: "Auditoría",
+  users: "Usuarios",
+  roles: "Roles y permisos",
+  params: "Parámetros del sistema",
+};
+
+const MODULE_ORDER = [
+  "dashboard", "attention", "delivery", "patients", "doctors", "studies",
+  "cashbox", "deposits", "third_party", "commissions", "reports",
+  "users", "roles", "params", "audit",
+];
+
+const ACTION_META: Record<string, { label: string; icon: LucideIcon; order: number }> = {
+  view: { label: "Ver", icon: Eye, order: 1 },
+  create: { label: "Crear", icon: Plus, order: 2 },
+  edit: { label: "Editar", icon: Pencil, order: 3 },
+  delete: { label: "Eliminar", icon: Trash2, order: 4 },
+  charge: { label: "Cobrar", icon: DollarSign, order: 5 },
+  deliver: { label: "Entregar", icon: PackageCheck, order: 6 },
+  export: { label: "Exportar PDF", icon: FileDown, order: 7 },
+  manage_roles: { label: "Asignar roles", icon: UserCog, order: 8 },
+  manage_permissions: { label: "Gestionar permisos", icon: ShieldCheck, order: 9 },
+};
+const defaultAction = (a: string) => ({ label: a, icon: Settings2, order: 99 });
+
+function parseKey(key: string): { module: string; action: string } {
+  // view.<module>  → module=<module>, action=view
+  if (key.startsWith("view.")) return { module: key.slice(5), action: "view" };
+  const [mod, ...rest] = key.split(".");
+  return { module: mod, action: rest.join(".") || "view" };
+}
 
 export const Route = createFileRoute("/app/roles")({ component: RolesPage });
 
@@ -22,7 +66,7 @@ function RolesPage() {
   const { data: permissions = [] } = useQuery({
     queryKey: ["permissions"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("permissions").select("*").order("category").order("key");
+      const { data, error } = await supabase.from("permissions").select("*").order("key");
       if (error) throw error;
       return data as any[];
     },
@@ -52,52 +96,80 @@ function RolesPage() {
     await reloadPermissions();
   };
 
-  const grouped = permissions.reduce<Record<string, any[]>>((acc, p) => {
-    (acc[p.category] ||= []).push(p); return acc;
+  // Group by module
+  const byModule = permissions.reduce<Record<string, any[]>>((acc, p) => {
+    const { module } = parseKey(p.key);
+    (acc[module] ||= []).push(p);
+    return acc;
   }, {});
+
+  const modules = Object.keys(byModule).sort((a, b) => {
+    const ia = MODULE_ORDER.indexOf(a); const ib = MODULE_ORDER.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
 
   return (
     <div>
-      <PageHeader title="Roles y permisos" description="Matriz configurable. ADMIN siempre tiene todo. Marca/desmarca para cada rol." />
+      <PageHeader title="Roles y permisos" description="Agrupado por módulo. Cada fila es una acción (ver, crear, editar, eliminar, etc.). ADMIN siempre tiene todo." />
       {!canEdit && <div className="mb-3 text-sm text-muted-foreground">Solo lectura — necesitas el permiso <code>roles.manage_permissions</code>.</div>}
-      <Card className="overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[260px]">Permiso</TableHead>
-              {ROLES.map((r) => <TableHead key={r} className="text-center">{r}</TableHead>)}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {Object.entries(grouped).map(([cat, list]) => (
-              <Fragment key={cat}>
-                <TableRow className="bg-muted/40">
-                  <TableCell colSpan={1 + ROLES.length} className="font-semibold uppercase text-xs tracking-wider">
-                    <Badge variant="outline">{cat}</Badge>
-                  </TableCell>
-                </TableRow>
-                {list.map((p) => (
-                  <TableRow key={p.key}>
-                    <TableCell>
-                      <div className="font-medium text-sm">{p.description}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{p.key}</div>
-                    </TableCell>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {modules.map((mod) => {
+          const perms = byModule[mod]
+            .map((p) => ({ ...p, ...parseKey(p.key) }))
+            .sort((a, b) => (ACTION_META[a.action] ?? defaultAction(a.action)).order - (ACTION_META[b.action] ?? defaultAction(b.action)).order);
+          return (
+            <Card key={mod} className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+                <div className="font-semibold text-sm">{MODULE_LABELS[mod] ?? mod}</div>
+                <Badge variant="outline" className="text-[10px] font-mono">{mod}</Badge>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[45%]">Acción</TableHead>
                     {ROLES.map((r) => (
-                      <TableCell key={r} className="text-center">
-                        <Checkbox
-                          checked={r === "ADMIN" ? true : has(r, p.key)}
-                          disabled={!canEdit || r === "ADMIN"}
-                          onCheckedChange={(v) => toggle(r, p.key, !!v)}
-                        />
-                      </TableCell>
+                      <TableHead key={r} className="text-center px-1 text-[10px] font-medium">{r.slice(0, 3)}</TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </Fragment>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {perms.map((p) => {
+                    const meta = ACTION_META[p.action] ?? defaultAction(p.action);
+                    const Icon = meta.icon;
+                    return (
+                      <TableRow key={p.key}>
+                        <TableCell className="py-2">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-sm leading-tight">{meta.label}</div>
+                              <div className="text-[10px] text-muted-foreground truncate" title={p.description}>{p.description}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        {ROLES.map((r) => (
+                          <TableCell key={r} className="text-center px-1 py-2">
+                            <Checkbox
+                              checked={r === "ADMIN" ? true : has(r, p.key)}
+                              disabled={!canEdit || r === "ADMIN"}
+                              onCheckedChange={(v) => toggle(r, p.key, !!v)}
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 text-xs text-muted-foreground">
+        <span className="font-medium">Leyenda:</span> las columnas son roles (ADM=ADMIN, REC=RECEPCION, CAJ=CAJA, CON=CONTABILIDAD, DOC=DOCTOR, AUD=AUDITOR).
+      </div>
     </div>
   );
 }
