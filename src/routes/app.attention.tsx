@@ -431,7 +431,7 @@ function EntregasTab() {
       const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
       const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
       if (error) { toast.error(error.message); setBusy(null); return; }
-      chargedItems.push({ id: it.id, before: it._debt, after: 0, amount: it._debt });
+      chargedItems.push({ id: it.id, study_id: it.study_id, before: it._debt, after: 0, amount: it._debt });
     }
     await supabase.from("audit_logs").insert({
       user_id: user!.id,
