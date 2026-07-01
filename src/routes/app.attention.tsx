@@ -165,7 +165,7 @@ function RegistroTab() {
   if (!canCreate) return <Card className="p-6 text-sm text-muted-foreground">Sin permiso <code>attention.create</code>.</Card>;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[260px,1fr]">
+    <div className="grid gap-3 lg:grid-cols-2">
       {/* LEFT: compact summary / total */}
       <aside className="order-2 lg:order-1">
         <Card className="p-3 lg:sticky lg:top-3 space-y-2">
