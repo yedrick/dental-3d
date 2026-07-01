@@ -135,9 +135,14 @@ function DoctorsPage() {
               <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             </div>
             <div><Label>Dirección consultorio</Label><Input value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div><Label>Cuenta bancaria</Label><Input value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
               <div><Label>% Comisión</Label><Input type="number" step="0.01" value={form.default_commission_pct} onChange={(e) => setForm({ ...form, default_commission_pct: Number(e.target.value) })} /></div>
+              <div>
+                <Label>% Descuento convenio</Label>
+                <Input type="number" step="0.01" min="0" max="100" value={form.agreement_discount_pct} onChange={(e) => setForm({ ...form, agreement_discount_pct: Number(e.target.value) })} />
+                <p className="text-[10px] text-muted-foreground mt-1">Se aplica automático al paciente en cada estudio.</p>
+              </div>
             </div>
             {form.id && (
               <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
