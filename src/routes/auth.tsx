@@ -90,7 +90,7 @@ function PasswordInput({
             <Req ok={checks.lower}>Al menos una minúscula (a-z)</Req>
             <Req ok={checks.num}>Al menos un número (0-9)</Req>
             <Req ok={checks.sym}>Al menos un símbolo (!@#$%...)</Req>
-            <Req ok={checks.notCommon}>No usar palabras comunes (admin, 12345, password...)</Req>
+            
           </ul>
           <p className="mt-2 text-muted-foreground">
             ⚠️ El sistema rechaza contraseñas que aparecen en <b>filtraciones públicas</b> (base HaveIBeenPwned). Inventa una nueva que NO uses en otros sitios. Ejemplo válido: <code className="rounded bg-background px-1">Dental3D#Clinica-2026!</code>
@@ -119,7 +119,7 @@ function AuthPage() {
     lower: /[a-z]/.test(password),
     num: /[0-9]/.test(password),
     sym: /[^A-Za-z0-9]/.test(password),
-    notCommon: password.length > 0 && !/^(admin|password|12345|qwerty|dental|123456789|admin123)/i.test(password),
+    
   }), [password]);
   const allOk = Object.values(checks).every(Boolean);
   const togglePasswordVisibility = () => setShowPwd((v) => !v);
