@@ -13,6 +13,10 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppStudiesRouteImport } from './routes/app.studies'
+import { Route as AppPatientsRouteImport } from './routes/app.patients'
+import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
+import { Route as AppAttentionRouteImport } from './routes/app.attention'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -34,16 +38,44 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppStudiesRoute = AppStudiesRouteImport.update({
+  id: '/studies',
+  path: '/studies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPatientsRoute = AppPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDoctorsRoute = AppDoctorsRouteImport.update({
+  id: '/doctors',
+  path: '/doctors',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAttentionRoute = AppAttentionRouteImport.update({
+  id: '/attention',
+  path: '/attention',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/studies': typeof AppStudiesRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/studies': typeof AppStudiesRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -51,14 +83,42 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/app/attention': typeof AppAttentionRoute
+  '/app/doctors': typeof AppDoctorsRoute
+  '/app/patients': typeof AppPatientsRoute
+  '/app/studies': typeof AppStudiesRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/auth' | '/app/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/attention'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/studies'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/app'
-  id: '__root__' | '/' | '/app' | '/auth' | '/app/'
+  to:
+    | '/'
+    | '/auth'
+    | '/app/attention'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/studies'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/attention'
+    | '/app/doctors'
+    | '/app/patients'
+    | '/app/studies'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -97,14 +157,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/studies': {
+      id: '/app/studies'
+      path: '/studies'
+      fullPath: '/app/studies'
+      preLoaderRoute: typeof AppStudiesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/patients': {
+      id: '/app/patients'
+      path: '/patients'
+      fullPath: '/app/patients'
+      preLoaderRoute: typeof AppPatientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/doctors': {
+      id: '/app/doctors'
+      path: '/doctors'
+      fullPath: '/app/doctors'
+      preLoaderRoute: typeof AppDoctorsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/attention': {
+      id: '/app/attention'
+      path: '/attention'
+      fullPath: '/app/attention'
+      preLoaderRoute: typeof AppAttentionRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAttentionRoute: typeof AppAttentionRoute
+  AppDoctorsRoute: typeof AppDoctorsRoute
+  AppPatientsRoute: typeof AppPatientsRoute
+  AppStudiesRoute: typeof AppStudiesRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAttentionRoute: AppAttentionRoute,
+  AppDoctorsRoute: AppDoctorsRoute,
+  AppPatientsRoute: AppPatientsRoute,
+  AppStudiesRoute: AppStudiesRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
