@@ -245,6 +245,7 @@ export type Database = {
       }
       doctors: {
         Row: {
+          agreement_discount_pct: number
           bank_account: string | null
           clinic_address: string | null
           created_at: string
@@ -257,6 +258,7 @@ export type Database = {
           status: boolean
         }
         Insert: {
+          agreement_discount_pct?: number
           bank_account?: string | null
           clinic_address?: string | null
           created_at?: string
@@ -269,6 +271,7 @@ export type Database = {
           status?: boolean
         }
         Update: {
+          agreement_discount_pct?: number
           bank_account?: string | null
           clinic_address?: string | null
           created_at?: string
