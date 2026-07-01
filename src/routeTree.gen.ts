@@ -16,10 +16,13 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppUsersRouteImport } from './routes/app.users'
 import { Route as AppThirdPartyRouteImport } from './routes/app.third-party'
 import { Route as AppStudiesRouteImport } from './routes/app.studies'
+import { Route as AppRolesRouteImport } from './routes/app.roles'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppPatientsRouteImport } from './routes/app.patients'
+import { Route as AppParamsRouteImport } from './routes/app.params'
 import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
 import { Route as AppDepositsRouteImport } from './routes/app.deposits'
+import { Route as AppDeliveryRouteImport } from './routes/app.delivery'
 import { Route as AppCommissionsRouteImport } from './routes/app.commissions'
 import { Route as AppCashboxRouteImport } from './routes/app.cashbox'
 import { Route as AppAuditRouteImport } from './routes/app.audit'
@@ -60,6 +63,11 @@ const AppStudiesRoute = AppStudiesRouteImport.update({
   path: '/studies',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -70,6 +78,11 @@ const AppPatientsRoute = AppPatientsRouteImport.update({
   path: '/patients',
   getParentRoute: () => AppRoute,
 } as any)
+const AppParamsRoute = AppParamsRouteImport.update({
+  id: '/params',
+  path: '/params',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDoctorsRoute = AppDoctorsRouteImport.update({
   id: '/doctors',
   path: '/doctors',
@@ -78,6 +91,11 @@ const AppDoctorsRoute = AppDoctorsRouteImport.update({
 const AppDepositsRoute = AppDepositsRouteImport.update({
   id: '/deposits',
   path: '/deposits',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDeliveryRoute = AppDeliveryRouteImport.update({
+  id: '/delivery',
+  path: '/delivery',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCommissionsRoute = AppCommissionsRouteImport.update({
@@ -109,10 +127,13 @@ export interface FileRoutesByFullPath {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -125,10 +146,13 @@ export interface FileRoutesByTo {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -143,10 +167,13 @@ export interface FileRoutesById {
   '/app/audit': typeof AppAuditRoute
   '/app/cashbox': typeof AppCashboxRoute
   '/app/commissions': typeof AppCommissionsRoute
+  '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -162,10 +189,13 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/params'
     | '/app/patients'
     | '/app/reports'
+    | '/app/roles'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -178,10 +208,13 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/params'
     | '/app/patients'
     | '/app/reports'
+    | '/app/roles'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -195,10 +228,13 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/cashbox'
     | '/app/commissions'
+    | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/params'
     | '/app/patients'
     | '/app/reports'
+    | '/app/roles'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -262,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStudiesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/roles': {
+      id: '/app/roles'
+      path: '/roles'
+      fullPath: '/app/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/reports': {
       id: '/app/reports'
       path: '/reports'
@@ -276,6 +319,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPatientsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/params': {
+      id: '/app/params'
+      path: '/params'
+      fullPath: '/app/params'
+      preLoaderRoute: typeof AppParamsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/doctors': {
       id: '/app/doctors'
       path: '/doctors'
@@ -288,6 +338,13 @@ declare module '@tanstack/react-router' {
       path: '/deposits'
       fullPath: '/app/deposits'
       preLoaderRoute: typeof AppDepositsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/delivery': {
+      id: '/app/delivery'
+      path: '/delivery'
+      fullPath: '/app/delivery'
+      preLoaderRoute: typeof AppDeliveryRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/commissions': {
@@ -326,10 +383,13 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppCashboxRoute: typeof AppCashboxRoute
   AppCommissionsRoute: typeof AppCommissionsRoute
+  AppDeliveryRoute: typeof AppDeliveryRoute
   AppDepositsRoute: typeof AppDepositsRoute
   AppDoctorsRoute: typeof AppDoctorsRoute
+  AppParamsRoute: typeof AppParamsRoute
   AppPatientsRoute: typeof AppPatientsRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppRolesRoute: typeof AppRolesRoute
   AppStudiesRoute: typeof AppStudiesRoute
   AppThirdPartyRoute: typeof AppThirdPartyRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -341,10 +401,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppCashboxRoute: AppCashboxRoute,
   AppCommissionsRoute: AppCommissionsRoute,
+  AppDeliveryRoute: AppDeliveryRoute,
   AppDepositsRoute: AppDepositsRoute,
   AppDoctorsRoute: AppDoctorsRoute,
+  AppParamsRoute: AppParamsRoute,
   AppPatientsRoute: AppPatientsRoute,
   AppReportsRoute: AppReportsRoute,
+  AppRolesRoute: AppRolesRoute,
   AppStudiesRoute: AppStudiesRoute,
   AppThirdPartyRoute: AppThirdPartyRoute,
   AppUsersRoute: AppUsersRoute,

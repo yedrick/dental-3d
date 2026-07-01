@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_params: {
+        Row: {
+          description: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value_bool: boolean | null
+          value_num: number | null
+          value_text: string | null
+        }
+        Insert: {
+          description: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value_bool?: boolean | null
+          value_num?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          description?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_bool?: boolean | null
+          value_num?: number | null
+          value_text?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -184,45 +214,76 @@ export type Database = {
       }
       patient_studies: {
         Row: {
+          amount_paid: number
+          clinic_name: string | null
           created_at: string
           created_by: string
+          delivered_at: string | null
+          delivered_by: string | null
           delivery_date: string | null
+          discount: number
+          doctor_id: string | null
           has_report: boolean
           id: string
           invoice_number: string | null
+          invoice_surcharge: number
           is_voucher: boolean
           patient_id: string
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           price: number
           study_id: string
+          with_invoice: boolean
         }
         Insert: {
+          amount_paid?: number
+          clinic_name?: string | null
           created_at?: string
           created_by: string
+          delivered_at?: string | null
+          delivered_by?: string | null
           delivery_date?: string | null
+          discount?: number
+          doctor_id?: string | null
           has_report?: boolean
           id?: string
           invoice_number?: string | null
+          invoice_surcharge?: number
           is_voucher?: boolean
           patient_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           price?: number
           study_id: string
+          with_invoice?: boolean
         }
         Update: {
+          amount_paid?: number
+          clinic_name?: string | null
           created_at?: string
           created_by?: string
+          delivered_at?: string | null
+          delivered_by?: string | null
           delivery_date?: string | null
+          discount?: number
+          doctor_id?: string | null
           has_report?: boolean
           id?: string
           invoice_number?: string | null
+          invoice_surcharge?: number
           is_voucher?: boolean
           patient_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           price?: number
           study_id?: string
+          with_invoice?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "patient_studies_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "patient_studies_patient_id_fkey"
             columns: ["patient_id"]
@@ -277,6 +338,27 @@ export type Database = {
           },
         ]
       }
+      permissions: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          key: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description: string
+          key: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string
+          key?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean
@@ -303,6 +385,32 @@ export type Database = {
           username?: string
         }
         Relationships: []
+      }
+      role_permissions: {
+        Row: {
+          created_at: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          created_at?: string
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          created_at?: string
+          permission_key?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       studies: {
         Row: {
@@ -430,6 +538,10 @@ export type Database = {
           _roles: Database["public"]["Enums"]["app_role"][]
           _user_id: string
         }
+        Returns: boolean
+      }
+      has_permission: {
+        Args: { _key: string; _user_id: string }
         Returns: boolean
       }
       has_role: {

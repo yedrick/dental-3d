@@ -6,38 +6,42 @@ import {
 import {
   LayoutDashboard, Stethoscope, Users, TestTube2, ClipboardList, Percent,
   Wallet, Landmark, Receipt, BarChart3, ShieldCheck, UserCog, LogOut,
+  PackageCheck, KeyRound, Settings2,
 } from "lucide-react";
-import { useAuth, type AppRole } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
-type Item = { title: string; url: string; icon: any; roles?: AppRole[] };
+type Item = { title: string; url: string; icon: any; perm: string };
 
 const nav: { label: string; items: Item[] }[] = [
   { label: "General", items: [
-    { title: "Dashboard", url: "/app", icon: LayoutDashboard },
+    { title: "Dashboard", url: "/app", icon: LayoutDashboard, perm: "view.dashboard" },
   ]},
   { label: "Clínico", items: [
-    { title: "Doctores", url: "/app/doctors", icon: Stethoscope, roles: ["ADMIN","RECEPCION","AUDITOR","DOCTOR"] },
-    { title: "Pacientes", url: "/app/patients", icon: Users, roles: ["ADMIN","RECEPCION","AUDITOR","DOCTOR"] },
-    { title: "Estudios y tarifas", url: "/app/studies", icon: TestTube2, roles: ["ADMIN","RECEPCION","CAJA","AUDITOR"] },
-    { title: "Atenciones", url: "/app/attention", icon: ClipboardList, roles: ["ADMIN","RECEPCION","CAJA","AUDITOR"] },
+    { title: "Doctores", url: "/app/doctors", icon: Stethoscope, perm: "view.doctors" },
+    { title: "Pacientes", url: "/app/patients", icon: Users, perm: "view.patients" },
+    { title: "Estudios y tarifas", url: "/app/studies", icon: TestTube2, perm: "view.studies" },
+    { title: "Atenciones", url: "/app/attention", icon: ClipboardList, perm: "view.attention" },
+    { title: "Entregas y cobros", url: "/app/delivery", icon: PackageCheck, perm: "view.delivery" },
   ]},
   { label: "Financiero", items: [
-    { title: "Comisiones", url: "/app/commissions", icon: Percent, roles: ["ADMIN","CONTABILIDAD","AUDITOR","DOCTOR"] },
-    { title: "Caja chica", url: "/app/cashbox", icon: Wallet, roles: ["ADMIN","CAJA","CONTABILIDAD","AUDITOR"] },
-    { title: "Depósitos", url: "/app/deposits", icon: Landmark, roles: ["ADMIN","CAJA","CONTABILIDAD","AUDITOR"] },
-    { title: "Pagos a terceros", url: "/app/third-party", icon: Receipt, roles: ["ADMIN","CONTABILIDAD","AUDITOR"] },
+    { title: "Comisiones", url: "/app/commissions", icon: Percent, perm: "view.commissions" },
+    { title: "Caja chica", url: "/app/cashbox", icon: Wallet, perm: "view.cashbox" },
+    { title: "Depósitos", url: "/app/deposits", icon: Landmark, perm: "view.deposits" },
+    { title: "Pagos a terceros", url: "/app/third-party", icon: Receipt, perm: "view.third_party" },
   ]},
   { label: "Control", items: [
-    { title: "Reportes", url: "/app/reports", icon: BarChart3, roles: ["ADMIN","CONTABILIDAD","AUDITOR"] },
-    { title: "Auditoría", url: "/app/audit", icon: ShieldCheck, roles: ["ADMIN","AUDITOR"] },
-    { title: "Usuarios", url: "/app/users", icon: UserCog, roles: ["ADMIN"] },
+    { title: "Reportes", url: "/app/reports", icon: BarChart3, perm: "view.reports" },
+    { title: "Auditoría", url: "/app/audit", icon: ShieldCheck, perm: "view.audit" },
+    { title: "Usuarios", url: "/app/users", icon: UserCog, perm: "view.users" },
+    { title: "Roles y permisos", url: "/app/roles", icon: KeyRound, perm: "view.roles" },
+    { title: "Parámetros", url: "/app/params", icon: Settings2, perm: "view.params" },
   ]},
 ];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { hasAny, signOut, user, roles } = useAuth();
+  const { can, signOut, user, roles } = useAuth();
 
   return (
     <Sidebar collapsible="icon">
@@ -52,7 +56,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         {nav.map((group) => {
-          const visible = group.items.filter((i) => !i.roles || hasAny(i.roles));
+          const visible = group.items.filter((i) => can(i.perm));
           if (visible.length === 0) return null;
           return (
             <SidebarGroup key={group.label}>
