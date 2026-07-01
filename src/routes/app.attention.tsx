@@ -425,13 +425,13 @@ function EntregasTab() {
     if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
     setBusy(g.patient.id);
     const balanceBefore = g.debt;
-    const chargedItems: { id: string; before: number; after: number; amount: number }[] = [];
+    const chargedItems: { id: string; study_id: string; before: number; after: number; amount: number }[] = [];
     for (const it of g.items) {
       if (it._debt <= 0.009) continue;
       const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
       const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
       if (error) { toast.error(error.message); setBusy(null); return; }
-      chargedItems.push({ id: it.id, before: it._debt, after: 0, amount: it._debt });
+      chargedItems.push({ id: it.id, study_id: it.study_id, before: it._debt, after: 0, amount: it._debt });
     }
     await supabase.from("audit_logs").insert({
       user_id: user!.id,
@@ -474,6 +474,7 @@ function EntregasTab() {
         patient_name: g.patient.full_name,
         delivered_count: pending.length,
         delivered_ids: ids,
+        study_ids: pending.map((it) => it.study_id),
         balance_before: Math.round(g.debt * 100) / 100,
         balance_after: Math.round(g.debt * 100) / 100,
         total_paid: Math.round(g.paid * 100) / 100,
