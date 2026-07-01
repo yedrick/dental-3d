@@ -40,7 +40,7 @@ function DoctorsPage() {
 
   const openNew = () => { setForm(empty); setOpen(true); };
   const openEdit = (d: any) => {
-    setForm({ id: d.id, full_name: d.full_name, clinic_address: d.clinic_address || "", phone: d.phone || "", email: d.email || "", bank_account: d.bank_account || "", default_commission_pct: Number(d.default_commission_pct ?? 20), status: d.status });
+    setForm({ id: d.id, full_name: d.full_name, clinic_address: d.clinic_address || "", phone: d.phone || "", email: d.email || "", bank_account: d.bank_account || "", default_commission_pct: Number(d.default_commission_pct ?? 20), agreement_discount_pct: Number(d.agreement_discount_pct ?? 0), status: d.status });
     setOpen(true);
   };
 
