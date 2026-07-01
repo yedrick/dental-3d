@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -27,72 +28,53 @@ function translateError(msg: string): string {
   return msg;
 }
 
-function AuthPage() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
-  useEffect(() => { if (!loading && user) navigate({ to: "/app" }); }, [user, loading, navigate]);
+type PasswordChecks = {
+  len: boolean;
+  upper: boolean;
+  lower: boolean;
+  num: boolean;
+  sym: boolean;
+  notCommon: boolean;
+};
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
-  const [username, setUsername] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const checks = useMemo(() => ({
-    len: password.length >= 10,
-    upper: /[A-Z]/.test(password),
-    lower: /[a-z]/.test(password),
-    num: /[0-9]/.test(password),
-    sym: /[^A-Za-z0-9]/.test(password),
-    notCommon: password.length > 0 && !/^(admin|password|12345|qwerty|dental|123456789|admin123)/i.test(password),
-  }), [password]);
-  const allOk = Object.values(checks).every(Boolean);
-
-  const signIn = async () => {
-    if (!email || !password) { toast.error("Ingresa email y contraseña."); return; }
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) toast.error(translateError(error.message));
-    else navigate({ to: "/app" });
-  };
-  const signUp = async () => {
-    if (!allOk) { toast.error("Tu contraseña no cumple los requisitos mínimos."); return; }
-    setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/app`,
-        data: { username, full_name: fullName },
-      },
-    });
-    setBusy(false);
-    if (error) toast.error(translateError(error.message), { duration: 8000 });
-    else toast.success("Cuenta creada. Revisa tu correo o inicia sesión.");
-  };
-
-  const Req = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
-    <li className={`flex items-center gap-2 ${ok ? "text-green-600" : "text-muted-foreground"}`}>
+function Req({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <li className={`flex items-center gap-2 ${ok ? "text-primary" : "text-muted-foreground"}`}>
       {ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
       <span>{children}</span>
     </li>
   );
+}
 
-  const PasswordInput = ({ showHelp = false }: { showHelp?: boolean }) => (
+function PasswordInput({
+  password,
+  showPwd,
+  showHelp = false,
+  checks,
+  onPasswordChange,
+  onToggleShow,
+}: {
+  password: string;
+  showPwd: boolean;
+  showHelp?: boolean;
+  checks: PasswordChecks;
+  onPasswordChange: (value: string) => void;
+  onToggleShow: () => void;
+}) {
+  return (
     <div>
       <Label>Contraseña</Label>
       <div className="relative">
         <Input
           type={showPwd ? "text" : "password"}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => onPasswordChange(e.target.value)}
           className="pr-10"
           autoComplete={showHelp ? "new-password" : "current-password"}
         />
         <button
           type="button"
-          onClick={() => setShowPwd((v) => !v)}
+          onClick={onToggleShow}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
         >
@@ -117,6 +99,53 @@ function AuthPage() {
       )}
     </div>
   );
+}
+
+function AuthPage() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => { if (!loading && user) navigate({ to: "/app" }); }, [user, loading, navigate]);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [username, setUsername] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const checks = useMemo(() => ({
+    len: password.length >= 10,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    num: /[0-9]/.test(password),
+    sym: /[^A-Za-z0-9]/.test(password),
+    notCommon: password.length > 0 && !/^(admin|password|12345|qwerty|dental|123456789|admin123)/i.test(password),
+  }), [password]);
+  const allOk = Object.values(checks).every(Boolean);
+  const togglePasswordVisibility = () => setShowPwd((v) => !v);
+
+  const signIn = async () => {
+    if (!email || !password) { toast.error("Ingresa email y contraseña."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (error) toast.error(translateError(error.message));
+    else navigate({ to: "/app" });
+  };
+  const signUp = async () => {
+    if (!allOk) { toast.error("Tu contraseña no cumple los requisitos mínimos."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/app`,
+        data: { username, full_name: fullName },
+      },
+    });
+    setBusy(false);
+    if (error) toast.error(translateError(error.message), { duration: 8000 });
+    else toast.success("Cuenta creada. Revisa tu correo o inicia sesión.");
+  };
 
   return (
     <div className="grid min-h-screen place-items-center bg-muted/40 p-4">
@@ -136,14 +165,14 @@ function AuthPage() {
             </TabsList>
             <TabsContent value="in" className="space-y-3">
               <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-              <PasswordInput />
+              <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
             </TabsContent>
             <TabsContent value="up" className="space-y-3">
               <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
               <div><Label>Usuario</Label><Input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
               <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-              <PasswordInput showHelp />
+              <PasswordInput password={password} showPwd={showPwd} showHelp checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
               <Button onClick={signUp} disabled={busy || !allOk} className="w-full">Crear cuenta</Button>
               <p className="text-xs text-muted-foreground">El primer usuario registrado será ADMIN. Los siguientes serán RECEPCION por defecto y un ADMIN puede cambiar sus roles.</p>
             </TabsContent>
