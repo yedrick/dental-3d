@@ -189,7 +189,7 @@ function RegistroTab() {
       </aside>
 
       {/* RIGHT: form */}
-      <div className="order-1 lg:order-2 space-y-3 min-w-0">
+      <div className="order-1 space-y-3 min-w-0">
         {/* Patient */}
         <Card className="p-3">
           <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">1. Paciente</Label>
