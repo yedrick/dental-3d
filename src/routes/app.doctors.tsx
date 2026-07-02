@@ -106,7 +106,7 @@ function DoctorsPage() {
                 </TableCell>
                 <TableCell className="text-sm">{d.phone || "—"}</TableCell>
                 <TableCell className="text-sm">{d.email || "—"}</TableCell>
-                <TableCell className="text-sm">{d.default_commission_pct}%</TableCell>
+                <TableCell className="text-sm">{d.use_percentage ? `${Number(d.default_commission_pct ?? 0)}%` : <span className="text-muted-foreground">Fija por estudio</span>}</TableCell>
                 <TableCell className="text-sm">{Number(d.agreement_discount_pct ?? 0)}%</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
