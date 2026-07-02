@@ -68,6 +68,11 @@ function StudiesPage() {
                   <div className="grid gap-3">
                     <div><Label>Nombre</Label><Input value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></div>
                     <div><Label>Descripción</Label><Input value={s.description} onChange={(e) => setS({ ...s, description: e.target.value })} /></div>
+                    <div>
+                      <Label>Comisión fija (Bs)</Label>
+                      <Input type="number" step="0.01" min="0" value={s.fixed_commission} onChange={(e) => setS({ ...s, fixed_commission: Number(e.target.value) })} />
+                      <p className="text-[10px] text-muted-foreground mt-1">Se paga al doctor cuando NO tiene "Comisión por porcentaje" activo.</p>
+                    </div>
                   </div>
                   <DialogFooter><Button onClick={saveStudy} disabled={!s.name}>Guardar</Button></DialogFooter>
                 </DialogContent>
