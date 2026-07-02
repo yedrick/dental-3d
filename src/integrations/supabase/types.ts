@@ -657,6 +657,7 @@ export type Database = {
         | "CONTABILIDAD"
         | "DOCTOR"
         | "AUDITOR"
+        | "SUBADMIN"
       payment_method: "cash" | "qr" | "card"
     }
     CompositeTypes: {
@@ -792,6 +793,7 @@ export const Constants = {
         "CONTABILIDAD",
         "DOCTOR",
         "AUDITOR",
+        "SUBADMIN",
       ],
       payment_method: ["cash", "qr", "card"],
     },
