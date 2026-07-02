@@ -82,13 +82,13 @@ function NotificationsPage() {
           <h1 className="text-2xl font-semibold flex items-center gap-2"><Bell className="h-6 w-6" /> Notificaciones</h1>
           <p className="text-sm text-muted-foreground">Mensajes internos del sistema</p>
         </div>
-        {isAdmin && <ComposeDialog onSent={() => { qc.invalidateQueries({ queryKey: ["notif-sent"] }); }} />}
+        {canSend && <ComposeDialog onSent={() => { qc.invalidateQueries({ queryKey: ["notif-sent"] }); }} />}
       </div>
 
       <Tabs defaultValue="received">
         <TabsList>
           <TabsTrigger value="received">Recibidas ({received.length})</TabsTrigger>
-          {isAdmin && <TabsTrigger value="sent">Enviadas ({sent.length})</TabsTrigger>}
+          {canSend && <TabsTrigger value="sent">Enviadas ({sent.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="received" className="space-y-3">
