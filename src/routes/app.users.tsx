@@ -149,13 +149,14 @@ function UsersPage() {
               <TableHead>Usuario</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Estado</TableHead>
               <TableHead>Creado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow><TableCell colSpan={5} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
             )}
             {!isLoading && filtered.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/40">
