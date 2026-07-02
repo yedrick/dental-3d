@@ -37,7 +37,7 @@ function StudiesPage() {
     const { error } = await supabase.from("studies").insert(s);
     if (error) return toast.error(error.message);
     toast.success("Estudio creado");
-    setOpenS(false); setS({ name: "", description: "", active: true });
+    setOpenS(false); setS({ name: "", description: "", fixed_commission: 0, active: true });
     qc.invalidateQueries({ queryKey: ["studies"] });
   };
   const savePrice = async () => {
