@@ -420,10 +420,15 @@ function EntregasTab() {
     return (g.patient.full_name ?? "").toLowerCase().includes(s) || (g.patient.phone ?? "").includes(q);
   }).sort((a, b) => b.debt - a.debt);
 
-  const collectAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
+  const openCharge = (g: typeof filtered[number], e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     if (g.debt <= 0.009) return;
-    if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
+    setChargeTarget(g);
+  };
+
+  const confirmCharge = async () => {
+    const g = chargeTarget;
+    if (!g) return;
     setBusy(g.patient.id);
     const balanceBefore = g.debt;
     const chargedItems: { id: string; study_id: string; before: number; after: number; amount: number }[] = [];
@@ -449,6 +454,7 @@ function EntregasTab() {
     });
     toast.success("Saldo cobrado");
     setBusy(null);
+    setChargeTarget(null);
     qc.invalidateQueries({ queryKey: ["patient_studies"] });
     qc.invalidateQueries({ queryKey: ["audit_logs"] });
   };
