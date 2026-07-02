@@ -133,11 +133,23 @@ function AppointmentsPage() {
     if (form.id) {
       const { error } = await supabase.from("appointments").update(payload).eq("id", form.id);
       if (error) return toast.error(error.message);
+      await supabase.rpc("log_audit_event", {
+        _action: "APPOINTMENT_UPDATE",
+        _table_name: "appointments",
+        _record_id: form.id,
+        _data: payload,
+      });
       toast.success("Cita actualizada");
     } else {
       payload.created_by = user!.id;
-      const { error } = await supabase.from("appointments").insert(payload);
+      const { data: ins, error } = await supabase.from("appointments").insert(payload).select("id").single();
       if (error) return toast.error(error.message);
+      await supabase.rpc("log_audit_event", {
+        _action: "APPOINTMENT_CREATE",
+        _table_name: "appointments",
+        _record_id: (ins as any)?.id ?? "",
+        _data: payload,
+      });
       toast.success("Cita creada");
     }
     setOpen(false);
@@ -148,12 +160,24 @@ function AppointmentsPage() {
     if (!confirm("¿Eliminar cita?")) return;
     const { error } = await supabase.from("appointments").delete().eq("id", a.id);
     if (error) return toast.error(error.message);
+    await supabase.rpc("log_audit_event", {
+      _action: "APPOINTMENT_DELETE",
+      _table_name: "appointments",
+      _record_id: a.id,
+      _data: { patient_name: a.patient_name, starts_at: a.starts_at, status: a.status } as any,
+    });
     toast.success("Cita eliminada");
     qc.invalidateQueries({ queryKey: ["appointments"] });
   };
 
   const changeStatus = async (a: any, v: string) => {
     await supabase.from("appointments").update({ status: v }).eq("id", a.id);
+    await supabase.rpc("log_audit_event", {
+      _action: "APPOINTMENT_STATUS",
+      _table_name: "appointments",
+      _record_id: a.id,
+      _data: { from: a.status, to: v, patient_name: a.patient_name } as any,
+    });
     qc.invalidateQueries({ queryKey: ["appointments"] });
   };
 
