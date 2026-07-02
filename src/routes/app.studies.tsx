@@ -28,7 +28,7 @@ function StudiesPage() {
 
   const [openS, setOpenS] = useState(false);
   const [openP, setOpenP] = useState(false);
-  const [s, setS] = useState<any>({ name: "", description: "", active: true });
+  const [s, setS] = useState<any>({ name: "", description: "", fixed_commission: 0, active: true });
   const [p, setP] = useState<any>({ study_id: "", price_with_report: 0, price_without_report: 0, effective_date: new Date().toISOString().slice(0, 10), is_active: true });
 
   const studyMap = new Map(studies.map((x: any) => [x.id, x.name]));
