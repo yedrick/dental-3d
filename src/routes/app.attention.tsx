@@ -538,7 +538,7 @@ function EntregasTab() {
               </div>
               <div className="flex gap-1 shrink-0">
                 {g.debt > 0.009 && (
-                  <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => collectAll(g, e)}>
+                  <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => openCharge(g, e)}>
                     <Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(g.debt)}
                   </Button>
                 )}
