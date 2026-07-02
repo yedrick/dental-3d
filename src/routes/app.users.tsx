@@ -201,9 +201,9 @@ function UsersPage() {
                   {new Date(u.created_at).toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
-                  {isAdmin && (
+                  {(canApprove || canEdit || canDelete || canImpersonate) && (
                     <div className="flex justify-end gap-1">
-                      {u.id !== user?.id && (
+                      {canApprove && u.id !== user?.id && (
                         <Button
                           size="sm"
                           variant={u.approved ? "ghost" : "default"}
@@ -213,14 +213,17 @@ function UsersPage() {
                           {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
                         </Button>
                       )}
-                      {u.id !== user?.id && (
+                      {canImpersonate && u.id !== user?.id && (
                         <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      {canEdit && (
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id}>
@@ -234,6 +237,7 @@ function UsersPage() {
                               Se eliminará <b>{u.full_name}</b> ({u.email}) de forma permanente.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
+
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                             <AlertDialogAction
