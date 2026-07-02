@@ -134,7 +134,7 @@ function UsersPage() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" />{data.length} usuarios</Badge>
-          {isAdmin && (
+          {canCreate && (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="h-4 w-4 mr-2" />Nuevo usuario</Button>
@@ -145,6 +145,7 @@ function UsersPage() {
               />
             </Dialog>
           )}
+
         </div>
       </Card>
 
