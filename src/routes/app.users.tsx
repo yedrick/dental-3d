@@ -248,7 +248,7 @@ function UsersPage() {
               </TableRow>
             ))}
             {!isLoading && filtered.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-muted-foreground py-8 text-center">Sin resultados.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Sin resultados.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
