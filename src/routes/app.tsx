@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -15,14 +15,21 @@ function GlobalLoader() {
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const active = fetching + mutating > 0;
-  if (!active) return null;
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!active) { setShow(false); return; }
+    const t = setTimeout(() => setShow(true), 400);
+    return () => clearTimeout(t);
+  }, [active]);
+  if (!show) return null;
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      <div className="text-sm font-medium text-foreground">Cargando…</div>
+    <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur">
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+      <span>Actualizando…</span>
     </div>
   );
 }
+
 
 
 function AppLayout() {
