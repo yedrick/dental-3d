@@ -43,9 +43,15 @@ type Row = {
 };
 
 function UsersPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, can } = useAuth();
   const isAdmin = hasRole("ADMIN");
+  const canCreate = isAdmin || can("users.create");
+  const canEdit = isAdmin || can("users.edit");
+  const canDelete = isAdmin || can("users.delete");
+  const canApprove = isAdmin || can("users.approve");
+  const canImpersonate = isAdmin || can("users.impersonate");
   const qc = useQueryClient();
+
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
