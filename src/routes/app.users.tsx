@@ -18,10 +18,11 @@ import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck } from "luci
 import { useAuth, type AppRole } from "@/lib/auth";
 import { adminCreateUser, adminUpdateUser, adminDeleteUser } from "@/lib/users-admin.functions";
 
-const ROLES: AppRole[] = ["ADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
+const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
 
 const ROLE_STYLES: Record<AppRole, string> = {
   ADMIN: "bg-primary/15 text-primary border-primary/30",
+  SUBADMIN: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30",
   RECEPCION: "bg-blue-500/15 text-blue-600 border-blue-500/30",
   CAJA: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
   CONTABILIDAD: "bg-amber-500/15 text-amber-700 border-amber-500/30",
