@@ -62,12 +62,15 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const changed: Record<string, unknown> = {};
     const authPatch: any = {};
     if (data.email) authPatch.email = data.email;
     if (data.password && data.password.length > 0) authPatch.password = data.password;
     if (Object.keys(authPatch).length) {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, authPatch);
       if (error) throw new Error(error.message);
+      if (data.email) changed.email = data.email;
+      if (data.password) changed.password_changed = true;
     }
     const profPatch: any = {};
     if (data.full_name !== undefined) profPatch.full_name = data.full_name;
@@ -76,12 +79,21 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
     if (Object.keys(profPatch).length) {
       const { error } = await supabaseAdmin.from("profiles").update(profPatch).eq("id", data.user_id);
       if (error) throw new Error(error.message);
+      Object.assign(changed, profPatch);
     }
     if (data.role) {
       await supabaseAdmin.from("user_roles").delete().eq("user_id", data.user_id);
       const { error } = await supabaseAdmin.from("user_roles").insert({ user_id: data.user_id, role: data.role });
       if (error) throw new Error(error.message);
+      changed.role = data.role;
     }
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: context.userId,
+      action: "USER_UPDATE",
+      table_name: "auth.users",
+      record_id: data.user_id,
+      data: { changed },
+    });
     return { ok: true };
   });
 
@@ -92,7 +104,16 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase, context.userId);
     if (data.user_id === context.userId) throw new Error("No puedes eliminar tu propio usuario");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prof } = await supabaseAdmin
+      .from("profiles").select("email, full_name, username").eq("id", data.user_id).maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.user_id);
     if (error) throw new Error(error.message);
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: context.userId,
+      action: "USER_DELETE",
+      table_name: "auth.users",
+      record_id: data.user_id,
+      data: { profile: prof ?? null },
+    });
     return { ok: true };
   });
