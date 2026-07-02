@@ -21,9 +21,11 @@ export const Route = createFileRoute("/app/notifications")({
 });
 
 function NotificationsPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, can } = useAuth();
   const isAdmin = hasRole("ADMIN");
+  const canSend = isAdmin || can("notifications.send");
   const qc = useQueryClient();
+
 
   const { data: received = [] } = useQuery({
     queryKey: ["notif-received", user?.id],
