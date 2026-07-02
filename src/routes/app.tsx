@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
+import { NotificationBell } from "@/components/notification-bell";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
