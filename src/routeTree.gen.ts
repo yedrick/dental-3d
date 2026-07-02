@@ -18,6 +18,7 @@ import { Route as AppThirdPartyRouteImport } from './routes/app.third-party'
 import { Route as AppStudiesRouteImport } from './routes/app.studies'
 import { Route as AppRolesRouteImport } from './routes/app.roles'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppPatientsRouteImport } from './routes/app.patients'
 import { Route as AppParamsRouteImport } from './routes/app.params'
 import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
@@ -73,6 +74,11 @@ const AppRolesRoute = AppRolesRouteImport.update({
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPatientsRoute = AppPatientsRouteImport.update({
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/app/doctors': typeof AppDoctorsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
   '/app/studies': typeof AppStudiesRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/app/doctors'
     | '/app/params'
     | '/app/patients'
+    | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/studies'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/app/doctors'
     | '/app/params'
     | '/app/patients'
+    | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/studies'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/app/doctors'
     | '/app/params'
     | '/app/patients'
+    | '/app/profile'
     | '/app/reports'
     | '/app/roles'
     | '/app/studies'
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/app/reports'
       preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/patients': {
@@ -439,6 +458,7 @@ interface AppRouteChildren {
   AppDoctorsRoute: typeof AppDoctorsRoute
   AppParamsRoute: typeof AppParamsRoute
   AppPatientsRoute: typeof AppPatientsRouteWithChildren
+  AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppStudiesRoute: typeof AppStudiesRoute
@@ -458,6 +478,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDoctorsRoute: AppDoctorsRoute,
   AppParamsRoute: AppParamsRoute,
   AppPatientsRoute: AppPatientsRouteWithChildren,
+  AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
   AppStudiesRoute: AppStudiesRoute,
