@@ -92,7 +92,7 @@ function DoctorsPage() {
         <Table>
           <TableHeader><TableRow>
             <TableHead>Nombre</TableHead><TableHead>Teléfono</TableHead><TableHead>Email</TableHead>
-            <TableHead>% Comisión</TableHead><TableHead>% Desc. convenio</TableHead><TableHead>Estado</TableHead>
+            <TableHead>Comisión</TableHead><TableHead>% Desc. convenio</TableHead><TableHead>Estado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
