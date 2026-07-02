@@ -253,8 +253,10 @@ function UsersPage() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                      )}
                     </div>
                   )}
+
                 </TableCell>
               </TableRow>
             ))}
