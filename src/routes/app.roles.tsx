@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useAuth, type AppRole } from "@/lib/auth";
 import { Eye, Plus, Pencil, Trash2, DollarSign, PackageCheck, Settings2, UserCog, ShieldCheck, FileDown, type LucideIcon } from "lucide-react";
 
-const ROLES: AppRole[] = ["ADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
+const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
 
 const MODULE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
