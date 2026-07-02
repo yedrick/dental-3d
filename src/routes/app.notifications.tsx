@@ -44,11 +44,20 @@ function NotificationsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("notifications")
-        .select("id, title, body, created_at, recipients:notification_recipients(id, user_id, read_at, profile:profiles!notification_recipients_user_id_fkey(full_name, email))")
+        .select("id, title, body, created_at, recipients:notification_recipients(id, user_id, read_at)")
         .eq("sender_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      const ids = Array.from(new Set((data ?? []).flatMap((n: any) => n.recipients.map((r: any) => r.user_id))));
+      const profMap = new Map<string, { full_name: string | null; email: string | null }>();
+      if (ids.length) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+        (profs ?? []).forEach((p: any) => profMap.set(p.id, { full_name: p.full_name, email: p.email }));
+      }
+      return (data ?? []).map((n: any) => ({
+        ...n,
+        recipients: n.recipients.map((r: any) => ({ ...r, profile: profMap.get(r.user_id) ?? null })),
+      }));
     },
     enabled: !!user && isAdmin,
   });

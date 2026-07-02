@@ -21,6 +21,7 @@ import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppPatientsRouteImport } from './routes/app.patients'
 import { Route as AppParamsRouteImport } from './routes/app.params'
+import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
 import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
 import { Route as AppDepositsRouteImport } from './routes/app.deposits'
 import { Route as AppDeliveryRouteImport } from './routes/app.delivery'
@@ -91,6 +92,11 @@ const AppParamsRoute = AppParamsRouteImport.update({
   path: '/params',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDoctorsRoute = AppDoctorsRouteImport.update({
   id: '/doctors',
   path: '/doctors',
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/notifications': typeof AppNotificationsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/notifications': typeof AppNotificationsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/app/delivery': typeof AppDeliveryRoute
   '/app/deposits': typeof AppDepositsRoute
   '/app/doctors': typeof AppDoctorsRoute
+  '/app/notifications': typeof AppNotificationsRoute
   '/app/params': typeof AppParamsRoute
   '/app/patients': typeof AppPatientsRouteWithChildren
   '/app/profile': typeof AppProfileRoute
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
     | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/notifications'
     | '/app/params'
     | '/app/patients'
     | '/app/profile'
@@ -242,6 +252,7 @@ export interface FileRouteTypes {
     | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/notifications'
     | '/app/params'
     | '/app/patients'
     | '/app/profile'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/app/delivery'
     | '/app/deposits'
     | '/app/doctors'
+    | '/app/notifications'
     | '/app/params'
     | '/app/patients'
     | '/app/profile'
@@ -369,6 +381,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppParamsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/notifications': {
+      id: '/app/notifications'
+      path: '/notifications'
+      fullPath: '/app/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/doctors': {
       id: '/app/doctors'
       path: '/doctors'
@@ -456,6 +475,7 @@ interface AppRouteChildren {
   AppDeliveryRoute: typeof AppDeliveryRoute
   AppDepositsRoute: typeof AppDepositsRoute
   AppDoctorsRoute: typeof AppDoctorsRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppParamsRoute: typeof AppParamsRoute
   AppPatientsRoute: typeof AppPatientsRouteWithChildren
   AppProfileRoute: typeof AppProfileRoute
@@ -476,6 +496,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDeliveryRoute: AppDeliveryRoute,
   AppDepositsRoute: AppDepositsRoute,
   AppDoctorsRoute: AppDoctorsRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppParamsRoute: AppParamsRoute,
   AppPatientsRoute: AppPatientsRouteWithChildren,
   AppProfileRoute: AppProfileRoute,
