@@ -37,6 +37,13 @@ export const adminCreateUser = createServerFn({ method: "POST" })
     await supabaseAdmin.from("user_roles").delete().eq("user_id", uid);
     const { error: rErr } = await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
     if (rErr) throw new Error(rErr.message);
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: context.userId,
+      action: "USER_CREATE",
+      table_name: "auth.users",
+      record_id: uid,
+      data: { email: data.email, full_name: data.full_name, username: data.username, role: data.role },
+    });
     return { id: uid };
   });
 
