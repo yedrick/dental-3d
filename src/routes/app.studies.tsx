@@ -81,16 +81,17 @@ function StudiesPage() {
           )}
           <Card>
             <Table>
-              <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Descripción</TableHead><TableHead>Activo</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Comisión fija</TableHead><TableHead>Activo</TableHead></TableRow></TableHeader>
               <TableBody>
                 {studies.map((x: any) => (
                   <TableRow key={x.id}>
                     <TableCell className="font-medium">{x.name}</TableCell>
                     <TableCell>{x.description || "-"}</TableCell>
+                    <TableCell className="text-right">{formatMoney(x.fixed_commission ?? 0)}</TableCell>
                     <TableCell><Badge variant={x.active ? "default" : "secondary"}>{x.active ? "Sí" : "No"}</Badge></TableCell>
                   </TableRow>
                 ))}
-                {studies.length === 0 && <TableRow><TableCell colSpan={3} className="text-muted-foreground">Sin estudios.</TableCell></TableRow>}
+                {studies.length === 0 && <TableRow><TableCell colSpan={4} className="text-muted-foreground">Sin estudios.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </Card>
