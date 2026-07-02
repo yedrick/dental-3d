@@ -179,12 +179,33 @@ function UsersPage() {
                     <Badge variant="outline" className="text-muted-foreground">Sin rol</Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  {u.approved ? (
+                    <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Aprobado
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/15 text-amber-700 border-amber-500/30 gap-1">
+                      <XCircle className="h-3 w-3" /> Pendiente
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {new Date(u.created_at).toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
                   {isAdmin && (
                     <div className="flex justify-end gap-1">
+                      {u.id !== user?.id && (
+                        <Button
+                          size="sm"
+                          variant={u.approved ? "ghost" : "default"}
+                          title={u.approved ? "Deshabilitar acceso" : "Aprobar acceso"}
+                          onClick={() => toggleApproved(u)}
+                        >
+                          {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
+                        </Button>
+                      )}
                       {u.id !== user?.id && (
                         <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
