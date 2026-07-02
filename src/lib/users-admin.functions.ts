@@ -117,3 +117,32 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+export const adminImpersonate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    if (data.user_id === context.userId) throw new Error("Ya eres este usuario");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prof, error: pErr } = await supabaseAdmin
+      .from("profiles").select("email, full_name").eq("id", data.user_id).maybeSingle();
+    if (pErr) throw new Error(pErr.message);
+    if (!prof?.email) throw new Error("Usuario sin email");
+    const { data: link, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email: prof.email,
+    });
+    if (error) throw new Error(error.message);
+    const token_hash = (link as any)?.properties?.hashed_token;
+    if (!token_hash) throw new Error("No se pudo generar el enlace de acceso");
+    await supabaseAdmin.from("audit_logs").insert({
+      user_id: context.userId,
+      action: "USER_UPDATE",
+      table_name: "auth.users",
+      record_id: data.user_id,
+      data: { impersonate: true, target: prof.email },
+    });
+    return { token_hash, email: prof.email, full_name: prof.full_name };
+  });
+
