@@ -256,6 +256,7 @@ export type Database = {
           id: string
           phone: string | null
           status: boolean
+          use_percentage: boolean
         }
         Insert: {
           agreement_discount_pct?: number
@@ -269,6 +270,7 @@ export type Database = {
           id?: string
           phone?: string | null
           status?: boolean
+          use_percentage?: boolean
         }
         Update: {
           agreement_discount_pct?: number
@@ -282,6 +284,7 @@ export type Database = {
           id?: string
           phone?: string | null
           status?: boolean
+          use_percentage?: boolean
         }
         Relationships: []
       }
@@ -499,6 +502,7 @@ export type Database = {
           active: boolean
           created_at: string
           description: string | null
+          fixed_commission: number
           id: string
           name: string
         }
@@ -506,6 +510,7 @@ export type Database = {
           active?: boolean
           created_at?: string
           description?: string | null
+          fixed_commission?: number
           id?: string
           name: string
         }
@@ -513,6 +518,7 @@ export type Database = {
           active?: boolean
           created_at?: string
           description?: string | null
+          fixed_commission?: number
           id?: string
           name?: string
         }

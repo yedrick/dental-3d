@@ -28,7 +28,7 @@ function StudiesPage() {
 
   const [openS, setOpenS] = useState(false);
   const [openP, setOpenP] = useState(false);
-  const [s, setS] = useState<any>({ name: "", description: "", active: true });
+  const [s, setS] = useState<any>({ name: "", description: "", fixed_commission: 0, active: true });
   const [p, setP] = useState<any>({ study_id: "", price_with_report: 0, price_without_report: 0, effective_date: new Date().toISOString().slice(0, 10), is_active: true });
 
   const studyMap = new Map(studies.map((x: any) => [x.id, x.name]));
@@ -37,7 +37,7 @@ function StudiesPage() {
     const { error } = await supabase.from("studies").insert(s);
     if (error) return toast.error(error.message);
     toast.success("Estudio creado");
-    setOpenS(false); setS({ name: "", description: "", active: true });
+    setOpenS(false); setS({ name: "", description: "", fixed_commission: 0, active: true });
     qc.invalidateQueries({ queryKey: ["studies"] });
   };
   const savePrice = async () => {
@@ -68,6 +68,11 @@ function StudiesPage() {
                   <div className="grid gap-3">
                     <div><Label>Nombre</Label><Input value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></div>
                     <div><Label>Descripción</Label><Input value={s.description} onChange={(e) => setS({ ...s, description: e.target.value })} /></div>
+                    <div>
+                      <Label>Comisión fija (Bs)</Label>
+                      <Input type="number" step="0.01" min="0" value={s.fixed_commission} onChange={(e) => setS({ ...s, fixed_commission: Number(e.target.value) })} />
+                      <p className="text-[10px] text-muted-foreground mt-1">Se paga al doctor cuando NO tiene "Comisión por porcentaje" activo.</p>
+                    </div>
                   </div>
                   <DialogFooter><Button onClick={saveStudy} disabled={!s.name}>Guardar</Button></DialogFooter>
                 </DialogContent>
@@ -76,16 +81,17 @@ function StudiesPage() {
           )}
           <Card>
             <Table>
-              <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Descripción</TableHead><TableHead>Activo</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Nombre</TableHead><TableHead>Descripción</TableHead><TableHead className="text-right">Comisión fija</TableHead><TableHead>Activo</TableHead></TableRow></TableHeader>
               <TableBody>
                 {studies.map((x: any) => (
                   <TableRow key={x.id}>
                     <TableCell className="font-medium">{x.name}</TableCell>
                     <TableCell>{x.description || "-"}</TableCell>
+                    <TableCell className="text-right">{formatMoney(x.fixed_commission ?? 0)}</TableCell>
                     <TableCell><Badge variant={x.active ? "default" : "secondary"}>{x.active ? "Sí" : "No"}</Badge></TableCell>
                   </TableRow>
                 ))}
-                {studies.length === 0 && <TableRow><TableCell colSpan={3} className="text-muted-foreground">Sin estudios.</TableCell></TableRow>}
+                {studies.length === 0 && <TableRow><TableCell colSpan={4} className="text-muted-foreground">Sin estudios.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </Card>
