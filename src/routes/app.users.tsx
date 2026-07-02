@@ -14,9 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn } from "lucide-react";
 import { useAuth, type AppRole } from "@/lib/auth";
-import { adminCreateUser, adminUpdateUser, adminDeleteUser } from "@/lib/users-admin.functions";
+import { adminCreateUser, adminUpdateUser, adminDeleteUser, adminImpersonate } from "@/lib/users-admin.functions";
 
 const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
 
