@@ -52,10 +52,25 @@ function DeliveryPage() {
     const amt = Number(charge.amount || 0);
     if (amt <= 0) return toast.error("Monto inválido");
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
+    const before = charge.row.debt;
+    const newPaid = Number((charge.row.paid + amt).toFixed(2));
     const { error } = await supabase.from("patient_studies")
-      .update({ amount_paid: Number((charge.row.paid + amt).toFixed(2)) })
+      .update({ amount_paid: newPaid })
       .eq("id", charge.row.id);
     if (error) return toast.error(error.message);
+    await supabase.rpc("log_audit_event", {
+      _action: "CHARGE",
+      _table_name: "patient_studies",
+      _record_id: charge.row.id,
+      _data: {
+        patient_id: charge.row.patient_id,
+        patient_name: charge.row.patient?.full_name,
+        study_id: charge.row.study_id,
+        amount_charged: amt,
+        balance_before: Math.round(before * 100) / 100,
+        balance_after: Math.round((before - amt) * 100) / 100,
+      } as any,
+    });
     toast.success("Cobro registrado");
     setCharge(null);
     qc.invalidateQueries();
@@ -67,15 +82,43 @@ function DeliveryPage() {
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .eq("id", row.id);
     if (error) return toast.error(error.message);
+    await supabase.rpc("log_audit_event", {
+      _action: "DELIVER",
+      _table_name: "patient_studies",
+      _record_id: row.id,
+      _data: {
+        patient_id: row.patient_id,
+        patient_name: row.patient?.full_name,
+        study_id: row.study_id,
+        balance_before: Math.round(row.debt * 100) / 100,
+        balance_after: Math.round(row.debt * 100) / 100,
+        total: Math.round(row.total * 100) / 100,
+      } as any,
+    });
     toast.success("Estudio entregado");
     qc.invalidateQueries();
   };
 
   const chargeAll = async (patientId: string) => {
     const patientRows = enriched.filter((r) => r.patient_id === patientId && r.debt > 0.009);
+    const totalDebt = patientRows.reduce((s, r) => s + r.debt, 0);
     for (const r of patientRows) {
       await supabase.from("patient_studies").update({ amount_paid: Number(r.total.toFixed(2)) }).eq("id", r.id);
     }
+    await supabase.rpc("log_audit_event", {
+      _action: "CHARGE_ALL",
+      _table_name: "patient_studies",
+      _record_id: patientId,
+      _data: {
+        patient_id: patientId,
+        patient_name: patientRows[0]?.patient?.full_name,
+        items_count: patientRows.length,
+        record_ids: patientRows.map((r) => r.id),
+        amount_charged: Math.round(totalDebt * 100) / 100,
+        balance_before: Math.round(totalDebt * 100) / 100,
+        balance_after: 0,
+      } as any,
+    });
     toast.success(`Cobrado saldo total del paciente`);
     qc.invalidateQueries();
   };
