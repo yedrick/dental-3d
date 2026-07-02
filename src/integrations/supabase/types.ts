@@ -151,6 +151,7 @@ export type Database = {
           created_by: string
           deposit_date: string
           id: string
+          receipt_url: string | null
           reference: string | null
         }
         Insert: {
@@ -159,6 +160,7 @@ export type Database = {
           created_by: string
           deposit_date: string
           id?: string
+          receipt_url?: string | null
           reference?: string | null
         }
         Update: {
@@ -167,6 +169,7 @@ export type Database = {
           created_by?: string
           deposit_date?: string
           id?: string
+          receipt_url?: string | null
           reference?: string | null
         }
         Relationships: []
@@ -570,6 +573,7 @@ export type Database = {
           id: string
           payment_date: string
           provider_name: string
+          receipt_url: string | null
           service_date: string
           service_type: string
         }
@@ -580,6 +584,7 @@ export type Database = {
           id?: string
           payment_date: string
           provider_name: string
+          receipt_url?: string | null
           service_date: string
           service_type: string
         }
@@ -590,6 +595,7 @@ export type Database = {
           id?: string
           payment_date?: string
           provider_name?: string
+          receipt_url?: string | null
           service_date?: string
           service_type?: string
         }
