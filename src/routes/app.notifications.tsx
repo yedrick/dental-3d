@@ -21,9 +21,11 @@ export const Route = createFileRoute("/app/notifications")({
 });
 
 function NotificationsPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, can } = useAuth();
   const isAdmin = hasRole("ADMIN");
+  const canSend = isAdmin || can("notifications.send");
   const qc = useQueryClient();
+
 
   const { data: received = [] } = useQuery({
     queryKey: ["notif-received", user?.id],
@@ -59,7 +61,7 @@ function NotificationsPage() {
         recipients: n.recipients.map((r: any) => ({ ...r, profile: profMap.get(r.user_id) ?? null })),
       }));
     },
-    enabled: !!user && isAdmin,
+    enabled: !!user && canSend,
   });
 
   const markRead = useMutation({
@@ -80,13 +82,13 @@ function NotificationsPage() {
           <h1 className="text-2xl font-semibold flex items-center gap-2"><Bell className="h-6 w-6" /> Notificaciones</h1>
           <p className="text-sm text-muted-foreground">Mensajes internos del sistema</p>
         </div>
-        {isAdmin && <ComposeDialog onSent={() => { qc.invalidateQueries({ queryKey: ["notif-sent"] }); }} />}
+        {canSend && <ComposeDialog onSent={() => { qc.invalidateQueries({ queryKey: ["notif-sent"] }); }} />}
       </div>
 
       <Tabs defaultValue="received">
         <TabsList>
           <TabsTrigger value="received">Recibidas ({received.length})</TabsTrigger>
-          {isAdmin && <TabsTrigger value="sent">Enviadas ({sent.length})</TabsTrigger>}
+          {canSend && <TabsTrigger value="sent">Enviadas ({sent.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="received" className="space-y-3">
@@ -120,7 +122,7 @@ function NotificationsPage() {
           })}
         </TabsContent>
 
-        {isAdmin && (
+        {canSend && (
           <TabsContent value="sent" className="space-y-3">
             {sent.length === 0 && <div className="text-sm text-muted-foreground py-8 text-center">No has enviado notificaciones</div>}
             {sent.map((n: any) => {

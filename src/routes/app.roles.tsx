@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth, type AppRole } from "@/lib/auth";
-import { Eye, Plus, Pencil, Trash2, DollarSign, PackageCheck, Settings2, UserCog, ShieldCheck, FileDown, type LucideIcon } from "lucide-react";
+import { Eye, Plus, Pencil, Trash2, DollarSign, PackageCheck, Settings2, UserCog, ShieldCheck, FileDown, Send, CheckCircle2, LogIn, type LucideIcon } from "lucide-react";
 
 const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
 
@@ -18,6 +18,7 @@ const MODULE_LABELS: Record<string, string> = {
   patients: "Pacientes",
   studies: "Estudios y tarifas",
   attention: "Atención",
+  appointments: "Agenda de citas",
   delivery: "Entregas y cobros",
   cashbox: "Caja chica",
   deposits: "Depósitos bancarios",
@@ -28,11 +29,14 @@ const MODULE_LABELS: Record<string, string> = {
   users: "Usuarios",
   roles: "Roles y permisos",
   params: "Parámetros del sistema",
+  notifications: "Notificaciones",
+  profile: "Perfil personal",
 };
 
 const MODULE_ORDER = [
-  "dashboard", "attention", "delivery", "patients", "doctors", "studies",
+  "dashboard", "attention", "delivery", "appointments", "patients", "doctors", "studies",
   "cashbox", "deposits", "third_party", "commissions", "reports",
+  "notifications", "profile",
   "users", "roles", "params", "audit",
 ];
 
@@ -44,10 +48,14 @@ const ACTION_META: Record<string, { label: string; icon: LucideIcon; order: numb
   charge: { label: "Cobrar", icon: DollarSign, order: 5 },
   deliver: { label: "Entregar", icon: PackageCheck, order: 6 },
   export: { label: "Exportar PDF", icon: FileDown, order: 7 },
-  manage_roles: { label: "Asignar roles", icon: UserCog, order: 8 },
-  manage_permissions: { label: "Gestionar permisos", icon: ShieldCheck, order: 9 },
+  send: { label: "Enviar", icon: Send, order: 8 },
+  approve: { label: "Aprobar", icon: CheckCircle2, order: 9 },
+  impersonate: { label: "Iniciar sesión como", icon: LogIn, order: 10 },
+  manage_roles: { label: "Asignar roles", icon: UserCog, order: 11 },
+  manage_permissions: { label: "Gestionar permisos", icon: ShieldCheck, order: 12 },
 };
 const defaultAction = (a: string) => ({ label: a, icon: Settings2, order: 99 });
+
 
 function parseKey(key: string): { module: string; action: string } {
   // view.<module>  → module=<module>, action=view

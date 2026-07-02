@@ -83,17 +83,22 @@ export function AppSidebar() {
           <SidebarGroupLabel>Personal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={path === "/app/notifications"}>
-                  <Link to="/app/notifications"><Bell /><span>Notificaciones</span></Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={path === "/app/profile"}>
-                  <Link to="/app/profile"><UserCircle /><span>Mi perfil</span></Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {can("view.notifications") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={path === "/app/notifications"}>
+                    <Link to="/app/notifications"><Bell /><span>Notificaciones</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {can("view.profile") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={path === "/app/profile"}>
+                    <Link to="/app/profile"><UserCircle /><span>Mi perfil</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
+
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

@@ -43,9 +43,15 @@ type Row = {
 };
 
 function UsersPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, can } = useAuth();
   const isAdmin = hasRole("ADMIN");
+  const canCreate = isAdmin || can("users.create");
+  const canEdit = isAdmin || can("users.edit");
+  const canDelete = isAdmin || can("users.delete");
+  const canApprove = isAdmin || can("users.approve");
+  const canImpersonate = isAdmin || can("users.impersonate");
   const qc = useQueryClient();
+
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -128,7 +134,7 @@ function UsersPage() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" />{data.length} usuarios</Badge>
-          {isAdmin && (
+          {canCreate && (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="h-4 w-4 mr-2" />Nuevo usuario</Button>
@@ -139,6 +145,7 @@ function UsersPage() {
               />
             </Dialog>
           )}
+
         </div>
       </Card>
 
@@ -194,9 +201,9 @@ function UsersPage() {
                   {new Date(u.created_at).toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
-                  {isAdmin && (
+                  {(canApprove || canEdit || canDelete || canImpersonate) && (
                     <div className="flex justify-end gap-1">
-                      {u.id !== user?.id && (
+                      {canApprove && u.id !== user?.id && (
                         <Button
                           size="sm"
                           variant={u.approved ? "ghost" : "default"}
@@ -206,14 +213,17 @@ function UsersPage() {
                           {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
                         </Button>
                       )}
-                      {u.id !== user?.id && (
+                      {canImpersonate && u.id !== user?.id && (
                         <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      {canEdit && (
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id}>
@@ -227,6 +237,7 @@ function UsersPage() {
                               Se eliminará <b>{u.full_name}</b> ({u.email}) de forma permanente.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
+
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                             <AlertDialogAction
@@ -242,8 +253,10 @@ function UsersPage() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                      )}
                     </div>
                   )}
+
                 </TableCell>
               </TableRow>
             ))}
