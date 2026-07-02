@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Stethoscope, Users, TestTube2, ClipboardList, Percent,
   Wallet, Landmark, Receipt, BarChart3, ShieldCheck, UserCog, LogOut,
-  PackageCheck, KeyRound, Settings2, CalendarDays,
+  PackageCheck, KeyRound, Settings2, CalendarDays, Bell, UserCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
