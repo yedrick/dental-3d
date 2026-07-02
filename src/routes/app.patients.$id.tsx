@@ -395,8 +395,8 @@ function DoctorInfoCard({ doctor }: { doctor: any }) {
           <Badge variant={doctor.status ? "default" : "outline"}>{doctor.status ? "Activo" : "Inactivo"}</Badge>
         </div>
         <div className="pt-2">
-          <Link to="/app/doctors/$id" params={{ id: doctor.id }} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-            <FileText className="h-3 w-3" />Ver perfil del doctor
+          <Link to="/app/doctors" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            <FileText className="h-3 w-3" />Ver en Doctores
           </Link>
         </div>
       </div>
