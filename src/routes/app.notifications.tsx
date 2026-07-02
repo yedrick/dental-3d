@@ -61,7 +61,7 @@ function NotificationsPage() {
         recipients: n.recipients.map((r: any) => ({ ...r, profile: profMap.get(r.user_id) ?? null })),
       }));
     },
-    enabled: !!user && isAdmin,
+    enabled: !!user && canSend,
   });
 
   const markRead = useMutation({
@@ -122,7 +122,7 @@ function NotificationsPage() {
           })}
         </TabsContent>
 
-        {isAdmin && (
+        {canSend && (
           <TabsContent value="sent" className="space-y-3">
             {sent.length === 0 && <div className="text-sm text-muted-foreground py-8 text-center">No has enviado notificaciones</div>}
             {sent.map((n: any) => {
