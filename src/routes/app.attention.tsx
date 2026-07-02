@@ -433,12 +433,11 @@ function EntregasTab() {
       if (error) { toast.error(error.message); setBusy(null); return; }
       chargedItems.push({ id: it.id, study_id: it.study_id, before: it._debt, after: 0, amount: it._debt });
     }
-    await supabase.from("audit_logs").insert({
-      user_id: user!.id,
-      action: "CHARGE",
-      table_name: "patient_studies",
-      record_id: g.patient.id,
-      data: {
+    await supabase.rpc("log_audit_event", {
+      _action: "CHARGE",
+      _table_name: "patient_studies",
+      _record_id: g.patient.id,
+      _data: {
         patient_id: g.patient.id,
         patient_name: g.patient.full_name,
         amount_charged: Math.round(balanceBefore * 100) / 100,
@@ -464,12 +463,11 @@ function EntregasTab() {
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .in("id", ids);
     if (error) { toast.error(error.message); setBusy(null); return; }
-    await supabase.from("audit_logs").insert({
-      user_id: user!.id,
-      action: "DELIVER",
-      table_name: "patient_studies",
-      record_id: g.patient.id,
-      data: {
+    await supabase.rpc("log_audit_event", {
+      _action: "DELIVER",
+      _table_name: "patient_studies",
+      _record_id: g.patient.id,
+      _data: {
         patient_id: g.patient.id,
         patient_name: g.patient.full_name,
         delivered_count: pending.length,
