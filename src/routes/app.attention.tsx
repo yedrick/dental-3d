@@ -156,8 +156,28 @@ function RegistroTab() {
       };
     });
 
-    const { error } = await supabase.from("patient_studies").insert(rows as any);
+    const { data: inserted, error } = await supabase.from("patient_studies").insert(rows as any).select("id");
     if (error) return toast.error(error.message);
+    await supabase.rpc("log_audit_event", {
+      _action: "ATTENTION_CREATE",
+      _table_name: "patient_studies",
+      _record_id: patient.id,
+      _data: {
+        patient_id: patient.id,
+        patient_name: patient.full_name,
+        doctor_id: doctorId || null,
+        clinic_name: clinic || null,
+        items_count: rows.length,
+        study_ids: rows.map((r) => r.study_id),
+        inserted_ids: (inserted ?? []).map((r: any) => r.id),
+        total: Math.round(totals.total * 100) / 100,
+        paid: Math.round(paid * 100) / 100,
+        debt: Math.round(debt * 100) / 100,
+        with_invoice: withInvoice,
+        invoice_number: invoiceNumber || null,
+        pay_mode: payMode,
+      } as any,
+    });
     toast.success(`Atención registrada.${debt > 0 ? ` Deuda: ${formatMoney(debt)}` : ""}`);
     resetForm(); qc.invalidateQueries();
   };
