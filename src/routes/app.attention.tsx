@@ -392,6 +392,7 @@ function EntregasTab() {
   const { data: studies = [] } = useList<any>("studies", "name", true);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [chargeTarget, setChargeTarget] = useState<any | null>(null);
 
   const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
   const studyMap = new Map((studies as any[]).map((s) => [s.id, s]));
