@@ -72,6 +72,16 @@ function UsersPage() {
     }
   };
 
+  const toggleApproved = async (u: Row) => {
+    const next = !u.approved;
+    const { error } = await supabase.from("profiles").update({ approved: next }).eq("id", u.id);
+    if (error) return toast.error(error.message);
+    toast.success(next ? `${u.full_name} aprobado — ya puede iniciar sesión` : `${u.full_name} deshabilitado`);
+    refresh();
+  };
+
+
+
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["users_admin"],
