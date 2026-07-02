@@ -14,9 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn } from "lucide-react";
 import { useAuth, type AppRole } from "@/lib/auth";
-import { adminCreateUser, adminUpdateUser, adminDeleteUser } from "@/lib/users-admin.functions";
+import { adminCreateUser, adminUpdateUser, adminDeleteUser, adminImpersonate } from "@/lib/users-admin.functions";
 
 const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
 
@@ -48,6 +48,29 @@ function UsersPage() {
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
+  const impersonateFn = useServerFn(adminImpersonate);
+
+  const impersonate = async (u: Row) => {
+    if (!confirm(`¿Ingresar como ${u.full_name} (${u.email})?\n\nTu sesión actual se guardará para poder volver.`)) return;
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      if (sess.session?.refresh_token) {
+        sessionStorage.setItem("impersonation_return", JSON.stringify({
+          refresh_token: sess.session.refresh_token,
+          admin_email: user?.email,
+        }));
+      }
+      const { token_hash } = await impersonateFn({ data: { user_id: u.id } });
+      const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
+      if (error) throw error;
+      toast.success(`Ahora eres ${u.full_name}`);
+      window.location.href = "/app";
+    } catch (e: any) {
+      sessionStorage.removeItem("impersonation_return");
+      toast.error(e.message ?? "No se pudo cambiar de usuario");
+    }
+  };
+
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["users_admin"],
@@ -150,6 +173,11 @@ function UsersPage() {
                 <TableCell className="text-right">
                   {isAdmin && (
                     <div className="flex justify-end gap-1">
+                      {u.id !== user?.id && (
+                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
+                          <LogIn className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
