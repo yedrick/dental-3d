@@ -92,6 +92,12 @@ function AppLayout() {
           <header className="flex h-12 items-center gap-2 border-b bg-background px-3">
             <SidebarTrigger />
             <div className="text-sm font-medium">Dental-3D</div>
+            <div className="ml-auto flex items-center gap-1">
+              <NotificationBell />
+              <Button asChild variant="ghost" size="icon" title="Mi perfil">
+                <Link to="/app/profile"><UserIcon className="h-5 w-5" /></Link>
+              </Button>
+            </div>
           </header>
 
           <main className="flex-1 bg-muted/30 p-4 md:p-6">
