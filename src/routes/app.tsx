@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
+import { NotificationBell } from "@/components/notification-bell";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
@@ -92,6 +93,12 @@ function AppLayout() {
           <header className="flex h-12 items-center gap-2 border-b bg-background px-3">
             <SidebarTrigger />
             <div className="text-sm font-medium">Dental-3D</div>
+            <div className="ml-auto flex items-center gap-1">
+              <NotificationBell />
+              <Button asChild variant="ghost" size="icon" title="Mi perfil">
+                <Link to="/app/profile"><UserIcon className="h-5 w-5" /></Link>
+              </Button>
+            </div>
           </header>
 
           <main className="flex-1 bg-muted/30 p-4 md:p-6">
