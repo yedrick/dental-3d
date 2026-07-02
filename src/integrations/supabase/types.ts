@@ -450,6 +450,7 @@ export type Database = {
       profiles: {
         Row: {
           active: boolean
+          approved: boolean
           created_at: string
           email: string
           full_name: string
@@ -458,6 +459,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          approved?: boolean
           created_at?: string
           email: string
           full_name: string
@@ -466,6 +468,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          approved?: boolean
           created_at?: string
           email?: string
           full_name?: string
