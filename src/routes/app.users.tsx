@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn } from "lucide-react";
+import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth, type AppRole } from "@/lib/auth";
 import { adminCreateUser, adminUpdateUser, adminDeleteUser, adminImpersonate } from "@/lib/users-admin.functions";
 
@@ -38,6 +38,7 @@ type Row = {
   full_name: string;
   username: string;
   created_at: string;
+  approved: boolean;
   role: AppRole | null;
 };
 
@@ -70,6 +71,16 @@ function UsersPage() {
       toast.error(e.message ?? "No se pudo cambiar de usuario");
     }
   };
+
+  const toggleApproved = async (u: Row) => {
+    const next = !u.approved;
+    const { error } = await supabase.from("profiles").update({ approved: next }).eq("id", u.id);
+    if (error) return toast.error(error.message);
+    toast.success(next ? `${u.full_name} aprobado — ya puede iniciar sesión` : `${u.full_name} deshabilitado`);
+    refresh();
+  };
+
+
 
 
   const { data = [], isLoading } = useQuery({
@@ -138,13 +149,14 @@ function UsersPage() {
               <TableHead>Usuario</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Estado</TableHead>
               <TableHead>Creado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow><TableCell colSpan={5} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
             )}
             {!isLoading && filtered.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/40">
@@ -167,12 +179,33 @@ function UsersPage() {
                     <Badge variant="outline" className="text-muted-foreground">Sin rol</Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  {u.approved ? (
+                    <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Aprobado
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/15 text-amber-700 border-amber-500/30 gap-1">
+                      <XCircle className="h-3 w-3" /> Pendiente
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {new Date(u.created_at).toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
                   {isAdmin && (
                     <div className="flex justify-end gap-1">
+                      {u.id !== user?.id && (
+                        <Button
+                          size="sm"
+                          variant={u.approved ? "ghost" : "default"}
+                          title={u.approved ? "Deshabilitar acceso" : "Aprobar acceso"}
+                          onClick={() => toggleApproved(u)}
+                        >
+                          {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
+                        </Button>
+                      )}
                       {u.id !== user?.id && (
                         <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
@@ -215,7 +248,7 @@ function UsersPage() {
               </TableRow>
             ))}
             {!isLoading && filtered.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-muted-foreground py-8 text-center">Sin resultados.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Sin resultados.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

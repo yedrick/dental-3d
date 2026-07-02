@@ -39,22 +39,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions(await loadPermissionsFor(rs));
   };
 
+  const checkApproved = async (userId: string): Promise<boolean> => {
+    const { data } = await supabase.from("profiles").select("approved").eq("id", userId).maybeSingle();
+    if (data && data.approved === false) {
+      await supabase.auth.signOut();
+      if (typeof window !== "undefined") {
+        const { toast } = await import("sonner");
+        toast.error("Tu cuenta aún no ha sido aprobada por un administrador.", { duration: 6000 });
+      }
+      return false;
+    }
+    return true;
+  };
+
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       if (s?.user) {
-        setTimeout(() => { loadRolesAndPerms(s.user.id); }, 0);
+        setTimeout(async () => {
+          const ok = await checkApproved(s.user.id);
+          if (ok) await loadRolesAndPerms(s.user.id);
+        }, 0);
       } else {
         setRoles([]); setPermissions(new Set());
       }
     });
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      if (data.session?.user) await loadRolesAndPerms(data.session.user.id);
+      if (data.session?.user) {
+        const ok = await checkApproved(data.session.user.id);
+        if (ok) await loadRolesAndPerms(data.session.user.id);
+        else setSession(null);
+      }
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
 
   const value: AuthCtx = {
     user: session?.user ?? null,

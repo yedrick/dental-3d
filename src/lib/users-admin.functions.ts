@@ -37,6 +37,8 @@ export const adminCreateUser = createServerFn({ method: "POST" })
     await supabaseAdmin.from("user_roles").delete().eq("user_id", uid);
     const { error: rErr } = await supabaseAdmin.from("user_roles").insert({ user_id: uid, role: data.role });
     if (rErr) throw new Error(rErr.message);
+    // Admin-created users are auto-approved
+    await supabaseAdmin.from("profiles").update({ approved: true }).eq("id", uid);
     await supabaseAdmin.from("audit_logs").insert({
       user_id: context.userId,
       action: "USER_CREATE",
