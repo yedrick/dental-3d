@@ -392,6 +392,7 @@ function EntregasTab() {
   const { data: studies = [] } = useList<any>("studies", "name", true);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [chargeTarget, setChargeTarget] = useState<any | null>(null);
 
   const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
   const studyMap = new Map((studies as any[]).map((s) => [s.id, s]));
@@ -419,10 +420,15 @@ function EntregasTab() {
     return (g.patient.full_name ?? "").toLowerCase().includes(s) || (g.patient.phone ?? "").includes(q);
   }).sort((a, b) => b.debt - a.debt);
 
-  const collectAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
+  const openCharge = (g: typeof filtered[number], e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     if (g.debt <= 0.009) return;
-    if (!confirm(`Cobrar ${formatMoney(g.debt)} de ${g.patient.full_name}?`)) return;
+    setChargeTarget(g);
+  };
+
+  const confirmCharge = async () => {
+    const g = chargeTarget;
+    if (!g) return;
     setBusy(g.patient.id);
     const balanceBefore = g.debt;
     const chargedItems: { id: string; study_id: string; before: number; after: number; amount: number }[] = [];
@@ -448,6 +454,7 @@ function EntregasTab() {
     });
     toast.success("Saldo cobrado");
     setBusy(null);
+    setChargeTarget(null);
     qc.invalidateQueries({ queryKey: ["patient_studies"] });
     qc.invalidateQueries({ queryKey: ["audit_logs"] });
   };
@@ -531,7 +538,7 @@ function EntregasTab() {
               </div>
               <div className="flex gap-1 shrink-0">
                 {g.debt > 0.009 && (
-                  <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => collectAll(g, e)}>
+                  <Button size="sm" variant="outline" disabled={busy === g.patient.id} onClick={(e) => openCharge(g, e)}>
                     <Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(g.debt)}
                   </Button>
                 )}
@@ -549,6 +556,34 @@ function EntregasTab() {
       <div className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1 border-t">
         <Wallet className="h-3 w-3" /> "Cobrar" salda la deuda; "Entregar" marca los estudios como entregados e imprime el comprobante.
       </div>
+
+      <Dialog open={!!chargeTarget} onOpenChange={(o) => !o && setChargeTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Cobrar saldo</DialogTitle></DialogHeader>
+          {chargeTarget && (
+            <div className="space-y-4 py-2">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Paciente</div>
+                <div className="font-medium">{chargeTarget.patient.full_name}</div>
+              </div>
+              <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-4 text-center">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Monto a cobrar</div>
+                <div className="text-3xl font-bold font-mono text-amber-700 dark:text-amber-400">{formatMoney(chargeTarget.debt)}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><div className="text-muted-foreground text-xs">Total</div><div className="font-mono">{formatMoney(chargeTarget.total)}</div></div>
+                <div><div className="text-muted-foreground text-xs">Pagado</div><div className="font-mono">{formatMoney(chargeTarget.paid)}</div></div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setChargeTarget(null)} disabled={busy !== null}>Cancelar</Button>
+            <Button onClick={confirmCharge} disabled={busy !== null}>
+              <Wallet className="h-4 w-4 mr-1" />Cobrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
