@@ -79,6 +79,23 @@ export function AppSidebar() {
             </SidebarGroup>
           );
         })}
+        <SidebarGroup>
+          <SidebarGroupLabel>Personal</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={path === "/app/notifications"}>
+                  <Link to="/app/notifications"><Bell /><span>Notificaciones</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={path === "/app/profile"}>
+                  <Link to="/app/profile"><UserCircle /><span>Mi perfil</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <div className="px-2 pb-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden truncate">{user?.email}</div>
