@@ -48,6 +48,29 @@ function UsersPage() {
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
+  const impersonateFn = useServerFn(adminImpersonate);
+
+  const impersonate = async (u: Row) => {
+    if (!confirm(`¿Ingresar como ${u.full_name} (${u.email})?\n\nTu sesión actual se guardará para poder volver.`)) return;
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      if (sess.session?.refresh_token) {
+        sessionStorage.setItem("impersonation_return", JSON.stringify({
+          refresh_token: sess.session.refresh_token,
+          admin_email: user?.email,
+        }));
+      }
+      const { token_hash } = await impersonateFn({ data: { user_id: u.id } });
+      const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
+      if (error) throw error;
+      toast.success(`Ahora eres ${u.full_name}`);
+      window.location.href = "/app";
+    } catch (e: any) {
+      sessionStorage.removeItem("impersonation_return");
+      toast.error(e.message ?? "No se pudo cambiar de usuario");
+    }
+  };
+
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["users_admin"],
