@@ -62,7 +62,7 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const changed: Record<string, unknown> = {};
+    const changed: Record<string, any> = {};
     const authPatch: any = {};
     if (data.email) authPatch.email = data.email;
     if (data.password && data.password.length > 0) authPatch.password = data.password;
