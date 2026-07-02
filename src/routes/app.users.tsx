@@ -150,6 +150,11 @@ function UsersPage() {
                 <TableCell className="text-right">
                   {isAdmin && (
                     <div className="flex justify-end gap-1">
+                      {u.id !== user?.id && (
+                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
+                          <LogIn className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
