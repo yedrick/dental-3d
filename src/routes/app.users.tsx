@@ -38,6 +38,7 @@ type Row = {
   full_name: string;
   username: string;
   created_at: string;
+  approved: boolean;
   role: AppRole | null;
 };
 
