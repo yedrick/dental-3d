@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 type Item = { title: string; url: string; icon: any; perm: string };
 
