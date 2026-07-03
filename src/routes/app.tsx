@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
+import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
@@ -90,9 +91,12 @@ function AppLayout() {
         <AppSidebar />
         <div className="flex flex-1 flex-col">
           <ImpersonationBanner />
-          <header className="flex h-12 items-center gap-2 border-b bg-background px-3">
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <SidebarTrigger />
-            <div className="text-sm font-medium">Dental-3D</div>
+            <Link to="/app" className="flex min-w-0 items-center gap-2">
+              <img src={logoAsset.url} alt="" className="h-7 w-7 shrink-0" />
+              <span className="truncate text-sm font-semibold">3 Dental Imagen</span>
+            </Link>
             <div className="ml-auto flex items-center gap-1">
               <NotificationBell />
               <Button asChild variant="ghost" size="icon" title="Mi perfil">
@@ -101,7 +105,7 @@ function AppLayout() {
             </div>
           </header>
 
-          <main className="flex-1 bg-muted/30 p-4 md:p-6">
+          <main className="flex-1 bg-muted/30 p-3 sm:p-4 md:p-6">
             <Outlet />
           </main>
         </div>

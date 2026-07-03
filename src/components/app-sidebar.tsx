@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 type Item = { title: string; url: string; icon: any; perm: string };
 
@@ -48,9 +49,9 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground text-xs font-bold">D3</div>
+          <img src={logoAsset.url} alt="" className="h-8 w-8 shrink-0 rounded-md" />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <div className="truncate text-sm font-semibold">Dental-3D</div>
+            <div className="truncate text-sm font-semibold">3 Dental Imagen</div>
             <div className="truncate text-xs text-muted-foreground">{roles.join(", ") || "sin rol"}</div>
           </div>
         </div>
