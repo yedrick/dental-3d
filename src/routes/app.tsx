@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
+import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
