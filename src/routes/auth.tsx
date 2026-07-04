@@ -143,6 +143,16 @@ function AuthPage() {
     if (error) toast.error(translateError(error.message));
     else navigate({ to: "/app" });
   };
+  const forgotPassword = async () => {
+    if (!email) { toast.error("Ingresa tu email arriba y vuelve a hacer clic en '¿Olvidaste tu contraseña?'."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) toast.error(translateError(error.message));
+    else toast.success("Te enviamos un correo con el enlace para restablecer tu contraseña.", { duration: 7000 });
+  };
   const signUp = async () => {
     if (!allOk) { toast.error("Tu contraseña no cumple los requisitos mínimos."); return; }
     setBusy(true);
@@ -178,6 +188,14 @@ function AuthPage() {
               <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
               <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
+              <button
+                type="button"
+                onClick={forgotPassword}
+                disabled={busy}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
             </TabsContent>
             <TabsContent value="up" className="space-y-3">
               <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
