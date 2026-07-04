@@ -56,6 +56,7 @@ function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
   const impersonateFn = useServerFn(adminImpersonate);
+  const deleteUserFn = useServerFn(adminDeleteUser);
 
   const impersonate = async (u: Row) => {
     if (!confirm(`¿Ingresar como ${u.full_name} (${u.email})?\n\nTu sesión actual se guardará para poder volver.`)) return;
@@ -244,7 +245,8 @@ function UsersPage() {
                               className="bg-destructive hover:bg-destructive/90"
                               onClick={async () => {
                                 try {
-                                  await adminDeleteUser({ data: { user_id: u.id } });
+                                  const result = await deleteUserFn({ data: { user_id: u.id } });
+                                  if (!result.ok) throw new Error(result.error);
                                   toast.success("Usuario eliminado");
                                   refresh();
                                 } catch (e: any) { toast.error(e.message); }
