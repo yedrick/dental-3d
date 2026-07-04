@@ -109,7 +109,15 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     const { data: prof } = await supabaseAdmin
       .from("profiles").select("email, full_name, username").eq("id", data.user_id).maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.user_id);
-    if (error) throw new Error(error.message);
+    if (error) {
+      const detail = (error as any).message || (error as any).code || JSON.stringify(error);
+      const isFk = /foreign key|violates|referenced/i.test(detail);
+      throw new Error(
+        isFk
+          ? "No se puede eliminar: el usuario tiene registros asociados (auditoría, pacientes, etc.). Considera desactivarlo en su lugar."
+          : `Error al eliminar usuario: ${detail}`,
+      );
+    }
     await supabaseAdmin.from("audit_logs").insert({
       user_id: context.userId,
       action: "USER_DELETE",
