@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
@@ -39,7 +40,7 @@ function ParamsPage() {
     const { error } = await supabase.from("app_params").update({
       value_num: num, updated_at: new Date().toISOString(), updated_by: user?.id,
     }).eq("key", key);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Parámetro actualizado");
     qc.invalidateQueries({ queryKey: ["app_params"] });
   };

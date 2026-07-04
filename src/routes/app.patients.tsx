@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,12 +65,12 @@ function PatientsPage() {
     };
     if (form.id) {
       const { error } = await supabase.from("patients").update(payload).eq("id", form.id);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       toast.success("Paciente actualizado");
     } else {
       payload.created_by = user!.id;
       const { error } = await supabase.from("patients").insert(payload);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       toast.success("Paciente registrado");
     }
     setOpen(false);
@@ -84,7 +85,7 @@ function PatientsPage() {
   const del = async (p: any) => {
     if (!confirm(`¿Eliminar paciente "${p.full_name}"? Esta acción también elimina su historial.`)) return;
     const { error } = await supabase.from("patients").delete().eq("id", p.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Paciente eliminado");
     qc.invalidateQueries({ queryKey: ["patients"] });
   };

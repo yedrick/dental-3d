@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,12 +51,12 @@ function DoctorsPage() {
     delete payload.id;
     if (form.id) {
       const { error } = await supabase.from("doctors").update(payload).eq("id", form.id);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       toast.success("Doctor actualizado");
     } else {
       payload.created_by = user!.id;
       const { error } = await supabase.from("doctors").insert(payload);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       toast.success("Doctor registrado");
     }
     setOpen(false);
@@ -65,7 +66,7 @@ function DoctorsPage() {
   const del = async (d: any) => {
     if (!confirm(`¿Eliminar doctor "${d.full_name}"? Los pacientes vinculados quedarán sin doctor y podría fallar si tiene registros históricos.`)) return;
     const { error } = await supabase.from("doctors").delete().eq("id", d.id);
-    if (error) return toast.error("No se puede eliminar: " + error.message);
+    if (error) return toast.error("No se puede eliminar: " + translateError(error));
     toast.success("Doctor eliminado");
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };

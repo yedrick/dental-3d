@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,7 +61,7 @@ function ResetPasswordPage() {
       if (m.includes("pwned") || m.includes("weak")) {
         toast.error("Esta contraseña aparece en filtraciones públicas. Usa una nueva y única.", { duration: 8000 });
       } else {
-        toast.error(error.message);
+        toast.error(translateError(error));
       }
       return;
     }

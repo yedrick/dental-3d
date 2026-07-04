@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,20 +47,20 @@ function StudiesPage() {
     const { error } = s.id
       ? await supabase.from("studies").update(payload).eq("id", s.id)
       : await supabase.from("studies").insert(payload);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success(s.id ? "Estudio actualizado" : "Estudio creado");
     setOpenS(false);
     qc.invalidateQueries({ queryKey: ["studies"] });
   };
   const toggleStudy = async (x: any) => {
     const { error } = await supabase.from("studies").update({ active: !x.active }).eq("id", x.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success(!x.active ? "Estudio activado" : "Estudio desactivado");
     qc.invalidateQueries({ queryKey: ["studies"] });
   };
   const deleteStudy = async (x: any) => {
     const { error } = await supabase.from("studies").delete().eq("id", x.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Estudio eliminado");
     qc.invalidateQueries({ queryKey: ["studies"] });
   };
@@ -72,20 +73,20 @@ function StudiesPage() {
     const { error } = p.id
       ? await supabase.from("study_prices").update(payload).eq("id", p.id)
       : await supabase.from("study_prices").insert(payload);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success(p.id ? "Tarifa actualizada" : "Tarifa registrada");
     setOpenP(false);
     qc.invalidateQueries({ queryKey: ["study_prices"] });
   };
   const togglePrice = async (r: any) => {
     const { error } = await supabase.from("study_prices").update({ is_active: !r.is_active }).eq("id", r.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success(!r.is_active ? "Tarifa activada" : "Tarifa desactivada");
     qc.invalidateQueries({ queryKey: ["study_prices"] });
   };
   const deletePrice = async (r: any) => {
     const { error } = await supabase.from("study_prices").delete().eq("id", r.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Tarifa eliminada");
     qc.invalidateQueries({ queryKey: ["study_prices"] });
   };

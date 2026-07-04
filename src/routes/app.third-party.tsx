@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -81,7 +82,7 @@ function ThirdPartyPage() {
       setOpen(false); setF(emptyForm); setFile(null);
       qc.invalidateQueries({ queryKey: ["third_party_payments"] });
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(translateError(e));
     } finally { setSaving(false); }
   };
 

@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -132,7 +133,7 @@ function AppointmentsPage() {
     };
     if (form.id) {
       const { error } = await supabase.from("appointments").update(payload).eq("id", form.id);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       await supabase.rpc("log_audit_event", {
         _action: "APPOINTMENT_UPDATE",
         _table_name: "appointments",
@@ -143,7 +144,7 @@ function AppointmentsPage() {
     } else {
       payload.created_by = user!.id;
       const { data: ins, error } = await supabase.from("appointments").insert(payload).select("id").single();
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
       await supabase.rpc("log_audit_event", {
         _action: "APPOINTMENT_CREATE",
         _table_name: "appointments",
@@ -159,7 +160,7 @@ function AppointmentsPage() {
   const del = async (a: any) => {
     if (!confirm("¿Eliminar cita?")) return;
     const { error } = await supabase.from("appointments").delete().eq("id", a.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     await supabase.rpc("log_audit_event", {
       _action: "APPOINTMENT_DELETE",
       _table_name: "appointments",

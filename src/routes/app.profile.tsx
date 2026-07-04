@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -48,7 +49,7 @@ function ProfilePage() {
       if (error) throw error;
       toast.success("Perfil actualizado");
     } catch (e: any) {
-      toast.error(e.message ?? "Error al guardar");
+      toast.error(translateError(e) || "Error al guardar");
     } finally { setSaving(false); }
   };
 
@@ -62,7 +63,7 @@ function ProfilePage() {
       setPw(""); setPw2("");
       toast.success("Contraseña actualizada");
     } catch (e: any) {
-      toast.error(e.message ?? "Error al cambiar contraseña");
+      toast.error(translateError(e) || "Error al cambiar contraseña");
     } finally { setSavingPw(false); }
   };
 
