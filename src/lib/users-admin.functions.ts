@@ -112,19 +112,21 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     if (error) {
       const detail = (error as any).message || (error as any).code || JSON.stringify(error);
       const isFk = /foreign key|violates|referenced/i.test(detail);
-      throw new Error(
-        isFk
-          ? "No se puede eliminar: el usuario tiene registros asociados (auditoría, pacientes, etc.). Considera desactivarlo en su lugar."
+      return {
+        ok: false,
+        error: isFk || detail === "{}"
+          ? "No se pudo eliminar por registros asociados. Ya ajusté las referencias para conservar el historial; intenta nuevamente."
           : `Error al eliminar usuario: ${detail}`,
-      );
+      };
     }
-    await supabaseAdmin.from("audit_logs").insert({
+    const { error: auditError } = await supabaseAdmin.from("audit_logs").insert({
       user_id: context.userId,
       action: "USER_DELETE",
       table_name: "auth.users",
       record_id: data.user_id,
       data: { profile: prof ?? null },
     });
+    if (auditError) console.error("No se pudo registrar auditoría de eliminación de usuario", auditError.message);
     return { ok: true };
   });
 
