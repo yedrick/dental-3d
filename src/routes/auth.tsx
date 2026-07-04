@@ -143,6 +143,16 @@ function AuthPage() {
     if (error) toast.error(translateError(error.message));
     else navigate({ to: "/app" });
   };
+  const forgotPassword = async () => {
+    if (!email) { toast.error("Ingresa tu email arriba y vuelve a hacer clic en '¿Olvidaste tu contraseña?'."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) toast.error(translateError(error.message));
+    else toast.success("Te enviamos un correo con el enlace para restablecer tu contraseña.", { duration: 7000 });
+  };
   const signUp = async () => {
     if (!allOk) { toast.error("Tu contraseña no cumple los requisitos mínimos."); return; }
     setBusy(true);
