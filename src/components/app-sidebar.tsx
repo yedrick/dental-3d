@@ -105,7 +105,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <div className="px-2 pb-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden truncate">{user?.email}</div>
-        <Button variant="ghost" size="sm" onClick={signOut} className="justify-start">
+        <Button variant="ghost" size="sm" onClick={signOut} className="justify-start" aria-label="Cerrar sesión">
           <LogOut className="h-4 w-4" />
           <span className="group-data-[collapsible=icon]:hidden">Salir</span>
         </Button>

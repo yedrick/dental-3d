@@ -131,11 +131,11 @@ function PatientsPage() {
                 <TableCell className="text-xs text-muted-foreground">{formatDate(p.created_at)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    <Button asChild size="sm" variant="ghost" title="Ver historial">
+                    <Button asChild size="sm" variant="ghost" title="Ver historial" aria-label="Ver historial del paciente">
                       <Link to="/app/patients/$id" params={{ id: p.id }}><Eye className="h-4 w-4" /></Link>
                     </Button>
-                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(p)} title="Editar"><Pencil className="h-4 w-4" /></Button>}
-                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(p)} title="Eliminar" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
+                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(p)} title="Editar" aria-label="Editar paciente"><Pencil className="h-4 w-4" /></Button>}
+                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(p)} title="Eliminar" aria-label="Eliminar paciente" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
                   </div>
                 </TableCell>
               </TableRow>

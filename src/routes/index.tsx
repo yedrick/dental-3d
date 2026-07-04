@@ -11,6 +11,34 @@ import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 export const Route = createFileRoute("/")({
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "3 Dental Imagen · Radiología Dental 2D y 3D en Bolivia" },
+      { name: "description", content: "Centro de radiología dental en Bolivia. Estudios 2D y 3D (CBCT) con entrega ágil. Agenda por WhatsApp al 77726685." },
+      { property: "og:title", content: "3 Dental Imagen · Radiología Dental 2D y 3D" },
+      { property: "og:description", content: "Estudios radiológicos dentales 2D y 3D con la última tecnología. Agenda tu cita por WhatsApp." },
+      { property: "og:url", content: "https://3d.kollatek.com/" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:title", content: "3 Dental Imagen · Radiología Dental" },
+      { name: "twitter:description", content: "Estudios radiológicos dentales 2D y 3D. Agenda por WhatsApp." },
+    ],
+    links: [{ rel: "canonical", href: "https://3d.kollatek.com/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "MedicalBusiness",
+          name: "3 Dental Imagen",
+          description: "Centro radiológico dental especializado en imagen 2D y 3D.",
+          url: "https://3d.kollatek.com/",
+          telephone: "+591-77726685",
+          address: { "@type": "PostalAddress", addressCountry: "BO" },
+          openingHours: ["Mo-Fr 08:00-19:00", "Sa 08:00-13:00"],
+        }),
+      },
+    ],
+  }),
   component: Landing,
 });
 

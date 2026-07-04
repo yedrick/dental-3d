@@ -196,9 +196,9 @@ function AppointmentsPage() {
         <Card className="p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setCursor(addMonths(cursor, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Mes anterior" onClick={() => setCursor(addMonths(cursor, -1))}><ChevronLeft className="h-4 w-4" /></Button>
               <div className="min-w-[160px] text-center text-sm font-semibold capitalize">{monthLabel}</div>
-              <Button size="sm" variant="ghost" onClick={() => setCursor(addMonths(cursor, 1))}><ChevronRight className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Mes siguiente" onClick={() => setCursor(addMonths(cursor, 1))}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <Button size="sm" variant="outline" onClick={() => { const t = new Date(); setCursor(startOfMonth(t)); setSelected(fmtISO(t)); }}>
               <CalendarDays className="h-3.5 w-3.5 mr-1" />Hoy
@@ -242,7 +242,7 @@ function AppointmentsPage() {
               <div className="text-xs text-muted-foreground">Citas del día</div>
               <div className="text-sm font-semibold">{new Date(selected + "T00:00:00").toLocaleDateString("es-BO", { weekday: "long", day: "numeric", month: "long" })}</div>
             </div>
-            {canEdit && <Button size="sm" onClick={() => openNew(selected)}><Plus className="h-3.5 w-3.5" /></Button>}
+            {canEdit && <Button size="sm" aria-label="Nueva cita" onClick={() => openNew(selected)}><Plus className="h-3.5 w-3.5" /></Button>}
           </div>
           <div className="space-y-2 max-h-[520px] overflow-auto">
             {selectedList.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">Sin citas este día.</div>}
@@ -263,8 +263,8 @@ function AppointmentsPage() {
                         <SelectTrigger className="h-7 text-[11px] flex-1"><SelectValue /></SelectTrigger>
                         <SelectContent>{STATUSES.map((s) => <SelectItem key={s.v} value={s.v}>{s.label}</SelectItem>)}</SelectContent>
                       </Select>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEdit(a)}><Pencil className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => del(a)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label="Editar cita" onClick={() => openEdit(a)}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label="Eliminar cita" onClick={() => del(a)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   )}
                 </div>
