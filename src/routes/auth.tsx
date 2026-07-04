@@ -188,6 +188,14 @@ function AuthPage() {
               <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
               <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
+              <button
+                type="button"
+                onClick={forgotPassword}
+                disabled={busy}
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
             </TabsContent>
             <TabsContent value="up" className="space-y-3">
               <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
