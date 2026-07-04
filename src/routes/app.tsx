@@ -92,14 +92,14 @@ function AppLayout() {
         <div className="flex flex-1 flex-col">
           <ImpersonationBanner />
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <SidebarTrigger />
+            <SidebarTrigger aria-label="Alternar menú lateral" />
             <Link to="/app" className="flex min-w-0 items-center gap-2">
               <img src={logoAsset.url} alt="" className="h-7 w-7 shrink-0" />
               <span className="truncate text-sm font-semibold">3 Dental Imagen</span>
             </Link>
             <div className="ml-auto flex items-center gap-1">
               <NotificationBell />
-              <Button asChild variant="ghost" size="icon" title="Mi perfil">
+              <Button asChild variant="ghost" size="icon" title="Mi perfil" aria-label="Mi perfil">
                 <Link to="/app/profile"><UserIcon className="h-5 w-5" /></Link>
               </Button>
             </div>
