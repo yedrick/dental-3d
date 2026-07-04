@@ -263,8 +263,8 @@ function AppointmentsPage() {
                         <SelectTrigger className="h-7 text-[11px] flex-1"><SelectValue /></SelectTrigger>
                         <SelectContent>{STATUSES.map((s) => <SelectItem key={s.v} value={s.v}>{s.label}</SelectItem>)}</SelectContent>
                       </Select>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEdit(a)}><Pencil className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => del(a)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label="Editar cita" onClick={() => openEdit(a)}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label="Eliminar cita" onClick={() => del(a)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   )}
                 </div>
