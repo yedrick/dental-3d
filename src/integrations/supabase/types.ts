@@ -148,7 +148,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
-          created_by: string
+          created_by: string | null
           deposit_date: string
           id: string
           receipt_url: string | null
@@ -157,7 +157,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
-          created_by: string
+          created_by?: string | null
           deposit_date: string
           id?: string
           receipt_url?: string | null
@@ -166,19 +166,27 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           deposit_date?: string
           id?: string
           receipt_url?: string | null
           reference?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bank_deposits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cashbox: {
         Row: {
           balance: number
           created_at: string
-          created_by: string
+          created_by: string | null
           description: string
           expense: number
           id: string
@@ -187,7 +195,7 @@ export type Database = {
         Insert: {
           balance?: number
           created_at?: string
-          created_by: string
+          created_by?: string | null
           description: string
           expense?: number
           id?: string
@@ -196,13 +204,21 @@ export type Database = {
         Update: {
           balance?: number
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           description?: string
           expense?: number
           id?: string
           income?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cashbox_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       commissions: {
         Row: {
@@ -252,7 +268,7 @@ export type Database = {
           bank_account: string | null
           clinic_address: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           default_commission_pct: number
           email: string | null
           full_name: string
@@ -266,7 +282,7 @@ export type Database = {
           bank_account?: string | null
           clinic_address?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           default_commission_pct?: number
           email?: string | null
           full_name: string
@@ -280,7 +296,7 @@ export type Database = {
           bank_account?: string | null
           clinic_address?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           default_commission_pct?: number
           email?: string | null
           full_name?: string
@@ -289,7 +305,15 @@ export type Database = {
           status?: boolean
           use_percentage?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "doctors_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_recipients: {
         Row: {
@@ -352,7 +376,7 @@ export type Database = {
           amount_paid: number
           clinic_name: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           delivered_at: string | null
           delivered_by: string | null
           delivery_date: string | null
@@ -373,7 +397,7 @@ export type Database = {
           amount_paid?: number
           clinic_name?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           delivered_at?: string | null
           delivered_by?: string | null
           delivery_date?: string | null
@@ -394,7 +418,7 @@ export type Database = {
           amount_paid?: number
           clinic_name?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           delivered_at?: string | null
           delivered_by?: string | null
           delivery_date?: string | null
@@ -412,6 +436,13 @@ export type Database = {
           with_invoice?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "patient_studies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "patient_studies_doctor_id_fkey"
             columns: ["doctor_id"]
@@ -439,7 +470,7 @@ export type Database = {
         Row: {
           birth_date: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           doctor_id: string
           email: string | null
           full_name: string
@@ -451,7 +482,7 @@ export type Database = {
         Insert: {
           birth_date?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           doctor_id: string
           email?: string | null
           full_name: string
@@ -463,7 +494,7 @@ export type Database = {
         Update: {
           birth_date?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           doctor_id?: string
           email?: string | null
           full_name?: string
@@ -473,6 +504,13 @@ export type Database = {
           status?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "patients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "patients_doctor_id_fkey"
             columns: ["doctor_id"]
@@ -628,7 +666,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
-          created_by: string
+          created_by: string | null
           id: string
           payment_date: string
           provider_name: string
@@ -639,7 +677,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
-          created_by: string
+          created_by?: string | null
           id?: string
           payment_date: string
           provider_name: string
@@ -650,7 +688,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           id?: string
           payment_date?: string
           provider_name?: string
@@ -658,7 +696,15 @@ export type Database = {
           service_date?: string
           service_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "third_party_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
