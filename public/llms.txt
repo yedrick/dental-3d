@@ -1,0 +1,9 @@
+# 3 Dental Imagen
+
+> Centro radiológico dental en Bolivia. Estudios de imagen 2D y 3D (CBCT) para profesionales y pacientes, con entrega ágil y agendamiento por WhatsApp.
+
+3 Dental Imagen ofrece servicios de radiología dental de alta precisión y opera además una plataforma interna de gestión clínica, administrativa y financiera para centros radiológicos dentales.
+
+## Pages
+
+- [Inicio](/): Servicios, horarios, contacto y catálogo público de estudios disponibles.
