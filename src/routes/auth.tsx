@@ -13,6 +13,17 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Iniciar sesión · 3 Dental Imagen" },
+      { name: "description", content: "Accede al sistema de gestión de 3 Dental Imagen para agendar, registrar pacientes y consultar estudios." },
+      { name: "robots", content: "noindex,nofollow" },
+      { property: "og:title", content: "Iniciar sesión · 3 Dental Imagen" },
+      { property: "og:description", content: "Acceso al sistema de gestión de 3 Dental Imagen." },
+      { property: "og:url", content: "https://3d.kollatek.com/auth" },
+    ],
+    links: [{ rel: "canonical", href: "https://3d.kollatek.com/auth" }],
+  }),
   component: AuthPage,
 });
 
