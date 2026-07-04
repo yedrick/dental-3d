@@ -242,7 +242,7 @@ function AppointmentsPage() {
               <div className="text-xs text-muted-foreground">Citas del día</div>
               <div className="text-sm font-semibold">{new Date(selected + "T00:00:00").toLocaleDateString("es-BO", { weekday: "long", day: "numeric", month: "long" })}</div>
             </div>
-            {canEdit && <Button size="sm" onClick={() => openNew(selected)}><Plus className="h-3.5 w-3.5" /></Button>}
+            {canEdit && <Button size="sm" aria-label="Nueva cita" onClick={() => openNew(selected)}><Plus className="h-3.5 w-3.5" /></Button>}
           </div>
           <div className="space-y-2 max-h-[520px] overflow-auto">
             {selectedList.length === 0 && <div className="text-xs text-muted-foreground py-6 text-center">Sin citas este día.</div>}
