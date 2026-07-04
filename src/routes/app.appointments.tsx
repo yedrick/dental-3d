@@ -196,9 +196,9 @@ function AppointmentsPage() {
         <Card className="p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setCursor(addMonths(cursor, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Mes anterior" onClick={() => setCursor(addMonths(cursor, -1))}><ChevronLeft className="h-4 w-4" /></Button>
               <div className="min-w-[160px] text-center text-sm font-semibold capitalize">{monthLabel}</div>
-              <Button size="sm" variant="ghost" onClick={() => setCursor(addMonths(cursor, 1))}><ChevronRight className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label="Mes siguiente" onClick={() => setCursor(addMonths(cursor, 1))}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <Button size="sm" variant="outline" onClick={() => { const t = new Date(); setCursor(startOfMonth(t)); setSelected(fmtISO(t)); }}>
               <CalendarDays className="h-3.5 w-3.5 mr-1" />Hoy
