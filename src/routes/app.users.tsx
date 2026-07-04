@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -75,14 +76,14 @@ function UsersPage() {
       window.location.href = "/app";
     } catch (e: any) {
       sessionStorage.removeItem("impersonation_return");
-      toast.error(e.message ?? "No se pudo cambiar de usuario");
+      toast.error(translateError(e) || "No se pudo cambiar de usuario");
     }
   };
 
   const toggleApproved = async (u: Row) => {
     const next = !u.approved;
     const { error } = await supabase.from("profiles").update({ approved: next }).eq("id", u.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success(next ? `${u.full_name} aprobado — ya puede iniciar sesión` : `${u.full_name} deshabilitado`);
     refresh();
   };
@@ -249,7 +250,7 @@ function UsersPage() {
                                   if (!result.ok) throw new Error(result.error);
                                   toast.success("Usuario eliminado");
                                   refresh();
-                                } catch (e: any) { toast.error(e.message); }
+                                } catch (e: any) { toast.error(translateError(e)); }
                               }}
                             >Eliminar</AlertDialogAction>
                           </AlertDialogFooter>
@@ -323,7 +324,7 @@ function UserFormDialog({
       }
       onDone();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(translateError(e));
     } finally {
       setSaving(false);
     }

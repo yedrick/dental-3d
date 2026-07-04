@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -196,7 +197,7 @@ function ComposeDialog({ onSent }: { onSent: () => void }) {
       setOpen(false);
       onSent();
     } catch (e: any) {
-      toast.error(e.message ?? "Error al enviar");
+      toast.error(translateError(e) || "Error al enviar");
     } finally { setSending(false); }
   };
 

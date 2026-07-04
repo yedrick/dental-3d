@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,7 +58,7 @@ function DeliveryPage() {
     const { error } = await supabase.from("patient_studies")
       .update({ amount_paid: newPaid })
       .eq("id", charge.row.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     await supabase.rpc("log_audit_event", {
       _action: "CHARGE",
       _table_name: "patient_studies",
@@ -81,7 +82,7 @@ function DeliveryPage() {
     const { error } = await supabase.from("patient_studies")
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .eq("id", row.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     await supabase.rpc("log_audit_event", {
       _action: "DELIVER",
       _table_name: "patient_studies",

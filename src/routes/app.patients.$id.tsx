@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,7 +79,7 @@ function PatientProfile() {
     const { error } = await supabase.from("patient_studies")
       .update({ amount_paid: Number((charge.row.paid + amt).toFixed(2)) })
       .eq("id", charge.row.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Cobro registrado"); setCharge(null); qc.invalidateQueries();
   };
 
@@ -87,7 +88,7 @@ function PatientProfile() {
     const { error } = await supabase.from("patient_studies")
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .eq("id", row.id);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Estudio entregado"); qc.invalidateQueries();
   };
 
@@ -336,7 +337,7 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
       notes: form.notes || null,
     }).eq("id", patient.id);
     setSaving(false);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Datos actualizados");
     onSaved();
   };

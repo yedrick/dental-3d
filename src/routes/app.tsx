@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
@@ -56,7 +57,7 @@ function ImpersonationBanner() {
       toast.success("Sesión restaurada");
       window.location.href = "/app/users";
     } catch (e: any) {
-      toast.error(e.message ?? "No se pudo restaurar la sesión");
+      toast.error(translateError(e) || "No se pudo restaurar la sesión");
     }
   };
   return (

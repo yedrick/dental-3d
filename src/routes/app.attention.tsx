@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -86,7 +87,7 @@ function RegistroTab() {
       full_name: quick.full_name, phone: quick.phone || null,
       doctor_id: quick.doctor_id, created_by: user!.id,
     }).select().single();
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Paciente creado");
     setPatient(data); setQuery(data.full_name);
     setQuickOpen(false); setQuick({ full_name: "", phone: "", doctor_id: "" });
@@ -157,7 +158,7 @@ function RegistroTab() {
     });
 
     const { data: inserted, error } = await supabase.from("patient_studies").insert(rows as any).select("id");
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     await supabase.rpc("log_audit_event", {
       _action: "ATTENTION_CREATE",
       _table_name: "patient_studies",
@@ -466,7 +467,7 @@ function EntregasTab() {
       if (it._debt <= 0.009) continue;
       const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
       const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
-      if (error) { toast.error(error.message); setBusy(null); return; }
+      if (error) { toast.error(translateError(error)); setBusy(null); return; }
       chargedItems.push({ id: it.id, study_id: it.study_id, before: it._debt, after: 0, amount: it._debt });
     }
     await supabase.rpc("log_audit_event", {
@@ -499,7 +500,7 @@ function EntregasTab() {
     const { error } = await supabase.from("patient_studies")
       .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
       .in("id", ids);
-    if (error) { toast.error(error.message); setBusy(null); return; }
+    if (error) { toast.error(translateError(error)); setBusy(null); return; }
     await supabase.rpc("log_audit_event", {
       _action: "DELIVER",
       _table_name: "patient_studies",

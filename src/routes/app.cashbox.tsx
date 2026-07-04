@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,7 +30,7 @@ function CashboxPage() {
   const save = async () => {
     if (!f.description) return toast.error("Descripción requerida");
     const { error } = await supabase.from("cashbox").insert({ ...f, created_by: user!.id });
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(translateError(error));
     toast.success("Movimiento registrado");
     setOpen(false); setF({ description: "", income: 0, expense: 0 });
     qc.invalidateQueries({ queryKey: ["cashbox"] });

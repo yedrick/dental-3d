@@ -1,3 +1,4 @@
+import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -95,10 +96,10 @@ function RolesPage() {
     if (role === "ADMIN") return toast.error("ADMIN siempre tiene todos los permisos");
     if (on) {
       const { error } = await supabase.from("role_permissions").insert({ role, permission_key: key });
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
     } else {
       const { error } = await supabase.from("role_permissions").delete().eq("role", role).eq("permission_key", key);
-      if (error) return toast.error(error.message);
+      if (error) return toast.error(translateError(error));
     }
     qc.invalidateQueries({ queryKey: ["role_permissions"] });
     await reloadPermissions();
