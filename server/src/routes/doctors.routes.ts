@@ -4,24 +4,18 @@ import { db, withTransaction, type Db } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { cache, CacheKeys, CacheTtl, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { optionalEmail, optionalText } from "../lib/schemas.js";
 import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
 
 export const doctorsRouter = Router();
 doctorsRouter.use(requireAuth);
 
-const optionalText = z
-  .string()
-  .trim()
-  .max(500)
-  .nullish()
-  .transform((v) => (v ? v : null));
-
 const doctorSchema = z.object({
   full_name: z.string().trim().min(1, "Nombre requerido").max(200),
-  clinic_address: optionalText,
-  phone: optionalText,
-  email: z.union([z.email("Email inválido"), z.literal(""), z.null()]).optional().transform((v) => v || null),
-  bank_account: optionalText,
+  clinic_address: optionalText(),
+  phone: optionalText(50),
+  email: optionalEmail,
+  bank_account: optionalText(100),
   status: z.boolean().default(true),
   use_percentage: z.boolean().default(false),
   default_commission_pct: z.number().min(0).max(20, "La comisión no puede superar 20%").default(0),

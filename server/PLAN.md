@@ -59,25 +59,45 @@ En cada petición, `tenancyMiddleware` lee el subdominio, abre el contexto de es
 
 **Bug encontrado en tenancy-node 0.8.0** (con parche aplicado): ver [Reporte para tenancy-node](#reporte-para-tenancy-node).
 
-## Fase 2 — Núcleo clínico y comisiones
+## Fase 2 — Núcleo clínico y comisiones ✅ hecha
 
-**Migración nueva:** `db/tenant/003_clinico.sql` con `patients`, `studies`, `study_prices`, `patient_studies` y `commissions`, más sus índices (ver [Base de datos](#rendimiento-y-base-de-datos)).
+**Migración:** `db/tenant/003_clinico.sql` con `patients`, `studies`, `study_prices`, `patient_studies` y `commissions`, más sus índices. Aplicada a todas las sucursales con `npm run db:migrate`.
 
-**Reglas que se pasan de trigger a código:**
+**Reglas que pasaron de trigger a código** (`src/services/attentions.ts`, todo en una transacción):
 
-| Trigger actual | En la API |
+| Trigger de Supabase | En la API |
 |---|---|
-| `set_patient_study_price` | Al registrar una atención, el precio se toma de la tarifa activa (con o sin informe), leída dentro de la transacción. El cliente nunca envía el precio. |
-| `deactivate_prev_prices` | Crear una tarifa activa desactiva la anterior en la misma transacción. |
-| `calc_commission` | Calcula la comisión al registrar la atención: vale = monto fijo, porcentaje del doctor, 50% en el primer paciente, o monto fijo del estudio. |
+| `set_patient_study_price` | El precio sale de la tarifa activa (con o sin informe), leída dentro de la transacción. **El cliente no envía precios.** Se calculan también el recargo por factura (`invoice_surcharge_pct`) y el descuento por convenio del doctor (`agreement_discount_pct`), ambos sobre el precio base. |
+| `deactivate_prev_prices` | Crear o activar una tarifa desactiva la anterior en la misma transacción. Además, un índice único sobre una columna generada impide que haya dos tarifas activas. |
+| `calc_commission` | Igual que hoy: vale = 50 Bs fijos; doctor con porcentaje = su % del precio, o 50% en su primera atención; doctor sin porcentaje = comisión fija del estudio. En una atención con varios estudios, solo el primero cuenta como "primer paciente". |
 
-**Endpoints:** `/api/patients`, `/api/studies`, `/api/studies/:id/prices`, `/api/attentions` (incluye cobrar y entregar) y `/api/commissions`.
+**Endpoints:** `/api/patients`, `/api/studies`, `/api/studies/:id/prices`, `/api/study-prices/:id`, `/api/attentions` (registrar, cobrar, cobrar todo, entregar) y `/api/commissions` (con totales por doctor). Detalle en el README.
 
-**Caché:** estudios con su tarifa activa (solo para mostrar, 10 min). La lista de pacientes se pagina y no se cachea.
+**Probado** con 33 verificaciones automáticas:
+- Cálculo de precio, recargo, descuento, reparto del pago y comisiones.
+- Una sola tarifa activa.
+- Validaciones de cobro y entrega.
+- Filtros por día local y paginación.
+- Permisos por rol y aislamiento entre sucursales.
+- Concurrencia.
 
-**Decisión pendiente (comisiones):** hoy el 50% del primer paciente **solo se aplica a doctores con porcentaje**, y no se puede combinar un monto fijo con un porcentaje. Confirmar si se mantiene así.
+En local, todas las listas responden en menos de 4 ms (p95).
 
-**Listo cuando:** una atención registrada por la API genera el mismo precio y la misma comisión que hoy genera Supabase con los mismos datos.
+**Mejoras y correcciones respecto a Supabase:**
+
+1. **Cobro de más con doctores con convenio (bug del sistema actual).** El trigger aplica el descuento por convenio, pero el frontend calcula el total y el "pago completo" **sin** ese descuento, así que el paciente queda pagando de más. Ahora el servidor calcula el total y reparte el pago. Además, la base rechaza `amount_paid > total`.
+2. **Doble 50% de "primer paciente" por concurrencia.** Dos atenciones simultáneas para un doctor nuevo podían cobrar ambas el 50%. Ahora se bloquea al doctor y la verificación usa una lectura con bloqueo (`FOR SHARE`), que ve los datos recién confirmados. Probado con peticiones simultáneas.
+3. **Cobros simultáneos:** el saldo se lee con `FOR UPDATE`, así dos cobros a la vez no pueden pasarse del saldo.
+4. **Días en hora de Bolivia:** los filtros `from`/`to` usan el día local (`BUSINESS_UTC_OFFSET=-04:00`). Supabase filtraba por día UTC: una atención a las 21:00 aparecía en el día siguiente. Probado en el límite de las 23:59:59 / 00:00:00.
+5. **No se registran atenciones con estudios desactivados.**
+6. **No se borran pacientes ni estudios con atenciones** (409, con mensaje para desactivarlos). El frontend decía "también elimina su historial", pero en Supabase igual fallaba por la clave foránea.
+7. **Paginación y resúmenes en SQL:** pacientes, atenciones y comisiones ya no traen la tabla completa. Los totales (cobrado, saldo, comisiones por doctor) se suman en MySQL.
+
+**Decisión pendiente (comisiones):** hoy el 50% del primer paciente **solo se aplica a doctores con porcentaje**, y no se puede combinar monto fijo con porcentaje. Se mantuvo igual que Supabase. Si cambia, se toca solo `commissionFor()` en `src/services/attentions.ts`.
+
+**Notas:**
+- El rol DOCTOR ve todas las comisiones (igual que hoy), porque los usuarios no están vinculados a un doctor. Si cada doctor solo debe ver las suyas, hay que vincular `users` ↔ `doctors` (Fase 4).
+- MySQL debe correr en UTC (`--default-time-zone=+00:00`), porque `created_at` usa `CURRENT_TIMESTAMP`.
 
 ## Fase 3 — Finanzas, agenda y notificaciones
 
@@ -202,7 +222,7 @@ Implementada en `src/lib/cache.ts`. Las llaves llevan el prefijo de la sucursal 
 | Permisos por combinación de roles | `perms:<roles>` | 10 min | se edita `role_permissions` | ✅ (borrado en Fase 4) |
 | Lista de doctores | `doctors:list` | 5 min | se crea, edita o elimina un doctor | ✅ |
 | Parámetros (`app_params`) | `params` | 10 min | se edita un parámetro | Fase 4 |
-| Estudios + tarifa activa (para mostrar) | `studies:active` | 10 min | se crea o edita un estudio o una tarifa | Fase 2 |
+| Estudios + tarifa activa (para mostrar) | `studies:list` | 10 min | se crea, edita o borra un estudio o una tarifa | ✅ |
 | Reportes de **meses cerrados** | `report:<tipo>:<desde>:<hasta>` | 1 h | se registra un cambio con fecha en ese período | Fase 4 |
 
 Reglas:
@@ -248,6 +268,10 @@ Hoy el frontend tiene 5 minutos **para todo** (`src/router.tsx`). Es arriesgado 
   | búsqueda sin caché | 2.1 ms | 2.4 ms |
   | `/api/auth/me` | 2.1 ms | 2.4 ms |
   | `/tenancy/me` | 0.7 ms | 0.8 ms |
+  | `/api/studies` (caché) | 1.7 ms | 2.1 ms |
+  | `/api/patients` (50 por página) | 2.3 ms | 2.8 ms |
+  | `/api/attentions` (50 por página + resumen) | 2.6 ms | 3.4 ms |
+  | `/api/commissions` (+ totales por doctor) | 2.5 ms | 2.9 ms |
 
 - **Objetivo en producción:** p95 < 100 ms en lecturas y < 20 ms en catálogos cacheados. Repetir la medición con datos reales (`autocannon`) en cada fase.
 
@@ -255,28 +279,28 @@ Hoy el frontend tiene 5 minutos **para todo** (`src/router.tsx`). Es arriesgado 
 
 ### Ya implementado ✅
 
-- Índices: `doctors(status, full_name)`, `doctors(full_name)`, `audit_logs(user_id, timestamp)`, `audit_logs(table_name, record_id)`, `audit_logs(timestamp)`.
+- Índices de la Fase 1: `doctors(status, full_name)`, `doctors(full_name)`, `audit_logs(user_id, timestamp)`, `audit_logs(table_name, record_id)`, `audit_logs(timestamp)`.
+- Índices de la Fase 2:
+  - `patients(full_name)`, `patients(doctor_id)`, `patients(phone)`, `patients(created_at)`
+  - `patient_studies(patient_id, created_at)`, `patient_studies(created_at)`, `patient_studies(doctor_id, created_at)`, `patient_studies(study_id)`, `patient_studies(delivered_at)`
+  - `study_prices(study_id, is_active)` + único de tarifa activa
+  - `commissions(doctor_id, created_at)`, `commissions(created_at)` + único por atención
+- Paginación (máximo 500 por página) en pacientes, atenciones y comisiones.
+- Dinero calculado en centavos enteros (`src/lib/money.ts`), con el mismo redondeo que `ROUND(numeric, 2)` de PostgreSQL.
+- Restricciones `CHECK` en la base: montos no negativos, no pagar más que el total, comisión de doctor ≤ 20%.
 - Pools por sucursal de tenancy-node: 5 conexiones por sucursal, hasta 100 pools abiertos y cierre tras 60 s sin uso.
 - Tipos iguales a PostgreSQL: TINYINT(1) → boolean, DATE → `'YYYY-MM-DD'` sin conversión de zona horaria, DECIMAL → número.
 - Apagado ordenado: se terminan las peticiones en curso y se cierran los pools.
 
 ### En cada fase
 
-- **Índices de la Fase 2:**
-  - `patients(full_name)`
-  - `patients(doctor_id)`
-  - `patient_studies(patient_id)`
-  - `patient_studies(created_at)`
-  - `patient_studies(doctor_id, created_at)`
-  - `study_prices(study_id, is_active)`
-  - `commissions(doctor_id, created_at)`
 - **Índices de la Fase 3:**
   - `cashbox(created_at)`
   - `appointments(starts_at)`
   - `appointments(patient_id)`
   - `third_party_payments(payment_date)`
   - `bank_deposits(deposit_date)`
-- **Paginación** (`?page=&limit=`, máximo 100) en pacientes, atenciones, auditoría y caja. Hoy `useList` trae la tabla completa.
+- **Paginación** en auditoría y caja (Fase 3/4), igual que en pacientes y atenciones.
 - Revisar las consultas nuevas con `EXPLAIN` y activar `slow_query_log` (umbral de 200 ms) en producción.
 - **Conexiones:** `sucursales × 5 + pool central ≤ max_connections` de MySQL. Con más de 30 sucursales activas a la vez, subir `max_connections` o agregar un servidor (`npx tenancy servers:add`). tenancy-node reparte las sucursales nuevas al servidor con menos sucursales (`placement: 'least-tenants'`) y mueve una existente con `npx tenancy move`.
 - **Cambios de base:** siempre con una migración nueva en `db/tenant/` y `npm run db:migrate` (se aplica a todas las sucursales, de 5 en 5). Nunca editar una migración ya aplicada.
@@ -335,7 +359,7 @@ Diseño propuesto:
 Se puede usar la cola de tenancy-node (`tenancy.jobs`) para enviar el correo sin hacer esperar la petición. **Decisión pendiente:** qué servicio de correo usar.
 
 ### 2. Contenedor de MySQL local
-`dental3d-mysql`, en el puerto **3307**, tiene la base central `dental3d_central` y las sucursales de prueba `dental_central` y `dental_sur`, con un ADMIN (`admin` / `Admin123!xyz`) en cada una.
+`dental3d-mysql`, en el puerto **3307**, tiene la base central `dental3d_central` y las sucursales de prueba `dental_central` y `dental_sur`, con un ADMIN (`admin` / `Admin123!xyz`) en cada una. `dental_central` tiene datos de prueba de la Fase 2. El contenedor actual se creó sin `--default-time-zone=+00:00`, pero la imagen ya usa UTC por defecto; al recrearlo, usar el comando del README.
 - Detenerlo: `docker stop dental3d-mysql`
 - Iniciarlo: `docker start dental3d-mysql`
 - Empezar de cero: `docker rm -f dental3d-mysql`, volver a crearlo, `npm run db:install` y crear las sucursales.
@@ -349,13 +373,15 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 - `git checkout src/routeTree.gen.ts`
 
 ### 5. Otros
-- Tests automáticos (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba, empezando en la Fase 2, donde están las reglas de dinero.
+- Tests automáticos en el repo (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba. Las 33 verificaciones de la Fase 2 se corrieron con un script local. Conviene pasarlas al repo antes de la Fase 3.
 - Usar `pino` como logger de tenancy-node en producción y enviar los logs a un sistema donde se pueda filtrar por sucursal.
 
 ## Orden siguiente
 
-1. ✅ Commit de la Fase 1, el plan, la Fase 1.5 (multi-sucursal, seguridad, velocidad y marca) en `dev`.
-2. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
-3. Confirmar la regla de comisiones (Fase 2) y el servicio de correo.
-4. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
-5. Empezar la Fase 2.
+1. ✅ Commit de la Fase 1, el plan y la Fase 1.5 en `dev`.
+2. ✅ Fase 2 (núcleo clínico y comisiones) en `dev`.
+3. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
+4. Confirmar la regla de comisiones y el servicio de correo.
+5. Pasar las pruebas de la Fase 2 a tests automáticos en el repo.
+6. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
+7. Empezar la Fase 3 (finanzas, agenda y notificaciones).

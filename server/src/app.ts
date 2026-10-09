@@ -7,9 +7,13 @@ import { tenancyMiddleware } from "@tenancy-node/adapter-express";
 import { config } from "./config.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { requireTenant } from "./middleware/auth.js";
+import { attentionsRouter } from "./routes/attentions.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { brandingRouter, LOGO_MAX_BYTES } from "./routes/branding.routes.js";
+import { commissionsRouter } from "./routes/commissions.routes.js";
 import { doctorsRouter } from "./routes/doctors.routes.js";
+import { patientsRouter } from "./routes/patients.routes.js";
+import { studiesRouter, studyPricesRouter } from "./routes/studies.routes.js";
 import { tenancy } from "./tenancy/index.js";
 
 // Mensajes de validación en español
@@ -46,6 +50,11 @@ app.use("/api", (_req, res, next) => {
 app.use("/api", requireTenant);
 app.use("/api/auth", authRouter);
 app.use("/api/doctors", doctorsRouter);
+app.use("/api/patients", patientsRouter);
+app.use("/api/studies", studiesRouter);
+app.use("/api/study-prices", studyPricesRouter);
+app.use("/api/attentions", attentionsRouter);
+app.use("/api/commissions", commissionsRouter);
 app.use("/api/branding", brandingRouter);
 
 app.use(notFound);
