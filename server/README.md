@@ -61,7 +61,8 @@ server/
 ├── db/tenant/               migraciones de la base de CADA sucursal
 │   ├── 001_schema.sql       usuarios, roles, permisos, doctores, auditoría
 │   ├── 002_seed.sql         permisos, permisos por rol y parámetros
-│   └── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
+│   ├── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
+│   └── 004_finanzas.sql     caja chica, depósitos, pagos a terceros, citas, notificaciones
 └── src/
     ├── index.ts             arranque y apagado ordenado
     ├── app.ts               Express: seguridad, compresión, tenancy, rutas
@@ -72,10 +73,12 @@ server/
     │   ├── auth.ts          requireTenant, requireAuth (JWT ligado a la sucursal), permisos
     │   ├── rate-limit.ts    límites de intentos (login, registro, contraseña)
     │   └── error.ts         errores { error: { code, message } } en español
-    ├── lib/                 audit, cache, permissions, money, query, schemas, http-error
+    ├── lib/                 audit, cache, files, money, permissions, private-storage, query, schemas, http-error
     ├── services/
     │   └── attentions.ts    precio, recargo, descuento y comisión (antes triggers)
-    ├── routes/              auth, doctors, patients, studies, attentions, commissions, branding
+    ├── routes/              auth, doctors, patients, studies, attentions, commissions, cashbox,
+    │                        finance (depósitos y pagos a terceros), receipts, appointments,
+    │                        notifications, branding
     └── scripts/             create-admin.ts
 ```
 
@@ -193,6 +196,70 @@ Las comisiones se crean solas al registrar una atención:
 - **Vale:** monto fijo de `voucher_amount` (50 Bs).
 - **Doctor con porcentaje:** su % del precio, o `first_patient_commission_pct` (50%) en su primera atención.
 - **Doctor sin porcentaje:** la comisión fija del estudio.
+
+### Caja chica 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/cashbox?from=&to=&page=&limit=` (con `summary`: ingresos, gastos y saldo actual) | `view.cashbox` |
+| GET | `/api/cashbox/balance` | `view.cashbox` o `view.dashboard` |
+| POST | `/api/cashbox` `{ description, income }` o `{ description, expense }` | `cashbox.create` |
+
+`balance = saldo anterior + ingreso − gasto`. Lo calcula el servidor bloqueando una fila de saldo (`cashbox_state`), así los movimientos simultáneos nunca dan un saldo incorrecto.
+
+Los movimientos **no se editan ni se borran**: una corrección es un movimiento nuevo. Un gasto que deja la caja en negativo se rechaza (`INSUFFICIENT_BALANCE`), salvo que el parámetro `cashbox_allow_negative` esté activo.
+
+### Comprobantes 🔒 (almacenamiento privado)
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| POST | `/api/receipts` (binario PNG, JPG, WEBP o PDF, máximo 5 MB) → `{ key }` | `deposits.create` o `third_party.create` |
+| GET | `/api/receipts/url?key=...` → `{ url, expires_at }` (válido 5 minutos) | roles ADMIN, SUBADMIN, CAJA, CONTABILIDAD |
+| GET | `/api/receipts/file?key=&exp=&sig=` (el enlace firmado; no lleva token) | — |
+
+Flujo:
+1. Subir el archivo.
+2. Enviar la `key` como `receipt_key` al crear el depósito o el pago.
+3. Pedir un enlace firmado para verlo.
+
+Los archivos se guardan en `PRIVATE_STORAGE_DIR/<sucursal>/receipts/...` y **nunca** se sirven sin firma. Un enlace solo sirve para esa sucursal y ese archivo, y vence en 5 minutos.
+
+### Depósitos bancarios y pagos a terceros 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/deposits?from=&to=&q=&page=&limit=` (con total) | `view.deposits` |
+| POST | `/api/deposits` `{ amount, deposit_date, reference?, receipt_key? }` | `deposits.create` |
+| GET | `/api/third-party-payments?from=&to=&q=` (con total) | `view.third_party` |
+| POST | `/api/third-party-payments` `{ provider_name, service_type, amount, service_date, payment_date, receipt_key? }` | `third_party.create` |
+| PATCH | `/api/third-party-payments/:id` (la **fecha de servicio no se puede cambiar**: `SERVICE_DATE_LOCKED`) | `third_party.create` |
+
+Aquí `from`/`to` filtran por la fecha del depósito o del pago (columnas DATE, sin conversión de zona horaria).
+
+### Agenda de citas 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/appointments?from=&to=&status=&doctor_id=&patient_id=` | roles ADMIN, SUBADMIN, RECEPCION, DOCTOR, AUDITOR |
+| GET | `/api/appointments/:id` | ídem |
+| POST | `/api/appointments` | `appointments.create` |
+| PATCH | `/api/appointments/:id` (también para cambiar solo el `status`) | `appointments.edit` |
+| DELETE | `/api/appointments/:id` | `appointments.delete` |
+
+- `starts_at` va **con zona horaria** (`2026-10-20T09:30:00-04:00`) y se guarda en UTC.
+- Con `patient_id`, el nombre, el teléfono y el doctor se completan desde el paciente.
+- Estados: `SCHEDULED`, `CONFIRMED`, `DONE`, `CANCELLED`, `NO_SHOW`.
+- La respuesta trae `overlaps`: las citas del mismo doctor que se cruzan con el horario (es un aviso; no bloquea).
+
+### Notificaciones 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/notifications?unread=true&page=&limit=` (recibidas) | cualquier usuario |
+| GET | `/api/notifications/unread-count` (para consultar cada 30 s; responde 304 si no cambió) | cualquier usuario |
+| POST | `/api/notifications/:id/read` · `/api/notifications/read-all` | cualquier usuario (solo las propias) |
+| GET | `/api/notifications/recipients` (usuarios activos) · `/api/notifications/sent` | `notifications.send` |
+| POST | `/api/notifications` `{ title, body, target: "all" \| [userIds] }` | `notifications.send` |
 
 ### Marca de la sucursal 🔒 (permiso `branding.edit`)
 

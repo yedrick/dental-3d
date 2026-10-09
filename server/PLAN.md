@@ -99,15 +99,57 @@ En local, todas las listas responden en menos de 4 ms (p95).
 - El rol DOCTOR ve todas las comisiones (igual que hoy), porque los usuarios no están vinculados a un doctor. Si cada doctor solo debe ver las suyas, hay que vincular `users` ↔ `doctors` (Fase 4).
 - MySQL debe correr en UTC (`--default-time-zone=+00:00`), porque `created_at` usa `CURRENT_TIMESTAMP`.
 
-## Fase 3 — Finanzas, agenda y notificaciones
+## Fase 3 — Finanzas, agenda y notificaciones ✅ hecha
 
-**Migración nueva:** `004_finanzas.sql` con `cashbox`, `bank_deposits`, `third_party_payments`, `appointments`, `notifications` y `notification_recipients`.
+**Migración:** `db/tenant/004_finanzas.sql` con:
+- `cashbox` y `cashbox_state` (la fila del saldo);
+- `bank_deposits`, `third_party_payments`;
+- `appointments`;
+- `notifications`, `notification_recipients`;
+- el parámetro `cashbox_allow_negative`.
 
-- **Caja chica** (`set_cashbox_balance`): saldo = saldo anterior + ingreso − gasto. Se calcula bloqueando la última fila (`SELECT … FOR UPDATE`) para que dos movimientos al mismo tiempo no generen un saldo incorrecto. **Sin caché.**
-- **Pagos a terceros** (`prevent_service_date_change`): la fecha de servicio no se puede editar después de guardarla.
-- **Comprobantes (archivos privados):** **no** se guardan con `tenancy.storage()`, porque esa ruta es pública (`/tenancy/assets`). Hay que usar una carpeta privada por sucursal (`private/<sucursal>/receipts/...`), servida por un endpoint con login y permisos, o S3 privado con URLs firmadas. Mismo control de roles: ADMIN, CAJA y CONTABILIDAD suben; además SUBADMIN puede ver.
-- **Notificaciones:** hoy usan Supabase Realtime. Al principio se consultan cada 30 segundos; después se puede pasar a Server-Sent Events.
-- **Eventos de auditoría** que hoy usan `rpc("log_audit_event")` (cobrar, entregar, citas): se registran directamente en cada endpoint.
+**Endpoints:** `/api/cashbox`, `/api/receipts`, `/api/deposits`, `/api/third-party-payments`, `/api/appointments` y `/api/notifications`. Detalle en el README.
+
+**Probado** con 47 verificaciones automáticas, todas OK:
+- caja chica (incluye 10 movimientos simultáneos);
+- seguridad de comprobantes (firma, expiración, otra sucursal, SVG disfrazado, `../`, tamaño);
+- fecha de servicio bloqueada;
+- agenda (zona horaria, cruces, estados);
+- notificaciones (contador, 304, leídas, permisos);
+- permisos por rol y aislamiento entre sucursales.
+
+La prueba de la Fase 2 se volvió a correr sin regresiones. En local, todo responde en menos de 3.1 ms (p95).
+
+| Regla de Supabase | En la API |
+|---|---|
+| `set_cashbox_balance` (trigger) | Fila única `cashbox_state` bloqueada con `FOR UPDATE`: saldo = anterior + ingreso − gasto. |
+| `prevent_service_date_change` (trigger) | `PATCH` de pagos a terceros rechaza cambiar `service_date` (`SERVICE_DATE_LOCKED`). |
+| Bucket privado `receipts` | Almacenamiento privado por sucursal (`PRIVATE_STORAGE_DIR`) con enlaces firmados de 5 min, igual que `createSignedUrl`. |
+| Supabase Realtime (campana) | `GET /api/notifications/unread-count` cada 30 s, con ETag/304. |
+| `rpc("log_audit_event")` | Cada endpoint escribe su auditoría (`APPOINTMENT_*`, `NOTIFICATION_SEND`, etc.). |
+
+**Mejoras y correcciones respecto a Supabase:**
+
+1. **Saldo de caja con movimientos simultáneos.** El trigger leía "la última fila" sin bloqueo: dos movimientos a la vez podían calcular su saldo sobre el mismo anterior y la caja quedaba descuadrada. Ahora se bloquea una fila de saldo. Probado con 10 movimientos simultáneos: saldo exacto y sin saldos repetidos.
+2. **Comprobantes más seguros:**
+   - se valida el contenido real (imagen o PDF), sin SVG, máximo 5 MB;
+   - el PDF se sirve con `CSP: sandbox`;
+   - un comprobante de otra sucursal o inexistente no se puede asociar.
+3. **Agenda:**
+   - la hora se exige **con zona horaria**: el frontend actual usa la hora del navegador, que podría estar mal configurada;
+   - se avisa (sin bloquear) si la cita se cruza con otra del mismo doctor.
+4. **Montos en cero o negativos** rechazados en caja, depósitos y pagos.
+
+**Decisiones para ti:**
+
+- **Caja en negativo (cambio de comportamiento):** ahora **se rechaza** un gasto mayor al saldo. Supabase lo permitía. Se puede volver al comportamiento anterior con el parámetro `cashbox_allow_negative = 1`.
+- **Movimientos de caja y depósitos sin edición ni borrado:** igual que el frontend actual. Las correcciones se hacen con un movimiento nuevo. Si hace falta anular, propongo un endpoint de "anulación" que registre el movimiento inverso, en vez de borrar.
+- **AUDITOR no ve los comprobantes:** se mantuvo la regla del bucket de Supabase (ADMIN, SUBADMIN, CAJA, CONTABILIDAD). Si el auditor debe verlos, se agrega su rol.
+
+**Pendiente de esta fase:**
+- Limpiar los comprobantes subidos que nunca se asociaron a un depósito o pago (tarea programada con la cola de tenancy-node).
+- **Respaldo** de `PRIVATE_STORAGE_DIR` junto con las bases de datos.
+- Pasar a Server-Sent Events si 30 s de demora en la campana resulta mucho.
 
 ## Fase 4 — Administración, reportes y copia de datos
 
@@ -204,7 +246,7 @@ En este orden, **sin saltarse pasos**:
 - **Bloqueo por usuario** después de N intentos fallidos, además del límite por IP.
 - **Refresh tokens** o un JWT más corto (1–2 h), y revocar sesiones al cambiar la contraseña.
 - **2FA** para ADMIN (TOTP).
-- **Archivos privados** fuera de `tenancy.storage()` (ver Fase 3).
+- ✅ **Archivos privados** fuera de `tenancy.storage()`, con enlaces firmados (Fase 3). En producción con varias réplicas: S3 privado con URLs prefirmadas.
 - **Dependencias:** `npm audit` en CI y fijar tenancy-node a una versión exacta.
 - **Respaldos** automáticos de cada base y prueba de restauración mensual.
 
@@ -272,6 +314,10 @@ Hoy el frontend tiene 5 minutos **para todo** (`src/router.tsx`). Es arriesgado 
   | `/api/patients` (50 por página) | 2.3 ms | 2.8 ms |
   | `/api/attentions` (50 por página + resumen) | 2.6 ms | 3.4 ms |
   | `/api/commissions` (+ totales por doctor) | 2.5 ms | 2.9 ms |
+  | `/api/cashbox` (50 por página + saldo) | 2.4 ms | 3.1 ms |
+  | `/api/deposits` | 2.1 ms | 2.3 ms |
+  | `/api/appointments` (un mes) | 2.2 ms | 2.6 ms |
+  | `/api/notifications/unread-count` | 2.0 ms | 2.4 ms |
 
 - **Objetivo en producción:** p95 < 100 ms en lecturas y < 20 ms en catálogos cacheados. Repetir la medición con datos reales (`autocannon`) en cada fase.
 
@@ -288,19 +334,20 @@ Hoy el frontend tiene 5 minutos **para todo** (`src/router.tsx`). Es arriesgado 
 - Paginación (máximo 500 por página) en pacientes, atenciones y comisiones.
 - Dinero calculado en centavos enteros (`src/lib/money.ts`), con el mismo redondeo que `ROUND(numeric, 2)` de PostgreSQL.
 - Restricciones `CHECK` en la base: montos no negativos, no pagar más que el total, comisión de doctor ≤ 20%.
+- Índices de la Fase 3:
+  - `cashbox(seq)` único, `cashbox(created_at)`
+  - `bank_deposits(deposit_date)`
+  - `third_party_payments(payment_date)`, `third_party_payments(provider_name)`
+  - `appointments(starts_at)`, `appointments(patient_id)`, `appointments(doctor_id, starts_at)`
+  - `notification_recipients(user_id, read_at)`, `notification_recipients(user_id, created_at)`
+- Saldo de caja en O(1): una fila (`cashbox_state`) en vez de buscar el último movimiento.
 - Pools por sucursal de tenancy-node: 5 conexiones por sucursal, hasta 100 pools abiertos y cierre tras 60 s sin uso.
 - Tipos iguales a PostgreSQL: TINYINT(1) → boolean, DATE → `'YYYY-MM-DD'` sin conversión de zona horaria, DECIMAL → número.
 - Apagado ordenado: se terminan las peticiones en curso y se cierran los pools.
 
 ### En cada fase
 
-- **Índices de la Fase 3:**
-  - `cashbox(created_at)`
-  - `appointments(starts_at)`
-  - `appointments(patient_id)`
-  - `third_party_payments(payment_date)`
-  - `bank_deposits(deposit_date)`
-- **Paginación** en auditoría y caja (Fase 3/4), igual que en pacientes y atenciones.
+- **Paginación** en auditoría (Fase 4), igual que en pacientes, atenciones, caja, depósitos y pagos.
 - Revisar las consultas nuevas con `EXPLAIN` y activar `slow_query_log` (umbral de 200 ms) en producción.
 - **Conexiones:** `sucursales × 5 + pool central ≤ max_connections` de MySQL. Con más de 30 sucursales activas a la vez, subir `max_connections` o agregar un servidor (`npx tenancy servers:add`). tenancy-node reparte las sucursales nuevas al servidor con menos sucursales (`placement: 'least-tenants'`) y mueve una existente con `npx tenancy move`.
 - **Cambios de base:** siempre con una migración nueva en `db/tenant/` y `npm run db:migrate` (se aplica a todas las sucursales, de 5 en 5). Nunca editar una migración ya aplicada.
@@ -373,15 +420,16 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 - `git checkout src/routeTree.gen.ts`
 
 ### 5. Otros
-- Tests automáticos en el repo (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba. Las 33 verificaciones de la Fase 2 se corrieron con un script local. Conviene pasarlas al repo antes de la Fase 3.
+- Tests automáticos en el repo (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba. Las verificaciones de las Fases 2 (33) y 3 (47) se corrieron con scripts locales. Conviene pasarlas al repo antes de la Fase 4.
 - Usar `pino` como logger de tenancy-node en producción y enviar los logs a un sistema donde se pueda filtrar por sucursal.
 
 ## Orden siguiente
 
 1. ✅ Commit de la Fase 1, el plan y la Fase 1.5 en `dev`.
 2. ✅ Fase 2 (núcleo clínico y comisiones) en `dev`.
-3. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
-4. Confirmar la regla de comisiones y el servicio de correo.
-5. Pasar las pruebas de la Fase 2 a tests automáticos en el repo.
-6. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
-7. Empezar la Fase 3 (finanzas, agenda y notificaciones).
+3. ✅ Fase 3 (finanzas, agenda y notificaciones) en `dev`.
+4. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
+5. Decidir: regla de comisiones, servicio de correo, caja en negativo, anulaciones y comprobantes para AUDITOR.
+6. Pasar las pruebas de las Fases 2 y 3 a tests automáticos en el repo.
+7. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
+8. Empezar la Fase 4 (usuarios, roles, parámetros, auditoría, reportes y copia de datos).
