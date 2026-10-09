@@ -84,24 +84,40 @@ Edita `server/.env`:
 | `TENANCY_KEY` | generada con `npx tenancy key:generate`. **Guárdala también fuera del servidor** (gestor de secretos): sin ella no se pueden abrir las bases de las sucursales |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `STORAGE_DIR` / `PRIVATE_STORAGE_DIR` | `./storage` / `./storage-private` |
+| `TENANCY_ADMIN_SECRET` | `openssl rand -base64 48`: enciende el **panel de la plataforma** en `https://dental3d.com/admin/` |
+| `ADMIN_SECURE_COOKIES` | `true` |
+| `TENANT_PUBLIC_URL` | `https://{tenant}.dental3d.com` ("Entrar como…" abre esta dirección) |
 
-Crear las tablas centrales y las sucursales:
+Crear las tablas centrales y el **dueño de la plataforma** (el usuario del panel):
 
 ```sh
 sudo -u dental3d npm run db:install
-sudo -u dental3d npm run tenant:create -- central --name="3D Dental Central"
-# más sucursales: npm run tenant:create -- sur --name="3D Dental Sur"
+sudo -u dental3d OWNER_PASS='<contraseña de 12+ caracteres>' npx tenancy admin:user tu@email.com --role=owner --password-env=OWNER_PASS
 ```
 
-Después, una de estas dos opciones:
+### Crear sucursales desde el panel (recomendado)
 
-- **Sucursal nueva:** crear su ADMIN.
+1. Entra a `https://dental3d.com/admin/` con el usuario dueño. Solo desde las IP permitidas en nginx (paso 6).
+2. **Tenants → Nuevo tenant**: id `calacoto`, nombre "3D Dental Calacoto". El panel muestra el progreso:
+   - crea la base `dental_calacoto` y su usuario MySQL;
+   - aplica las migraciones;
+   - crea el **ADMIN por defecto** (`admin`, cuenta "por activar").
+3. **Tema**: color principal y demás colores. El logo se sube después desde la app, en "Marca de la sucursal".
+4. **Resumen → Entrar como…** con el usuario `admin` → "Generar enlace". El enlace abre `https://calacoto.dental3d.com` con la sesión iniciada y pide **activar la cuenta**: nombre, usuario, email y contraseña.
+5. Listo: `https://calacoto.dental3d.com` ya funciona con ese usuario.
+
+Desde el panel también se puede suspender una sucursal o ponerla en mantenimiento, ver su auditoría y sus migraciones, y explorar sus datos (solo lectura).
+
+### Alternativas por terminal
+
+- Crear una sucursal: `npm run tenant:create -- calacoto --name="3D Dental Calacoto"`. También deja el ADMIN por defecto.
+- Activar o reemplazar el ADMIN sin el panel:
 
   ```sh
-  sudo -u dental3d ADMIN_PASSWORD='<Contraseña123!>' npm run prod:create-admin -- central admin@clinica.com admin "Nombre Apellido"
+  sudo -u dental3d ADMIN_PASSWORD='<Contraseña123!>' npm run prod:create-admin -- calacoto admin@clinica.com admin "Nombre Apellido"
   ```
 
-- **Copiar los datos de Supabase:** ver el [paso 9](#9-el-día-del-corte-desde-supabase). En ese caso **no** se crea el ADMIN antes.
+- **Copiar los datos de Supabase:** ver el [paso 9](#9-el-día-del-corte-desde-supabase). Se hace sobre una sucursal recién creada, **sin activar** su ADMIN por defecto (la importación lo reemplaza).
 
 Opcional: `npm prune --omit=dev` quita las herramientas de desarrollo. La CLI `tenancy` y los scripts `prod:*` siguen funcionando.
 
@@ -137,7 +153,9 @@ sudo ln -s /etc/nginx/sites-available/dental3d.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Clave de la configuración: `proxy_set_header Host $host` en `/api` y `/tenancy`. La API reconoce la sucursal por el subdominio. **No actives `trustProxy` de tenancy-node.**
+Puntos clave de la configuración:
+- `proxy_set_header Host $host` en `/api` y `/tenancy`: la API reconoce la sucursal por el subdominio. **No actives `trustProxy` de tenancy-node.**
+- `/admin/` (panel de la plataforma) está **cerrado por IP**. Agrega `allow <IP de tu oficina o VPN>;` antes de `deny all;`. El módulo recomienda no exponerlo a internet, y su límite de intentos de login no distingue IPs detrás de nginx.
 
 ## 7. Certificado HTTPS comodín
 
@@ -167,7 +185,7 @@ echo '30 3 * * * root APP_DIR=/opt/dental3d /usr/local/bin/dental3d-backup >> /v
 ## 9. El día del corte desde Supabase
 
 1. Congelar los cambios en el sistema actual (Lovable).
-2. Crear la sucursal **sin ADMIN**: `npm run tenant:create -- central --name="…"`.
+2. Crear la sucursal (panel o `npm run tenant:create -- central --name="…"`) **sin activar** su ADMIN por defecto.
 3. Simulación, revisar el informe (conteos, sumas, observaciones):
 
    ```sh
@@ -220,3 +238,4 @@ curl -s https://noexiste.dental3d.com/api/public/studies     # TENANCY_TENANT_NO
 - [ ] HTTPS con comodín y HSTS activo.
 - [ ] Respaldos diarios, copiados fuera del servidor, y una restauración probada.
 - [ ] El usuario `tenancy_admin` no es `root` de MySQL.
+- [ ] `/admin/` limitado a las IP de la oficina o VPN, y 2FA activada para los usuarios del panel (Mi cuenta → 2FA).

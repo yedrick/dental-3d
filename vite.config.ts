@@ -17,6 +17,8 @@ export default defineConfig({
       proxy: {
         "/api": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
         "/tenancy": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
+        // Panel de la plataforma (tenancy-node), solo en el dominio central: http://localhost:8080/admin/
+        "/admin": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
       },
     },
   },

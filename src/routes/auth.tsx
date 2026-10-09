@@ -110,6 +110,11 @@ function AuthPage() {
   const branding = useBranding();
   const navigate = useNavigate();
   useEffect(() => { if (!loading && user) navigate({ to: "/app" }); }, [user, loading, navigate]);
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get("error");
+    if (err === "impersonation") toast.error("El enlace de \"Entrar como…\" venció o ya se usó (dura 60 segundos). Genera otro desde el panel.");
+    if (err === "impersonation_user") toast.error("El usuario indicado en \"Entrar como…\" no existe o está inactivo en esta sucursal.");
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -166,10 +171,14 @@ function AuthPage() {
           <CardHeader>
             <CardTitle>Elige tu sucursal</CardTitle>
             <CardDescription>
-              Este sistema se usa desde la dirección de tu sucursal, por ejemplo <b>central.{window.location.host}</b>.
+              Este sistema se usa desde la dirección de tu sucursal, por ejemplo <b>calacoto.{window.location.host}</b>.
               Pide la dirección a tu administrador.
             </CardDescription>
           </CardHeader>
+          <CardContent>
+            {/* Panel de tenancy-node: crear sucursales, tema, "Entrar como…" (solo en el dominio central) */}
+            <a href="/admin/" className="text-sm text-primary underline underline-offset-2">Administración de la plataforma</a>
+          </CardContent>
         </Card>
       </div>
     );

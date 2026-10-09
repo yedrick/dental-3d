@@ -33,6 +33,7 @@ import { Route as AppRolesRouteImport } from './routes/app.roles'
 import { Route as AppStudiesRouteImport } from './routes/app.studies'
 import { Route as AppThirdPartyRouteImport } from './routes/app.third-party'
 import { Route as AppUsersRouteImport } from './routes/app.users'
+import { Route as AuthImpersonateRouteImport } from './routes/auth_.impersonate'
 import { Route as AppPatientsIdRouteImport } from './routes/app.patients.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -155,6 +156,11 @@ const AppUsersRoute = AppUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AppRoute,
 } as any)
+const AuthImpersonateRoute = AuthImpersonateRouteImport.update({
+  id: '/auth_/impersonate',
+  path: '/auth/impersonate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppPatientsIdRoute = AppPatientsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
+  '/auth/impersonate': typeof AuthImpersonateRoute
   '/app/': typeof AppIndexRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
 }
@@ -211,6 +218,7 @@ export interface FileRoutesByTo {
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
+  '/auth/impersonate': typeof AuthImpersonateRoute
   '/app': typeof AppIndexRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
 }
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
+  '/auth_/impersonate': typeof AuthImpersonateRoute
   '/app/': typeof AppIndexRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
 }
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
+    | '/auth/impersonate'
     | '/app/'
     | '/app/patients/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
+    | '/auth/impersonate'
     | '/app'
     | '/app/patients/$id'
   id:
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
+    | '/auth_/impersonate'
     | '/app/'
     | '/app/patients/$id'
   fileRoutesById: FileRoutesById
@@ -331,6 +343,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  AuthImpersonateRoute: typeof AuthImpersonateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -503,6 +516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/auth_/impersonate': {
+      id: '/auth_/impersonate'
+      path: '/auth/impersonate'
+      fullPath: '/auth/impersonate'
+      preLoaderRoute: typeof AuthImpersonateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/patients/$id': {
       id: '/app/patients/$id'
       path: '/$id'
@@ -577,6 +597,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  AuthImpersonateRoute: AuthImpersonateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

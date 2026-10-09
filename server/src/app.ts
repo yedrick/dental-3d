@@ -4,6 +4,7 @@ import express from "express";
 import helmet from "helmet";
 import { z } from "zod";
 import { tenancyMiddleware } from "@tenancy-node/adapter-express";
+import { adminMiddleware, createAdminApi } from "@tenancy-node/admin-api";
 import { config } from "./config.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { requireTenant } from "./middleware/auth.js";
@@ -33,6 +34,22 @@ z.config(z.locales.es());
 export const app = express();
 
 app.set("trust proxy", config.trustProxy);
+
+// Panel de la plataforma de tenancy-node: https://dominio.com/admin (solo responde en los dominios
+// centrales; en una sucursal da 404). Crear sucursales (con su base y su ADMIN por defecto), dominios,
+// tema, suspender/mantenimiento, auditoría y "Entrar como…". Va antes de los body parsers y de
+// helmet: lee su propio body y pone sus propios encabezados de seguridad.
+if (config.admin.sessionSecret) {
+  const admin = createAdminApi(tenancy, {
+    sessionSecret: config.admin.sessionSecret,
+    secureCookies: config.admin.secureCookies,
+    ui: true,
+    // "Entrar como…" abre la sucursal por su subdominio y la app canjea el token
+    impersonationUrl: ({ tenantId, token }) =>
+      `${config.admin.tenantUrl.replace("{tenant}", tenantId)}/api/auth/impersonate?token=${encodeURIComponent(token)}`,
+  });
+  app.use(adminMiddleware(admin));
+}
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } })); // el logo se muestra desde el dominio del frontend
 app.use(cors({ origin: config.corsOrigin, exposedHeaders: ["X-Cache", "RateLimit", "RateLimit-Policy"] }));
 app.use(compression()); // JSON de listas grandes: 5-10 veces menos bytes

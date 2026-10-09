@@ -27,7 +27,8 @@ try {
       await tx.query(
         `INSERT INTO users (username, full_name, email, password_hash, approved, active)
          VALUES (?, ?, ?, ?, 1, 1)
-         ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), approved = 1, active = 1`,
+         ON DUPLICATE KEY UPDATE email = VALUES(email), full_name = VALUES(full_name), password_hash = VALUES(password_hash),
+                                 approved = 1, active = 1, must_change_password = 0, token_version = token_version + 1`,
         [username, fullName, email.toLowerCase(), hash],
       );
       const [{ id }] = await tx.query<{ id: string }[]>("SELECT id FROM users WHERE email = ?", [email.toLowerCase()]);

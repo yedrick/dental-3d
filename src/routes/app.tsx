@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
+import { SetupAccount } from "@/components/setup-account";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
@@ -39,8 +40,22 @@ function GlobalLoader() {
 
 
 function ImpersonationBanner() {
-  const { user, impersonatedBy, setSessionToken } = useAuth();
+  const { user, impersonatedBy, setSessionToken, signOut } = useAuth();
   if (!impersonatedBy) return null;
+  // Entrada desde el panel de la plataforma (tenancy-node): no hay una sesión propia a la cual volver
+  if (impersonatedBy.startsWith("platform:")) {
+    return (
+      <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
+        <div>
+          <span className="font-semibold text-amber-800">Acceso desde el panel de la plataforma:</span>{" "}
+          estás como <b>{user?.full_name}</b>. La sesión dura 1 hora y todo queda registrado.
+        </div>
+        <Button size="sm" variant="outline" onClick={async () => { await signOut(); window.location.href = "/auth"; }}>
+          <LogOut className="mr-1 h-3.5 w-3.5" /> Cerrar sesión
+        </Button>
+      </div>
+    );
+  }
   const back = async () => {
     const adminToken = tokenStore.getAdmin();
     tokenStore.clearAdmin();
@@ -82,6 +97,9 @@ function AppLayout() {
       <div>Cargando…</div>
     </div>
   );
+
+  // Cuenta ADMIN por defecto de una sucursal nueva: primero se activa
+  if (user.must_change_password) return <SetupAccount />;
 
   return (
     <SidebarProvider>

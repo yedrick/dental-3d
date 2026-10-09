@@ -11,6 +11,8 @@ export interface SessionUser {
   email: string;
   active: boolean;
   approved: boolean;
+  /** Cuenta ADMIN por defecto de una sucursal nueva: hay que activarla antes de usar el sistema. */
+  must_change_password: boolean;
   created_at: string;
 }
 
