@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
+import { detectFileKind, IMAGE_TYPES } from "../lib/files.js";
 import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { tenancy } from "../tenancy/index.js";
@@ -71,13 +72,6 @@ brandingRouter.patch("/", async (req, res) => {
   });
 });
 
-// Solo formatos de imagen rasterizada: SVG puede llevar scripts (XSS) y no se acepta.
-const IMAGE_TYPES: { ext: string; type: string; magic: (b: Buffer) => boolean }[] = [
-  { ext: "png", type: "image/png", magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  { ext: "jpg", type: "image/jpeg", magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  { ext: "webp", type: "image/webp", magic: (b) => b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP" },
-];
-
 export const LOGO_MAX_BYTES = 1024 * 1024;
 
 /**
@@ -90,7 +84,7 @@ brandingRouter.put("/logo", async (req, res) => {
   if (!Buffer.isBuffer(body) || body.length === 0) {
     throw new HttpError(415, "Envía la imagen como cuerpo binario (image/png, image/jpeg o image/webp)");
   }
-  const kind = IMAGE_TYPES.find((t) => t.magic(body));
+  const kind = detectFileKind(body, IMAGE_TYPES);
   if (!kind) throw new HttpError(415, "El archivo no es una imagen PNG, JPG o WEBP válida");
 
   const id = currentTenantId();

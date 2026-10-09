@@ -27,6 +27,8 @@ export const config = {
     centralDomains: list(process.env.CENTRAL_DOMAINS ?? "localhost"),
     storageDir: process.env.STORAGE_DIR ?? "./storage",
   },
+  // Archivos privados (comprobantes): nunca se sirven sin un enlace firmado
+  privateStorageDir: process.env.PRIVATE_STORAGE_DIR ?? "./storage-private",
   jwt: {
     secret: required("JWT_SECRET"),
     expiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
