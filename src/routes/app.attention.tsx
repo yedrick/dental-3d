@@ -1,10 +1,11 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useList, formatMoney, formatDate } from "@/lib/data";
+import { formatMoney, formatDate } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,14 @@ export const Route = createFileRoute("/app/attention")({ component: AttentionPag
 
 type SelectedStudy = { study_id: string; has_report: boolean; is_voucher: boolean };
 type PayMode = "full" | "advance" | "pending";
+
+// Dinero en centavos, con el mismo redondeo que el servidor (server/src/lib/money.ts),
+// para que la vista previa coincida con lo que se registra.
+const toCents = (amount: number) => Math.round(Number(amount) * 100);
+const percentOf = (cents: number, pct: number) => {
+  const raw = (cents * pct) / 100;
+  return Math.sign(raw) * Math.round(Math.abs(raw) + 1e-9);
+};
 
 function AttentionPage() {
   return (
@@ -44,50 +53,72 @@ function AttentionPage() {
 // REGISTRO TAB
 // ============================================================
 function RegistroTab() {
-  const { user, can } = useAuth();
+  const { can } = useAuth();
   const canCreate = can("attention.create");
   const qc = useQueryClient();
 
-  const { data: patients = [] } = useList<any>("patients", "full_name", true);
-  const { data: doctors = [] } = useList<any>("doctors", "full_name", true);
-  const { data: studies = [] } = useList<any>("studies", "name", true);
-  const { data: prices = [] } = useList<any>("study_prices");
-  const { data: paramsRow = [] } = useQuery({
+  const { data: doctors = [], isSuccess: doctorsReady } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
+  // Cada estudio trae price_with_report / price_without_report de su tarifa ACTIVA (null si no tiene)
+  const { data: studies = [], isSuccess: studiesReady } = useQuery({
+    queryKey: ["studies", "active"],
+    queryFn: () => apiGet<any[]>("/api/studies", { active: true }),
+    staleTime: STALE.catalog,
+  });
+  const { data: paramsRow = [], isSuccess: paramsReady } = useQuery({
     queryKey: ["app_params"],
-    queryFn: async () => (await supabase.from("app_params").select("*")).data ?? [],
+    queryFn: () => apiGet<any[]>("/api/params"),
+    staleTime: STALE.catalog,
   });
   const params = useMemo(() => {
     const m: Record<string, number> = {};
     (paramsRow as any[]).forEach((p) => { m[p.key] = Number(p.value_num ?? 0); });
     return m;
   }, [paramsRow]);
-  const invoicePct = params["invoice_surcharge_pct"] ?? 13;
+  // Mismo valor por defecto que el servidor si el parámetro no existe
+  const invoicePct = params["invoice_surcharge_pct"] ?? 0;
 
-  const activePrice = (studyId: string, withReport: boolean) => {
-    const p: any = (prices as any[]).find((x) => x.study_id === studyId && x.is_active);
-    if (!p) return 0;
-    return Number(withReport ? p.price_with_report : p.price_without_report) || 0;
+  const studyMap = useMemo(() => new Map((studies as any[]).map((s) => [s.id, s])), [studies]);
+  /** Precio de la tarifa activa; null si el estudio no tiene tarifa activa. */
+  const activePrice = (studyId: string, withReport: boolean): number | null => {
+    const s: any = studyMap.get(studyId);
+    if (!s) return null;
+    const v = withReport ? s.price_with_report : s.price_without_report;
+    return v == null ? null : Number(v);
   };
 
   const [query, setQuery] = useState("");
   const [patient, setPatient] = useState<any | null>(null);
-  const filtered = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase();
-    return (patients as any[])
-      .filter((p) => p.full_name?.toLowerCase().includes(q) || (p.phone ?? "").includes(query))
-      .slice(0, 6);
-  }, [patients, query]);
+  // Búsqueda en el servidor (nombre, celular o email), con una pequeña espera al escribir
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+  const { data: filtered = [], isFetching: searching } = useQuery({
+    queryKey: ["patients", "search", debounced],
+    queryFn: async () => (await apiGet<Paged<any>>("/api/patients", { q: debounced, sort: "name", limit: 6 })).data,
+    enabled: !patient && debounced.length > 0,
+    staleTime: STALE.master,
+  });
+  const searchPending = searching || debounced !== query.trim();
 
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState({ full_name: "", phone: "", doctor_id: "" });
   const createQuickPatient = async () => {
     if (!quick.full_name || !quick.doctor_id) return toast.error("Nombre y doctor son obligatorios");
-    const { data, error } = await supabase.from("patients").insert({
-      full_name: quick.full_name, phone: quick.phone || null,
-      doctor_id: quick.doctor_id, created_by: user!.id,
-    }).select().single();
-    if (error) return toast.error(translateError(error));
+    let data: any;
+    try {
+      // created_by lo pone la API con el usuario de la sesión
+      data = await apiPost<any>("/api/patients", {
+        full_name: quick.full_name, phone: quick.phone || null, doctor_id: quick.doctor_id,
+      });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Paciente creado");
     setPatient(data); setQuery(data.full_name);
     setQuickOpen(false); setQuick({ full_name: "", phone: "", doctor_id: "" });
@@ -102,6 +133,7 @@ function RegistroTab() {
   const [payMode, setPayMode] = useState<PayMode>("full");
   const [amountPaid, setAmountPaid] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<"cash"|"qr"|"card">("cash");
+  const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
     setPatient(null); setQuery(""); setItems([]); setDoctorId(""); setClinic("");
@@ -118,68 +150,63 @@ function RegistroTab() {
   };
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
 
+  // Descuento por convenio del doctor que usará el servidor: el elegido o, si no, el del paciente
+  const effectiveDoctorId = doctorId || patient?.doctor_id || "";
+  const discountPct = Number((doctors as any[]).find((d) => d.id === effectiveDoctorId)?.agreement_discount_pct ?? 0);
+
+  /** Vista previa de una línea, en centavos y con el mismo redondeo que el servidor. */
+  const lineCents = (it: SelectedStudy) => {
+    if (!it.study_id || it.is_voucher) return { base: 0, surcharge: 0, discount: 0, total: 0 };
+    const base = toCents(activePrice(it.study_id, it.has_report) ?? 0);
+    const surcharge = withInvoice ? percentOf(base, invoicePct) : 0;
+    const discount = percentOf(base, discountPct);
+    return { base, surcharge, discount, total: base + surcharge - discount };
+  };
+
   const totals = useMemo(() => {
-    let base = 0, surcharge = 0;
+    let base = 0, surcharge = 0, discount = 0;
     items.forEach((it) => {
-      if (!it.study_id || it.is_voucher) return;
-      const p = activePrice(it.study_id, it.has_report);
-      base += p;
-      if (withInvoice) surcharge += p * (invoicePct / 100);
+      const l = lineCents(it);
+      base += l.base; surcharge += l.surcharge; discount += l.discount;
     });
-    return { base, surcharge, total: base + surcharge };
-  }, [items, withInvoice, invoicePct, prices]);
+    return { base: base / 100, surcharge: surcharge / 100, discount: discount / 100, total: (base + surcharge - discount) / 100 };
+  }, [items, withInvoice, invoicePct, discountPct, studyMap]);
 
   const paid = payMode === "full" ? totals.total : payMode === "advance" ? Number(amountPaid || 0) : 0;
-  const debt = Math.max(0, totals.total - paid);
+  const debt = Math.max(0, Math.round((totals.total - paid) * 100) / 100);
 
   const save = async () => {
     if (!patient) return toast.error("Selecciona o crea un paciente");
     if (items.length === 0) return toast.error("Agrega al menos un estudio");
     if (items.some((it) => !it.study_id)) return toast.error("Elige el estudio en cada fila");
+    if (!paramsReady || !studiesReady || !doctorsReady) return toast.error("Cargando tarifas, espera un momento");
+    const noPrice = items.find((it) => !it.is_voucher && activePrice(it.study_id, it.has_report) == null);
+    if (noPrice) return toast.error(`No hay tarifa activa para el estudio "${studyMap.get(noPrice.study_id)?.name ?? ""}"`);
     if (payMode === "advance" && (paid <= 0 || paid > totals.total)) return toast.error("Monto adelantado inválido");
 
-    let remainingPaid = paid;
-    const rows = items.map((it) => {
-      const base = it.is_voucher ? 0 : activePrice(it.study_id, it.has_report);
-      const surcharge = it.is_voucher || !withInvoice ? 0 : base * (invoicePct / 100);
-      const total = base + surcharge;
-      const rowPaid = Math.min(remainingPaid, total);
-      remainingPaid -= rowPaid;
-      return {
-        patient_id: patient.id, study_id: it.study_id,
-        doctor_id: doctorId || null, clinic_name: clinic || null,
-        has_report: it.has_report, is_voucher: it.is_voucher,
-        with_invoice: !it.is_voucher && withInvoice,
-        invoice_number: invoiceNumber || null,
-        payment_method: it.is_voucher ? null : paymentMethod,
-        amount_paid: Math.round(rowPaid * 100) / 100,
-        created_by: user!.id,
-      };
-    });
-
-    const { data: inserted, error } = await supabase.from("patient_studies").insert(rows as any).select("id");
-    if (error) return toast.error(translateError(error));
-    await supabase.rpc("log_audit_event", {
-      _action: "ATTENTION_CREATE",
-      _table_name: "patient_studies",
-      _record_id: patient.id,
-      _data: {
+    const hasCharge = items.some((it) => !it.is_voucher);
+    setSaving(true);
+    let res: any;
+    try {
+      // El servidor calcula precio, recargo, descuento por convenio y comisión: aquí solo se dice qué y cuánto se pagó
+      res = await apiPost<any>("/api/attentions", {
         patient_id: patient.id,
-        patient_name: patient.full_name,
         doctor_id: doctorId || null,
         clinic_name: clinic || null,
-        items_count: rows.length,
-        study_ids: rows.map((r) => r.study_id),
-        inserted_ids: (inserted ?? []).map((r: any) => r.id),
-        total: Math.round(totals.total * 100) / 100,
-        paid: Math.round(paid * 100) / 100,
-        debt: Math.round(debt * 100) / 100,
         with_invoice: withInvoice,
-        invoice_number: invoiceNumber || null,
-        pay_mode: payMode,
-      } as any,
-    });
-    toast.success(`Atención registrada.${debt > 0 ? ` Deuda: ${formatMoney(debt)}` : ""}`);
+        invoice_number: withInvoice ? invoiceNumber || null : null,
+        payment_method: hasCharge ? paymentMethod : null,
+        amount_paid: Math.round(paid * 100) / 100,
+        delivery_date: null,
+        items: items.map((it) => ({ study_id: it.study_id, has_report: it.has_report, is_voucher: it.is_voucher })),
+      });
+    } catch (e) {
+      setSaving(false);
+      return toast.error(translateError(e));
+    }
+    setSaving(false);
+    const serverDebt = Number(res?.debt ?? 0);
+    toast.success(`Atención registrada. Total: ${formatMoney(Number(res?.total ?? 0))}.${serverDebt > 0 ? ` Deuda: ${formatMoney(serverDebt)}` : ""}`);
     resetForm(); qc.invalidateQueries();
   };
 
@@ -194,11 +221,12 @@ function RegistroTab() {
           <dl className="text-xs space-y-1">
             <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="font-mono">{formatMoney(totals.base)}</dd></div>
             <div className="flex justify-between"><dt className="text-muted-foreground">Recargo</dt><dd className="font-mono">{formatMoney(totals.surcharge)}</dd></div>
+            {totals.discount > 0 && <div className="flex justify-between"><dt className="text-muted-foreground">Desc. convenio ({discountPct}%)</dt><dd className="font-mono">−{formatMoney(totals.discount)}</dd></div>}
             <div className="flex justify-between border-t pt-1"><dt className="font-semibold">Total</dt><dd className="font-mono font-bold text-base">{formatMoney(totals.total)}</dd></div>
             <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><dt>Pagado</dt><dd className="font-mono">{formatMoney(paid)}</dd></div>
             <div className={"flex justify-between " + (debt > 0 ? "text-amber-600 dark:text-amber-400 font-semibold" : "")}><dt>Deuda</dt><dd className="font-mono">{formatMoney(debt)}</dd></div>
           </dl>
-          <Button size="sm" className="w-full" onClick={save} disabled={!patient || items.length === 0}>Registrar</Button>
+          <Button size="sm" className="w-full" onClick={save} disabled={!patient || items.length === 0 || saving}>{saving ? "Registrando…" : "Registrar"}</Button>
           {patient && (
             <div className="pt-2 border-t text-[11px] text-muted-foreground">
               <div className="font-medium text-foreground truncate">{patient.full_name}</div>
@@ -233,9 +261,9 @@ function RegistroTab() {
                   <UserPlus className="h-4 w-4 mr-1" />Nuevo
                 </Button>
               </div>
-              {filtered.length > 0 && (
+              {query.trim() && filtered.length > 0 && (
                 <div className="rounded-md border divide-y max-h-52 overflow-auto">
-                  {filtered.map((p) => (
+                  {(filtered as any[]).map((p) => (
                     <button key={p.id} onClick={() => selectPatient(p)} className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-sm hover:bg-accent">
                       <span className="font-medium truncate">{p.full_name}</span>
                       <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{p.phone || "—"}</span>
@@ -243,7 +271,7 @@ function RegistroTab() {
                   ))}
                 </div>
               )}
-              {query && filtered.length === 0 && (
+              {query && !searchPending && filtered.length === 0 && (
                 <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
                   Sin resultados. <button onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }} className="text-primary underline">Crear</button>.
                 </div>
@@ -261,10 +289,8 @@ function RegistroTab() {
           {items.length === 0 && <div className="text-xs text-muted-foreground py-3 text-center border border-dashed rounded-md">Sin estudios.</div>}
           <div className="space-y-2">
             {items.map((it, i) => {
-              const base = activePrice(it.study_id, it.has_report);
-              const surcharge = !withInvoice ? 0 : base * (invoicePct / 100);
-              const total = base + surcharge;
-              const selected = (studies as any[]).find((s) => s.id === it.study_id);
+              const total = lineCents(it).total / 100;
+              const selected = studyMap.get(it.study_id);
               return (
                 <div key={i} className="rounded-lg border bg-card/50 p-2.5 space-y-2 transition hover:border-primary/40">
                   <div className="flex items-center gap-2">
@@ -416,26 +442,41 @@ function printDeliveryTicket(opts: {
 }
 
 function EntregasTab() {
-  const { user } = useAuth();
   const qc = useQueryClient();
-  const { data: rows = [] } = useList<any>("patient_studies");
-  const { data: patients = [] } = useList<any>("patients", "full_name", true);
-  const { data: studies = [] } = useList<any>("studies", "name", true);
+  // Solo lo que tiene saldo o falta entregar (antes se bajaba toda la tabla)
+  const { data: debtRows = [] } = useQuery({
+    queryKey: ["attentions", "all", { status: "debt" }],
+    queryFn: () => apiGetAll<any>("/api/attentions", { status: "debt" }),
+    staleTime: STALE.ops,
+  });
+  const { data: pendingRows = [] } = useQuery({
+    queryKey: ["attentions", "all", { status: "pending_delivery" }],
+    queryFn: () => apiGetAll<any>("/api/attentions", { status: "pending_delivery" }),
+    staleTime: STALE.ops,
+  });
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [chargeTarget, setChargeTarget] = useState<any | null>(null);
 
-  const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
-  const studyMap = new Map((studies as any[]).map((s) => [s.id, s]));
+  // Las filas de atenciones no traen el celular: para buscar por número se consulta a pacientes
+  const phoneQ = /\d{3,}/.test(q) ? q.trim() : "";
+  const { data: phoneIds } = useQuery({
+    queryKey: ["patients", "search", phoneQ, "ids"],
+    queryFn: async () => new Set((await apiGet<Paged<any>>("/api/patients", { q: phoneQ, limit: 100 })).data.map((p) => p.id as string)),
+    enabled: phoneQ.length > 0,
+    staleTime: STALE.master,
+  });
 
   const grouped = useMemo(() => {
+    const byId = new Map<string, any>();
+    [...(debtRows as any[]), ...(pendingRows as any[])].forEach((r) => byId.set(r.id, r));
     const map = new Map<string, { patient: any; items: any[]; total: number; paid: number; debt: number; pendingDelivery: number; lastDate: string }>();
-    (rows as any[]).forEach((r) => {
-      const p = patMap.get(r.patient_id); if (!p) return;
-      const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
+    byId.forEach((r) => {
+      const total = Number(r.total ?? 0);
       const paid = Number(r.amount_paid ?? 0);
-      const debt = Math.max(0, total - paid);
-      const g = map.get(r.patient_id) ?? { patient: p, items: [] as any[], total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
+      const debt = Math.max(0, Number(r.debt ?? 0));
+      const patient = { id: r.patient_id, full_name: r.patient_name, phone: r.patient_phone ?? null };
+      const g = map.get(r.patient_id) ?? { patient, items: [] as any[], total: 0, paid: 0, debt: 0, pendingDelivery: 0, lastDate: r.created_at };
       g.items.push({ ...r, _total: total, _debt: debt });
       g.total += total; g.paid += paid; g.debt += debt;
       if (!r.delivered_at && !r.is_voucher) g.pendingDelivery += 1;
@@ -443,13 +484,20 @@ function EntregasTab() {
       map.set(r.patient_id, g);
     });
     return Array.from(map.values()).filter((g) => g.debt > 0.009 || g.pendingDelivery > 0);
-  }, [rows, patMap]);
+  }, [debtRows, pendingRows]);
 
   const filtered = grouped.filter((g) => {
     if (!q.trim()) return true;
     const s = q.toLowerCase();
-    return (g.patient.full_name ?? "").toLowerCase().includes(s) || (g.patient.phone ?? "").includes(q);
+    return (g.patient.full_name ?? "").toLowerCase().includes(s)
+      || (g.patient.phone ?? "").includes(q)
+      || !!phoneIds?.has(g.patient.id);
   }).sort((a, b) => b.debt - a.debt);
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["attentions"] });
+    qc.invalidateQueries({ queryKey: ["audit_logs"] });
+  };
 
   const openCharge = (g: typeof filtered[number], e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -461,33 +509,18 @@ function EntregasTab() {
     const g = chargeTarget;
     if (!g) return;
     setBusy(g.patient.id);
-    const balanceBefore = g.debt;
-    const chargedItems: { id: string; study_id: string; before: number; after: number; amount: number }[] = [];
-    for (const it of g.items) {
-      if (it._debt <= 0.009) continue;
-      const newPaid = Number(it.amount_paid ?? 0) + Number(it._debt);
-      const { error } = await supabase.from("patient_studies").update({ amount_paid: newPaid }).eq("id", it.id);
-      if (error) { toast.error(translateError(error)); setBusy(null); return; }
-      chargedItems.push({ id: it.id, study_id: it.study_id, before: it._debt, after: 0, amount: it._debt });
+    try {
+      // Cobra todo el saldo del paciente en una transacción; la API registra la auditoría
+      await apiPost("/api/attentions/charge-all", { patient_id: g.patient.id });
+    } catch (e) {
+      toast.error(translateError(e));
+      setBusy(null);
+      return;
     }
-    await supabase.rpc("log_audit_event", {
-      _action: "CHARGE",
-      _table_name: "patient_studies",
-      _record_id: g.patient.id,
-      _data: {
-        patient_id: g.patient.id,
-        patient_name: g.patient.full_name,
-        amount_charged: Math.round(balanceBefore * 100) / 100,
-        balance_before: Math.round(balanceBefore * 100) / 100,
-        balance_after: 0,
-        items: chargedItems,
-      } as any,
-    });
     toast.success("Saldo cobrado");
     setBusy(null);
     setChargeTarget(null);
-    qc.invalidateQueries({ queryKey: ["patient_studies"] });
-    qc.invalidateQueries({ queryKey: ["audit_logs"] });
+    refresh();
   };
 
   const deliverAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
@@ -497,31 +530,22 @@ function EntregasTab() {
     if (pending.length === 0) { toast.info("Nada por entregar"); return; }
     setBusy(g.patient.id);
     const ids = pending.map((it) => it.id);
-    const { error } = await supabase.from("patient_studies")
-      .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
-      .in("id", ids);
-    if (error) { toast.error(translateError(error)); setBusy(null); return; }
-    await supabase.rpc("log_audit_event", {
-      _action: "DELIVER",
-      _table_name: "patient_studies",
-      _record_id: g.patient.id,
-      _data: {
-        patient_id: g.patient.id,
-        patient_name: g.patient.full_name,
-        delivered_count: pending.length,
-        delivered_ids: ids,
-        study_ids: pending.map((it) => it.study_id),
-        balance_before: Math.round(g.debt * 100) / 100,
-        balance_after: Math.round(g.debt * 100) / 100,
-        total_paid: Math.round(g.paid * 100) / 100,
-      } as any,
-    });
+    let patient = g.patient;
+    try {
+      await apiPost("/api/attentions/deliver", { ids });
+      // Celular para el comprobante (las filas de atenciones no lo traen)
+      if (!patient.phone) patient = await apiGet<any>(`/api/patients/${g.patient.id}`).catch(() => g.patient);
+    } catch (err) {
+      toast.error(translateError(err));
+      setBusy(null);
+      return;
+    }
     // Print ticket
     printDeliveryTicket({
-      patient: g.patient,
+      patient,
       studies: pending.map((it) => ({
-        name: (studyMap.get(it.study_id) as any)?.name ?? "Estudio",
-        price: Number(it.price ?? 0) + Number(it.invoice_surcharge ?? 0) - Number(it.discount ?? 0),
+        name: it.study_name ?? "Estudio",
+        price: Number(it._total ?? 0),
         has_report: !!it.has_report,
         with_invoice: !!it.with_invoice,
       })),
@@ -530,8 +554,7 @@ function EntregasTab() {
     });
     toast.success(`${pending.length} estudio(s) entregados`);
     setBusy(null);
-    qc.invalidateQueries({ queryKey: ["patient_studies"] });
-    qc.invalidateQueries({ queryKey: ["audit_logs"] });
+    refresh();
   };
 
 
@@ -553,7 +576,7 @@ function EntregasTab() {
               <Link to="/app/patients/$id" params={{ id: g.patient.id }} className="flex-1 min-w-0">
                 <div className="font-medium truncate">{g.patient.full_name}</div>
                 <div className="text-[11px] text-muted-foreground truncate">
-                  Cel: {g.patient.phone || "—"} · Última: {formatDate(g.lastDate)}
+                  {g.patient.phone ? `Cel: ${g.patient.phone} · ` : ""}Última: {formatDate(g.lastDate)}
                 </div>
               </Link>
               <div className="text-right shrink-0 min-w-[110px]">

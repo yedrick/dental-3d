@@ -66,7 +66,7 @@ attentionsRouter.get("/", canRead, async (req, res) => {
 
   const [rows, [summary]] = await Promise.all([
     db().query(
-      `SELECT ps.*, p.full_name AS patient_name, s.name AS study_name, d.full_name AS doctor_name, ${ATTENTION_TOTALS_SQL}
+      `SELECT ps.*, p.full_name AS patient_name, p.phone AS patient_phone, s.name AS study_name, d.full_name AS doctor_name, ${ATTENTION_TOTALS_SQL}
          ${from} ${whereSql}
         ORDER BY ps.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset],

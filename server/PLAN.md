@@ -235,17 +235,86 @@ La prueba de la Fase 2 se volvió a correr sin regresiones. En local, todo respo
 
 ## Fase 5 — Cambiar el frontend y salir a producción
 
+### 5.1 Frontend sobre la API ✅ hecho (rama `dev`)
+
+**Ninguna pantalla usa ya Supabase.** Solo queda la carpeta `src/integrations/supabase/`, que no importa nadie y se borra en la Fase 6. Se eliminó `src/lib/users-admin.functions.ts` (las funciones de servidor de Lovable).
+
+**Base:**
+- `src/lib/api.ts`: cliente de la API.
+  - Guarda el token y lo envía en cada petición.
+  - Maneja los errores en español y la paginación.
+  - Si la sesión se cierra (por ejemplo, `SESSION_REVOKED`), vuelve al login.
+- `src/lib/auth.tsx`: sesión sobre `/api/auth/*`. Mantiene la misma interfaz (`can`, `hasRole`, `hasAny`, `user`, `roles`), así las pantallas casi no cambiaron. Ahora `can()` usa solo los permisos que entrega la API.
+- `src/lib/branding.tsx`: nombre, contacto, logo y color de la sucursal desde `/tenancy/me`, aplicados a las variables de shadcn (solo en modo claro).
+- `src/lib/query-config.ts`: tiempos de caché de React Query por tipo de dato:
+
+  | Tipo de dato | Tiempo |
+  |---|---|
+  | Catálogos | 10 min |
+  | Maestros | 2 min |
+  | Operación diaria | 20 s |
+  | Dinero | 0 |
+
+  Antes eran 5 minutos para todo.
+- `vite.config.ts`: en desarrollo, `/api` y `/tenancy` se reenvían a la API **conservando el host**. Se abre `http://central.localhost:8080`.
+- **Logo original rescatado** del CDN de Lovable (`src/assets/logo-3d.png`). Es el logo por defecto de las sucursales sin logo propio.
+
+**Pantallas convertidas (todas):** login y registro, perfil, portada, dashboard, doctores, pacientes y su ficha, estudios y tarifas, atenciones, entregas, agenda, comisiones, caja, depósitos, pagos a terceros, reportes, usuarios, roles, parámetros, auditoría, notificaciones y la campana.
+
+**Nueva pantalla:** "Marca de la sucursal" (`/app/branding`, permiso `branding.edit`): nombre, dirección, teléfono, color principal y logo.
+
+**Correcciones visibles para el usuario:**
+
+| Pantalla | Antes | Ahora |
+|---|---|---|
+| Atenciones | El total y el "pago completo" **no restaban el descuento por convenio**: se cobraba de más | La vista previa muestra "Desc. convenio (x%)" y cobra el total correcto. El servidor lo vuelve a calcular. |
+| Dashboard | "Ingresos hoy" sumaba solo el precio | "Facturado hoy" (precio + recargo − descuento) y "Cobrado hoy" |
+| Agenda, comisiones, auditoría, reportes | Días y horas en UTC | Días y horas en la hora local |
+| Pacientes, auditoría, caja, depósitos, pagos | Traían la tabla completa | Búsqueda y páginas en el servidor |
+| Usuarios | Un solo rol por usuario | Varios roles, estado activo/inactivo, reglas de contraseña visibles |
+| Notificaciones | Tiempo real de Supabase | La campana consulta cada 30 s (responde 304 si no hay cambios). Se agregaron "marcar todas como leídas" y el remitente. |
+| Comprobantes | Solo imágenes | Imágenes y PDF (≤ 5 MB), con enlace firmado de 5 minutos |
+| Reportes | — | Controles nuevos: fechas incoherentes, estudios sin tarifa, cobros de más |
+| Login | Solo email | Email o usuario. En una dirección sin sucursal, pide entrar por el subdominio. |
+| Recuperar contraseña | Email de Supabase | Pantalla que indica pedirla a un ADMIN (falta elegir el servicio de correo) |
+
+**Cambios en la API para el frontend:**
+- `GET /api/public/studies`: estudios de la portada, sin precios.
+- `GET /api/notifications/:id/recipients`: quién leyó cada notificación enviada.
+- Teléfono del paciente en la lista de atenciones.
+- Color por defecto `#0F172A`, para que la app se vea igual que antes mientras una sucursal no elija sus colores.
+
+**Probado en el navegador** (Chrome, sucursal `central` en `central.localhost`):
+- Login, dashboard, pacientes, estudios, agenda (hora local), comisiones, caja, entregas, reportes (día local), usuarios y auditoría.
+- **Registro de una atención con convenio:** la vista previa mostró 300 + 39 − 30 = 309 y el servidor registró 309.
+- Marca: el cambio de color se aplica al instante, y un color inválido se rechaza.
+- La sucursal `sur` muestra su propio nombre y color.
+- Sin errores en la consola. Solo aparece un aviso de "hydration" de desarrollo, por haber cambiado `__root.tsx` con el servidor encendido.
+- **No probado en pantalla:** "Ingresar como" otro usuario, porque usa una confirmación nativa del navegador. Está probado en la API.
+- TypeScript compila sin errores nuevos. El único error, en `src/routes/__root.tsx`, ya existía.
+
+**Pendientes del frontend:**
+- "Ingresar como" y otras confirmaciones usan `confirm()` del navegador: conviene pasarlas a `AlertDialog`.
+- La ficha del paciente oculta doctores y citas para roles sin acceso a esos datos (DOCTOR, CAJA, CONTABILIDAD). Decidir si esos roles deben verlos.
+- El reporte ya entrega pacientes nuevos, ingresos por estudio y comisiones por doctor, pero la pantalla todavía no los muestra.
+- Lista de proveedores para el autocompletado de pagos a terceros (hoy usa los últimos 500 pagos).
+- Corregir el error de tipos que ya existía en `src/routes/__root.tsx` (`errorComponent`).
+
+### 5.2 Salir a producción (pendiente)
+
 - **Un subdominio por sucursal**, y el frontend y la API **en el mismo host**: nginx manda `/api` y `/tenancy` a Node y el resto al frontend. Así `/tenancy/me` y el login reconocen la sucursal por el host.
-- Cliente de API (`src/lib/api.ts`) que guarda el token y lo envía en cada petición.
-- Reescribir `src/lib/auth.tsx` sobre `/api/auth/*`, conservando `can()` y `hasRole()` para no tocar las páginas.
-- **Marca:**
-  - Cargar `/tenancy/theme.css` y pasar `--color-primary` y los demás colores a las variables de Tailwind/shadcn.
-  - Mostrar el logo y el nombre desde `/tenancy/me` (sidebar, login, PDFs).
-  - Agregar una pantalla "Marca de la sucursal" para quien tenga `branding.edit`.
-- Reemplazar en las páginas unas 100 llamadas directas a Supabase: 77 `from()`, 11 `rpc()`, ~15 de login y sesión, 2 de archivos y 1 de tiempo real.
-- `staleTime` de React Query según el tipo de dato (ver [Caché](#caché-y-velocidad)).
-- Publicar la API con MySQL administrado, HTTPS, un certificado comodín (`*.dental3d.com`) y respaldos automáticos diarios **de cada base** (`tenancy run "mysqldump ..."` recorre todas las sucursales).
-- Recién entonces unir la rama a `main`. El día del corte: congelar cambios en Supabase → copiar los datos → publicar.
+- Publicar la API con:
+  - MySQL administrado en UTC;
+  - HTTPS con un certificado comodín (`*.dental3d.com`);
+  - `TRUST_PROXY=1`;
+  - respaldos automáticos diarios **de cada base** (`tenancy run "mysqldump ..."` recorre todas las sucursales) y de `PRIVATE_STORAGE_DIR`.
+- Publicar el frontend: build de Node, sin el destino Cloudflare de Lovable (Fase 6).
+- **El día del corte:**
+  1. Congelar cambios en Supabase.
+  2. `npm run tenant:import-supabase -- <sucursal> --dry-run`, revisar el informe.
+  3. Importación real.
+  4. Publicar.
+  5. Recién entonces unir `dev` a `main`.
 
 ## Fase 6 — Eliminar todo lo de Lovable
 
@@ -259,7 +328,7 @@ La prueba de la Fase 2 se volvió a correr sin regresiones. En local, todo respo
 | Dependencias | `package.json` | Quitar `@lovable.dev/vite-tanstack-config` y, después de la Fase 5, `@supabase/supabase-js`. Cambiar el nombre `tanstack_start_ts` por `dental-3d`. **(se puede adelantar, salvo Supabase)** |
 | Gestor de paquetes | `bunfig.toml`, `bun.lock`, `package-lock.json` | Elegir **uno solo**, borrar el lockfile del otro y quitar de `bunfig.toml` las excepciones de `@lovable.dev/*`. **(se puede adelantar)** |
 | Reporte de errores | `src/lib/lovable-error-reporting.ts`, `src/routes/__root.tsx` | Borrar el archivo y reemplazar `reportLovableError` por `console.error`, o por Sentry. **(se puede adelantar)** |
-| **Logo** | `src/assets/logo-3d.png.asset.json` | Hoy es un enlace al CDN de Lovable. **Descargar el PNG real** y subirlo como logo de cada sucursal con `PUT /api/branding/logo`. Mientras tanto, guardarlo en `src/assets/` como respaldo. **(se puede adelantar, prioridad alta)** |
+| **Logo** | `src/assets/logo-3d.png.asset.json` | ✅ El PNG real ya está en `src/assets/logo-3d.png` y es el logo por defecto; el `.asset.json` se eliminó. |
 | Supabase | `src/integrations/supabase/`, `supabase/`, `src/lib/users-admin.functions.ts` | Borrarlos después de la Fase 5. Conservar `supabase/migrations` en `docs/` o en el historial de git, como referencia. |
 | Variables de entorno | `.env` (raíz) | Hoy tiene las claves de Supabase y está subido a git. Borrarlo del repositorio (`git rm --cached .env`), agregarlo a `.gitignore` y crear `.env.example`. |
 | Carpeta `.lovable/` | `plan.md`, `project.json` | Mover `plan.md` (los requisitos originales) a `docs/plan-original.md` y borrar la carpeta. |
@@ -508,5 +577,6 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
    - comisiones por doctor.
 7. Correr la importación contra la base real de Supabase con `--dry-run` y revisar el informe.
 8. Pasar las pruebas de las Fases 2 a 4 a tests automáticos en el repo.
-9. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
-10. Empezar la Fase 5 (cambiar el frontend para que use la API).
+9. ✅ Logo descargado dentro del proyecto (`src/assets/logo-3d.png`).
+10. ✅ Fase 5.1: el frontend usa la API (rama `dev`).
+11. Elegir el hosting y hacer la Fase 5.2 (producción); después, la Fase 6 (quitar Lovable).

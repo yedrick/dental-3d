@@ -54,6 +54,7 @@ function PasswordInput({
   checks,
   onPasswordChange,
   onToggleShow,
+  onEnter,
 }: {
   password: string;
   showPwd: boolean;
@@ -61,6 +62,7 @@ function PasswordInput({
   checks: PasswordChecks;
   onPasswordChange: (value: string) => void;
   onToggleShow: () => void;
+  onEnter?: () => void;
 }) {
   return (
     <div>
@@ -72,6 +74,7 @@ function PasswordInput({
           onChange={(e) => onPasswordChange(e.target.value)}
           className="pr-10"
           autoComplete={showHelp ? "new-password" : "current-password"}
+          onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
         />
         <button
           type="button"
@@ -190,7 +193,7 @@ function AuthPage() {
             </TabsList>
             <TabsContent value="in" className="space-y-3">
               <div><Label>Email o usuario</Label><Input value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signIn()} /></div>
-              <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
+              <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} onEnter={signIn} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
               <button
                 type="button"

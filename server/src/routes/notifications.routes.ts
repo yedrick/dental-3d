@@ -95,6 +95,19 @@ notificationsRouter.get("/sent", requirePermission("notifications.send"), async 
   ));
 });
 
+/** Destinatarios de una notificación enviada por el usuario actual, con cuándo la leyó cada uno. */
+notificationsRouter.get("/:id/recipients", requirePermission("notifications.send"), async (req, res) => {
+  const id = String(req.params.id);
+  const [own] = await db().query("SELECT id FROM notifications WHERE id = ? AND sender_id = ?", [id, req.user!.id]);
+  if (!own) throw new HttpError(404, "Notificación no encontrada");
+  res.json(await db().query(
+    `SELECT nr.user_id, u.full_name, u.username, nr.read_at
+       FROM notification_recipients nr LEFT JOIN users u ON u.id = nr.user_id
+      WHERE nr.notification_id = ? ORDER BY u.full_name`,
+    [id],
+  ));
+});
+
 const sendSchema = z.object({
   title: z.string().trim().min(1, "Título requerido").max(200),
   body: z.string().trim().min(1, "Mensaje requerido").max(5000),

@@ -2,9 +2,10 @@ import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatMoney, formatDate, calcAge } from "@/lib/data";
+import { formatMoney, formatDate, formatDateTime, calcAge } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,41 +27,43 @@ export const Route = createFileRoute("/app/patients/$id")({ component: PatientPr
 
 function PatientProfile() {
   const { id } = Route.useParams();
-  const { can, user } = useAuth();
+  const { can } = useAuth();
   const canCharge = can("attention.charge");
   const canDeliver = can("attention.deliver");
   const canEdit = can("patients.edit");
   const qc = useQueryClient();
 
-  const { data: patient } = useQuery({
+  const { data: patient, error: patientError } = useQuery({
     queryKey: ["patient", id],
-    queryFn: async () => (await supabase.from("patients").select("*").eq("id", id).single()).data,
+    queryFn: () => apiGet<any>(`/api/patients/${id}`),
+    staleTime: STALE.master,
   });
   const { data: doctors = [] } = useQuery({
-    queryKey: ["doctors_all"],
-    queryFn: async () => (await supabase.from("doctors").select("*")).data ?? [],
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
   });
-  const { data: studies = [] } = useQuery({
-    queryKey: ["studies_all"],
-    queryFn: async () => (await supabase.from("studies").select("*")).data ?? [],
-  });
+  // Historial con study_name, total y debt de cada atención (más reciente primero)
   const { data: rows = [] } = useQuery({
-    queryKey: ["patient_studies", id],
-    queryFn: async () => (await supabase.from("patient_studies").select("*").eq("patient_id", id).order("created_at", { ascending: false })).data ?? [],
+    queryKey: ["attentions", "patient", id],
+    queryFn: () => apiGet<any[]>(`/api/patients/${id}/attentions`),
+    staleTime: STALE.ops,
   });
   const { data: appointments = [] } = useQuery({
-    queryKey: ["patient_appointments", id],
-    queryFn: async () => (await supabase.from("appointments").select("*").eq("patient_id", id).order("starts_at", { ascending: false })).data ?? [],
+    queryKey: ["appointments", "patient", id],
+    queryFn: () => apiGet<any[]>("/api/appointments", { patient_id: id }),
+    staleTime: STALE.ops,
   });
 
-  const studyName = (sid: string) => (studies as any[]).find((s) => s.id === sid)?.name ?? "—";
+  const doctorName = (did?: string | null) => (doctors as any[]).find((d) => d.id === did)?.full_name;
   const doctor = (doctors as any[]).find((d) => d.id === patient?.doctor_id);
 
-  const enriched = useMemo(() => (rows as any[]).map((r) => {
-    const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
-    const paid = Number(r.amount_paid ?? 0);
-    return { ...r, total, paid, debt: Math.max(0, total - paid) };
-  }), [rows]);
+  const enriched = useMemo(() => (rows as any[]).map((r) => ({
+    ...r,
+    total: Number(r.total ?? 0),
+    paid: Number(r.amount_paid ?? 0),
+    debt: Math.max(0, Number(r.debt ?? 0)),
+  })), [rows]);
 
   const summary = useMemo(() => enriched.reduce((s, r) => ({
     total: s.total + r.total, paid: s.paid + r.paid, debt: s.debt + r.debt,
@@ -70,35 +73,46 @@ function PatientProfile() {
     vouchers: s.vouchers + (r.is_voucher ? 1 : 0),
   }), { total: 0, paid: 0, debt: 0, pendingDelivery: 0, delivered: 0, withInvoice: 0, vouchers: 0 }), [enriched]);
 
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["attentions"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+    qc.invalidateQueries({ queryKey: ["cashbox"] });
+  };
+
   const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
   const doCharge = async () => {
     if (!charge) return;
-    const amt = Number(charge.amount || 0);
+    const amt = Math.round(Number(charge.amount || 0) * 100) / 100;
     if (amt <= 0) return toast.error("Monto inválido");
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
-    const { error } = await supabase.from("patient_studies")
-      .update({ amount_paid: Number((charge.row.paid + amt).toFixed(2)) })
-      .eq("id", charge.row.id);
-    if (error) return toast.error(translateError(error));
-    toast.success("Cobro registrado"); setCharge(null); qc.invalidateQueries();
+    try {
+      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
+    toast.success("Cobro registrado"); setCharge(null); refresh();
   };
 
   const deliver = async (row: any) => {
     if (row.debt > 0.009) return toast.error(`Aún debe ${formatMoney(row.debt)}. Cobra primero.`);
-    const { error } = await supabase.from("patient_studies")
-      .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
-      .eq("id", row.id);
-    if (error) return toast.error(translateError(error));
-    toast.success("Estudio entregado"); qc.invalidateQueries();
+    try {
+      await apiPost("/api/attentions/deliver", { ids: [row.id] });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
+    toast.success("Estudio entregado"); refresh();
   };
 
   const chargeAll = async () => {
-    for (const r of enriched.filter((x) => x.debt > 0.009)) {
-      await supabase.from("patient_studies").update({ amount_paid: Number(r.total.toFixed(2)) }).eq("id", r.id);
+    try {
+      await apiPost("/api/attentions/charge-all", { patient_id: id });
+    } catch (e) {
+      return toast.error(translateError(e));
     }
-    toast.success("Saldo total cobrado"); qc.invalidateQueries();
+    toast.success("Saldo total cobrado"); refresh();
   };
 
+  if (patientError) return <div className="p-6 text-sm text-destructive">{translateError(patientError)}</div>;
   if (!patient) return <div className="p-6 text-sm text-muted-foreground">Cargando…</div>;
 
   return (
@@ -167,8 +181,8 @@ function PatientProfile() {
                 {enriched.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)} {r.has_report && <Badge variant="outline" className="ml-1 text-[10px]">Inf.</Badge>} {r.is_voucher && <Badge className="ml-1 text-[10px]">Vale</Badge>}</TableCell>
-                    <TableCell className="text-xs">{(doctors as any[]).find((d) => d.id === r.doctor_id)?.full_name ?? "—"}</TableCell>
+                    <TableCell>{r.study_name ?? "—"} {r.has_report && <Badge variant="outline" className="ml-1 text-[10px]">Inf.</Badge>} {r.is_voucher && <Badge className="ml-1 text-[10px]">Vale</Badge>}</TableCell>
+                    <TableCell className="text-xs">{doctorName(r.doctor_id) ?? "—"}</TableCell>
                     <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
                     <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
                     <TableCell className="font-mono">{r.debt > 0.009 ? <Badge variant="outline" className="text-amber-600 border-amber-500">{formatMoney(r.debt)}</Badge> : <Badge variant="secondary">—</Badge>}</TableCell>
@@ -199,7 +213,7 @@ function PatientProfile() {
                 {enriched.filter((r) => r.paid > 0 || r.debt > 0).map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)}</TableCell>
+                    <TableCell>{r.study_name ?? "—"}</TableCell>
                     <TableCell className="text-xs uppercase">{r.payment_method || "—"}</TableCell>
                     <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
                     <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
@@ -223,7 +237,7 @@ function PatientProfile() {
                 {enriched.filter((r) => !r.is_voucher).map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)}</TableCell>
+                    <TableCell>{r.study_name ?? "—"}</TableCell>
                     <TableCell>{r.delivered_at ? <Badge>Entregado {formatDate(r.delivered_at)}</Badge> : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="font-mono">{r.debt > 0.009 ? <span className="text-amber-600 font-semibold">{formatMoney(r.debt)}</span> : "—"}</TableCell>
                     <TableCell className="text-right">
@@ -250,9 +264,9 @@ function PatientProfile() {
               <TableBody>
                 {(appointments as any[]).map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="text-xs">{new Date(a.starts_at).toLocaleString()}</TableCell>
-                    <TableCell className="text-xs">{(doctors as any[]).find((d) => d.id === a.doctor_id)?.full_name ?? "—"}</TableCell>
-                    <TableCell className="text-xs">{a.study_id ? studyName(a.study_id) : "—"}</TableCell>
+                    <TableCell className="text-xs">{formatDateTime(a.starts_at)}</TableCell>
+                    <TableCell className="text-xs">{a.doctor_name ?? doctorName(a.doctor_id) ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{a.study_name ?? "—"}</TableCell>
                     <TableCell><Badge variant="outline">{a.status}</Badge></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{a.notes || "—"}</TableCell>
                   </TableRow>
@@ -265,8 +279,8 @@ function PatientProfile() {
 
         <TabsContent value="datos">
           <div className="grid gap-4 md:grid-cols-2">
-            <PatientDataCard patient={patient} doctors={doctors} canEdit={canEdit} onSaved={() => qc.invalidateQueries({ queryKey: ["patient", id] })} />
-            <DoctorInfoCard doctor={doctor} />
+            <PatientDataCard patient={patient} doctors={doctors} canEdit={canEdit} onSaved={() => { qc.invalidateQueries({ queryKey: ["patient", id] }); qc.invalidateQueries({ queryKey: ["patients"] }); }} />
+            <DoctorInfoCard doctor={doctor ?? (patient.doctor_name ? { full_name: patient.doctor_name, status: true } : undefined)} />
           </div>
         </TabsContent>
       </Tabs>
@@ -277,7 +291,7 @@ function PatientProfile() {
           {charge && (
             <div className="space-y-3">
               <div className="text-sm">
-                <div><span className="text-muted-foreground">Estudio:</span> {studyName(charge.row.study_id)}</div>
+                <div><span className="text-muted-foreground">Estudio:</span> {charge.row.study_name ?? "—"}</div>
                 <div><span className="text-muted-foreground">Deuda:</span> <strong className="font-mono">{formatMoney(charge.row.debt)}</strong></div>
               </div>
               <div>
@@ -328,16 +342,21 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
   const [saving, setSaving] = useState(false);
   const save = async () => {
     setSaving(true);
-    const { error } = await supabase.from("patients").update({
-      full_name: form.full_name,
-      phone: form.phone || null,
-      email: form.email || null,
-      birth_date: form.birth_date || null,
-      doctor_id: form.doctor_id || null,
-      notes: form.notes || null,
-    }).eq("id", patient.id);
+    try {
+      await apiPatch(`/api/patients/${patient.id}`, {
+        full_name: form.full_name,
+        phone: form.phone || null,
+        email: form.email || null,
+        birth_date: form.birth_date || null,
+        // Todo paciente debe tener doctor: si no se eligió, no se envía
+        doctor_id: form.doctor_id || undefined,
+        notes: form.notes || null,
+      });
+    } catch (e) {
+      setSaving(false);
+      return toast.error(translateError(e));
+    }
     setSaving(false);
-    if (error) return toast.error(translateError(error));
     toast.success("Datos actualizados");
     onSaved();
   };
@@ -391,7 +410,7 @@ function DoctorInfoCard({ doctor }: { doctor: any }) {
         {doctor.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /><span>{doctor.phone}</span></div>}
         {doctor.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /><span>{doctor.email}</span></div>}
         <div className="flex flex-wrap gap-2 pt-2">
-          <Badge variant="outline"><Percent className="h-3 w-3 mr-1" />Comisión {doctor.default_commission_pct}%</Badge>
+          {doctor.default_commission_pct != null && <Badge variant="outline"><Percent className="h-3 w-3 mr-1" />Comisión {doctor.default_commission_pct}%</Badge>}
           {Number(doctor.agreement_discount_pct) > 0 && <Badge variant="outline">Convenio {doctor.agreement_discount_pct}% desc.</Badge>}
           <Badge variant={doctor.status ? "default" : "outline"}>{doctor.status ? "Activo" : "Inactivo"}</Badge>
         </div>

@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useList, formatMoney } from "@/lib/data";
+import { apiGet, type Paged } from "@/lib/api";
+import { formatDate, formatMoney } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +18,20 @@ import autoTable from "jspdf-autotable";
 
 export const Route = createFileRoute("/app/commissions")({ component: CommissionsPage });
 
+type CommissionSummary = { total: number; by_doctor: { doctor_id: string; doctor_name: string; count: number; total: number }[] };
+
+/** Trae todas las páginas del rango (el reporte y la exportación muestran todo) y el resumen del servidor. */
+async function fetchAllCommissions(query: Record<string, string | undefined>) {
+  const rows: any[] = [];
+  let summary: CommissionSummary | undefined;
+  for (let page = 1; ; page++) {
+    const res = await apiGet<Paged<any, CommissionSummary>>("/api/commissions", { ...query, page, limit: 500 });
+    rows.push(...res.data);
+    summary ??= res.summary;
+    if (page >= res.pages) return { rows, summary };
+  }
+}
+
 const MONTHS_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
 function CommissionsPage() {
@@ -25,8 +40,11 @@ function CommissionsPage() {
   const [month, setMonth] = useState(String(now.getMonth() + 1)); // "all" or 1-12
   const [doctorId, setDoctorId] = useState<string>("all");
 
-  const { data: doctors = [] } = useList<any>("doctors", "full_name", true);
-  const dmap = useMemo(() => new Map(doctors.map((d: any) => [d.id, d])), [doctors]);
+  const { data: doctors = [] } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
 
   const range = useMemo(() => {
     const y = Number(year);
@@ -40,49 +58,46 @@ function CommissionsPage() {
     return { from, to };
   }, [year, month]);
 
-  const { data: rows = [] } = useQuery({
+  const { data } = useQuery({
     queryKey: ["commissions-detail", range.from, range.to, doctorId],
-    queryFn: async () => {
-      let q = supabase
-        .from("commissions")
-        .select("id,doctor_id,commission_amount,percentage,created_at,patient_study_id,patient_studies(id,price,has_report,with_invoice,patient_id,study_id,patients(full_name),studies(name))")
-        .gte("created_at", range.from)
-        .lte("created_at", range.to + "T23:59:59")
-        .order("created_at", { ascending: true });
-      if (doctorId !== "all") q = q.eq("doctor_id", doctorId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchAllCommissions({ from: range.from, to: range.to, doctor_id: doctorId === "all" ? undefined : doctorId }),
+    staleTime: STALE.money,
   });
+  const rows = useMemo(() => data?.rows ?? [], [data]);
 
-  // Group: month -> doctor -> rows
+  // Nombre del doctor por id (las filas ya traen doctor_name)
+  const dmap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const r of rows) m.set(r.doctor_id, { id: r.doctor_id, full_name: r.doctor_name });
+    return m;
+  }, [rows]);
+
+  // Agrupar: mes (local) -> doctor -> filas
   const grouped = useMemo(() => {
     const g: Record<string, Record<string, any[]>> = {};
-    for (const r of rows as any[]) {
+    for (const r of rows) {
       const d = new Date(r.created_at);
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const doc = dmap.get(r.doctor_id);
       const dk = r.doctor_id;
       g[mk] ??= {};
       g[mk][dk] ??= [];
       g[mk][dk].push({
-        fecha: d.toISOString().slice(0, 10),
-        codigo: doc?.code || doc?.id?.slice(0, 8) || "-",
-        doctor: doc?.full_name || "-",
-        paciente: r.patient_studies?.patients?.full_name || "-",
-        estudio: r.patient_studies?.studies?.name || "-",
-        informe: r.patient_studies?.has_report ? "con informe" : "sin informe",
-        factura: r.patient_studies?.with_invoice ? "Sí" : "No",
-        precio: Number(r.patient_studies?.price ?? 0),
+        fecha: formatDate(r.created_at),
+        codigo: r.doctor_id?.slice(0, 8) || "-",
+        doctor: r.doctor_name || "-",
+        paciente: r.patient_name || "-",
+        estudio: r.study_name || "-",
+        informe: r.has_report ? "con informe" : "sin informe",
+        factura: r.with_invoice ? "Sí" : "No",
+        precio: Number(r.price ?? 0),
         pct: Number(r.percentage ?? 0),
         monto: Number(r.commission_amount ?? 0),
       });
     }
     return g;
-  }, [rows, dmap]);
+  }, [rows]);
 
-  const totalGeneral = (rows as any[]).reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
+  const totalGeneral = data?.summary?.total ?? rows.reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
