@@ -6,7 +6,7 @@ Backend propio que reemplaza a Supabase, **multi-sucursal** con [tenancy-node](h
 - La sucursal se identifica por **subdominio**: `sur.dental3d.com` → sucursal `sur`. En local: `sur.localhost:4000`.
 - Caché, archivos (logo) y logs van **aislados por sucursal**.
 
-Fases y pendientes: [PLAN.md](PLAN.md).
+Fases y pendientes: [PLAN.md](PLAN.md). Publicar en un servidor propio: [deploy/DEPLOY.md](../deploy/DEPLOY.md).
 
 ## Requisitos
 
@@ -43,7 +43,8 @@ Los navegadores y `curl` resuelven `*.localhost` a `127.0.0.1` sin configurar na
 
 | Comando | Qué hace |
 |---|---|
-| `npm run dev` / `build` / `start` | Desarrollo con recarga / compilar / producción |
+| `npm run dev` / `build` / `start` | Desarrollo con recarga / compilar a `dist/` / producción (`node dist/index.js`) |
+| `npm run prod:create-admin` / `prod:import-supabase` | Versiones compiladas de los scripts, para el servidor (sin `tsx`) |
 | `npm run db:install` | Tablas `tenancy_*` en la base central (idempotente) |
 | `npm run db:migrate` | Aplica las migraciones pendientes de `db/tenant/` en **todas** las sucursales |
 | `npm run tenant:create -- <id> --name="..."` | Crea una sucursal: base, usuario MySQL y migraciones |

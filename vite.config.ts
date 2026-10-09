@@ -7,6 +7,9 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // Producción en servidor propio: build de Node (node .output/server/index.mjs) en lugar de
+  // Cloudflare. Dentro de Lovable el paquete sigue forzando Cloudflare.
+  nitro: { preset: "node-server" },
   vite: {
     server: {
       // En desarrollo: abrir http://<sucursal>.localhost:8080. Vite reenvía /api y /tenancy a la

@@ -1,0 +1,26 @@
+# API Node (server/). Copiar a /etc/systemd/system/ y: systemctl enable --now dental3d-api
+[Unit]
+Description=Dental-3D API (Node + tenancy-node)
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=dental3d
+WorkingDirectory=/opt/dental3d/server
+EnvironmentFile=/opt/dental3d/server/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+# Apagado ordenado: termina peticiones en curso y cierra los pools de cada sucursal
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# Endurecimiento
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/dental3d/server/storage /opt/dental3d/server/storage-private
+
+[Install]
+WantedBy=multi-user.target

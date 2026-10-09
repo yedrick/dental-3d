@@ -12,6 +12,8 @@ function list(value: string | undefined): string[] {
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
+  // En producción, 127.0.0.1 (solo nginx llega a la API). Vacío = todas las interfaces.
+  host: process.env.HOST || undefined,
   corsOrigin: list(process.env.CORS_ORIGIN),
   // Saltos de proxy de confianza para leer la IP real (rate limit). 0 = tráfico directo.
   trustProxy: Number(process.env.TRUST_PROXY ?? 0),
