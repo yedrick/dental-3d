@@ -79,15 +79,21 @@ async function main() {
   await source.end();
 
   const result = await tenancy.run(tenantId, async () => {
+    // La sucursal debe estar recién creada. El ADMIN por defecto (cuenta "por activar" del seed)
+    // se reemplaza por los usuarios de Supabase.
     const [{ n }] = await db().query<{ n: number }[]>(
-      "SELECT (SELECT COUNT(*) FROM users) + (SELECT COUNT(*) FROM doctors) + (SELECT COUNT(*) FROM patients) AS n",
+      `SELECT (SELECT COUNT(*) FROM users WHERE must_change_password = 0) + (SELECT COUNT(*) FROM doctors)
+            + (SELECT COUNT(*) FROM patients) AS n`,
     );
     if (Number(n) > 0) {
-      throw new Error(`La sucursal "${tenantId}" ya tiene datos. Crea una sucursal nueva para importar (sin crear el ADMIN antes).`);
+      throw new Error(`La sucursal "${tenantId}" ya tiene datos. Crea una sucursal nueva para importar (sin activar su ADMIN por defecto).`);
     }
 
     const inserted: Record<string, number> = {};
     const outcome = await withTransaction(async (tx) => {
+      const removed = await tx.query<{ affectedRows: number }>("DELETE FROM users WHERE must_change_password = 1");
+      if (removed.affectedRows) note(`Se quitó el ADMIN por defecto de la sucursal: los usuarios vienen de Supabase.`);
+
       // ---------- Usuarios (auth.users + profiles) ----------
       const userIds = new Set<string>();
       const usernames = new Set<string>();

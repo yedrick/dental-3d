@@ -65,7 +65,8 @@ server/
 │   ├── 002_seed.sql         permisos, permisos por rol y parámetros
 │   ├── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
 │   ├── 004_finanzas.sql     caja chica, depósitos, pagos a terceros, citas, notificaciones
-│   └── 005_admin.sql        versión de sesión de usuarios, índice de auditoría
+│   ├── 005_admin.sql        versión de sesión de usuarios, índice de auditoría
+│   └── 006_default_admin.sql  cuenta "por activar" (ADMIN por defecto de cada sucursal)
 └── src/
     ├── index.ts             arranque y apagado ordenado
     ├── app.ts               Express: seguridad, compresión, tenancy, rutas
@@ -114,6 +115,8 @@ Los errores siempre tienen la misma forma (igual que tenancy-node):
 | GET 🔒 | `/api/auth/me` | Perfil, roles, permisos, sucursal e `impersonated_by` |
 | PATCH 🔒 | `/api/auth/me` | `{ full_name?, username? }`: el usuario edita su propio perfil |
 | POST 🔒 | `/api/auth/change-password` | `{ current_password, new_password }` → `{ token }` nuevo; **cierra las demás sesiones** |
+| GET | `/api/auth/impersonate?token=` | Canjea el token de "Entrar como…" del panel y redirige a `/auth/impersonate#token=…` |
+| POST 🔒 | `/api/auth/setup-account` | `{ full_name, username, email, new_password }`: activa la cuenta ADMIN por defecto (solo si está "por activar") |
 
 El token **solo sirve en la sucursal que lo emitió**. Además lleva la versión de sesión del usuario: al cambiar su contraseña, desactivarlo, desaprobarlo o cambiar sus roles, **todas sus sesiones se cierran** (`SESSION_REVOKED`).
 
@@ -336,6 +339,21 @@ Ejemplo:
 curl -X PUT http://sur.localhost:4000/api/branding/logo \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: image/png" --data-binary @logo.png
 ```
+
+## Panel de la plataforma (tenancy-node)
+
+En el **dominio central** (`dominio.com/admin/`; en local `http://localhost:8080/admin/`) se monta el panel de tenancy-node (`@tenancy-node/admin-api` + `admin-ui`). En el subdominio de una sucursal responde 404. Se activa con `TENANCY_ADMIN_SECRET`.
+
+| Desde el panel | Cómo lo resuelve |
+|---|---|
+| Crear una sucursal (`calacoto`) | tenancy-node crea `dental_calacoto`, su usuario MySQL y aplica `db/tenant/*.sql`, con el progreso en vivo |
+| ADMIN por defecto | El `seed` del módulo (`src/tenancy/seed.ts`) crea `admin` con una contraseña aleatoria y la cuenta **por activar** |
+| Tema (colores; logo por URL) | `theme.update` del módulo. La app lo lee de `/tenancy/me` |
+| Entrar a la sucursal | "Entrar como…" genera un token de un solo uso (60 s). La app lo canjea en `GET /api/auth/impersonate` (`consumeImpersonationToken`) y entrega una sesión de 1 hora, auditada con `_impersonated_by: "platform:<id>"` |
+| Activar la cuenta | La app obliga a definir nombre, usuario, email y contraseña (`POST /api/auth/setup-account`). Después, el ADMIN entra normal con su usuario y contraseña |
+| Suspender, mantenimiento, migraciones, explorar datos, auditoría, usuarios del panel con 2FA | Funciones propias del panel |
+
+Usuarios del panel (son distintos de los usuarios de cada sucursal): `npx tenancy admin:user tu@email.com --role=owner`.
 
 ## Copiar datos desde Supabase
 

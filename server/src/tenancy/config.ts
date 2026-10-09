@@ -3,6 +3,7 @@ import { defineConfig, LocalStorage } from "@tenancy-node/core";
 import { database } from "@tenancy-node/db";
 import { mysql } from "@tenancy-node/db-mysql";
 import { config } from "../config.js";
+import { seedTenant } from "./seed.js";
 
 /**
  * Configuración de tenancy-node. La usan la API (src/tenancy/index.ts) y la CLI
@@ -32,6 +33,8 @@ export const tenancyConfig = defineConfig({
       credentials: "per-tenant",
       prefix: "dental_",
       migrations: { tenant: fileURLToPath(new URL("../../db/tenant", import.meta.url)) },
+      // ADMIN por defecto de cada sucursal nueva (cuenta por activar)
+      seed: seedTenant,
       pool: { max: 5, maxOpenPools: 100, idleTimeoutMs: 60_000 },
     }),
   ],

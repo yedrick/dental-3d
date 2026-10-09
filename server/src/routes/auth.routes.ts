@@ -6,7 +6,9 @@ import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
 import { loadPermissions, loadRoles } from "../lib/permissions.js";
+import { consumeImpersonationToken, InvalidImpersonationTokenError } from "@tenancy-node/admin-api";
 import { requireAuth, signToken } from "../middleware/auth.js";
+import { tenancy } from "../tenancy/index.js";
 import { loginLimiter, registerLimiter, sensitiveLimiter } from "../middleware/rate-limit.js";
 
 export const authRouter = Router();
@@ -87,7 +89,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
 /** Datos de la sesión actual: perfil, roles, permisos y sucursal. */
 authRouter.get("/me", requireAuth, async (req, res) => {
   const rows = await db().query(
-    "SELECT id, username, full_name, email, active, approved, created_at FROM users WHERE id = ?",
+    "SELECT id, username, full_name, email, active, approved, must_change_password, created_at FROM users WHERE id = ?",
     [req.user!.id],
   );
   const roles = await loadRoles(req.user!.id);
@@ -142,4 +144,71 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     return u;
   });
   res.json(user);
+});
+
+/**
+ * "Entrar como…" desde el panel de la plataforma (tenancy-node, dominio central /admin).
+ * El panel abre https://<sucursal>.dominio.com/api/auth/impersonate?token=… (token de un solo uso,
+ * 60 s, solo vale en esta sucursal). Se canjea, se busca al usuario por id, usuario o email y se
+ * entrega una sesión de 1 hora marcada como suplantación: todo queda auditado con _impersonated_by.
+ * El token de la app viaja en el fragmento (#), que el navegador no envía a ningún servidor.
+ */
+authRouter.get("/impersonate", sensitiveLimiter, async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  let imp: Awaited<ReturnType<typeof consumeImpersonationToken>>;
+  try {
+    imp = await consumeImpersonationToken(tenancy, token);
+  } catch (e) {
+    if (e instanceof InvalidImpersonationTokenError) {
+      return res.redirect(302, "/auth?error=impersonation");
+    }
+    throw e;
+  }
+  const ident = imp.userIdentifier.trim();
+  const [user] = await db().query<{ id: string; active: boolean; approved: boolean; token_version: number }[]>(
+    "SELECT id, active, approved, token_version FROM users WHERE id = ? OR username = ? OR email = ? LIMIT 1",
+    [ident, ident, ident.toLowerCase()],
+  );
+  if (!user || !user.active) return res.redirect(302, "/auth?error=impersonation_user");
+
+  const by = `platform:${imp.adminUserId}`;
+  await withTransaction((tx) => audit(tx, user.id, "IMPERSONATE_PLATFORM", "users", user.id, { platform_admin_id: imp.adminUserId, by }));
+  const appToken = signToken(user.id, user.token_version, { impersonatedBy: by, expiresIn: "1h" });
+  const redirect = imp.redirectPath && imp.redirectPath.startsWith("/") && !imp.redirectPath.startsWith("//") ? imp.redirectPath : "/app";
+  res.setHeader("Cache-Control", "no-store");
+  res.redirect(302, `/auth/impersonate#token=${encodeURIComponent(appToken)}&redirect=${encodeURIComponent(redirect)}`);
+});
+
+const setupSchema = z.object({
+  email: z.email("Email inválido").trim().toLowerCase(),
+  username: z.string().trim().min(1).max(100),
+  full_name: z.string().trim().min(1).max(200),
+  new_password: passwordSchema,
+});
+
+/**
+ * Activa la cuenta por defecto de una sucursal nueva: define email, usuario, nombre y contraseña
+ * sin pedir la contraseña actual (nadie la conoce). Solo sirve mientras la cuenta está "por activar".
+ */
+authRouter.post("/setup-account", sensitiveLimiter, requireAuth, async (req, res) => {
+  const data = setupSchema.parse(req.body);
+  const hash = await bcrypt.hash(data.new_password, 12);
+  const version = await withTransaction(async (tx) => {
+    const [u] = await tx.query<{ must_change_password: boolean }[]>(
+      "SELECT must_change_password FROM users WHERE id = ? FOR UPDATE",
+      [req.user!.id],
+    );
+    if (!u?.must_change_password) throw new HttpError(400, "Esta cuenta ya está activada. Cambia tu contraseña desde Mi perfil.", "ALREADY_ACTIVATED");
+    await tx.query(
+      `UPDATE users SET email = ?, username = ?, full_name = ?, password_hash = ?, must_change_password = 0,
+              token_version = token_version + 1 WHERE id = ?`,
+      [data.email, data.username, data.full_name, hash, req.user!.id],
+    );
+    await audit(tx, req.user!.id, "ACCOUNT_SETUP", "users", req.user!.id, { email: data.email, username: data.username });
+    const [v] = await tx.query<{ token_version: number }[]>("SELECT token_version FROM users WHERE id = ?", [req.user!.id]);
+    return v.token_version;
+  });
+  await invalidate(CacheKeys.auth(req.user!.id));
+  // Sesión normal (ya no suplantada): la cuenta queda en manos de quien la activó
+  res.json({ ok: true, token: signToken(req.user!.id, version) });
 });

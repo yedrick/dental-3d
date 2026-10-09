@@ -347,6 +347,43 @@ Pasos originales de esta fase:
   4. Publicar.
   5. Recién entonces unir `dev` a `main`.
 
+## Panel de la plataforma: crear y configurar sucursales desde `dominio.com` ✅ hecho
+
+**Objetivo:** cada sucursal (`calacoto.dominio.com`, `chasquipampa.dominio.com`) con su **propia base**. Desde `dominio.com` se crean sucursales, se configura su marca y se entra a ellas; con solo la URL ya funcionan, y cada una trae un administrador por defecto. **Todo con tenancy-node.**
+
+**Cómo se resolvió:**
+
+| Necesidad | Pieza de tenancy-node | Glue en la app |
+|---|---|---|
+| Panel en el dominio central | `@tenancy-node/admin-api` + `admin-ui` (v0.8.0), montados con `adminMiddleware` en `src/app.ts`. Solo responden en dominios centrales | Variables `TENANCY_ADMIN_SECRET`, `ADMIN_SECURE_COOKIES`, `TENANT_PUBLIC_URL`; proxy `/admin` en Vite y nginx |
+| Crear sucursal con su base | `POST /tenants` del panel (aprovisionamiento con progreso en vivo) | Migraciones `db/tenant/*.sql` |
+| ADMIN por defecto | Opción `seed` del plugin de base de datos | `src/tenancy/seed.ts`: `admin`, contraseña aleatoria, `must_change_password = 1`. Idempotente |
+| Tema (colores; logo por URL) | Editor de tema del panel (`theme.update`) | `/tenancy/me` → `src/lib/branding.tsx` |
+| Entrar a la sucursal | "Entrar como…" (`impersonate`, token de 1 uso, 60 s) + `consumeImpersonationToken` | `GET /api/auth/impersonate` → sesión de 1 h, auditada con `platform:<id>`; ruta `/auth/impersonate` en el frontend |
+| Activar al administrador | — | Pantalla obligatoria "Activa la cuenta de administrador" + `POST /api/auth/setup-account` |
+
+**Probado en el navegador** (panel en `localhost:8081/admin/`):
+1. Login del dueño de la plataforma.
+2. "Nuevo tenant" `chasquipampa`, con el progreso en vivo: base, usuario MySQL, migraciones y seed.
+3. Tema morado.
+4. "Entrar como…" `admin` → `chasquipampa.localhost:8081` pidió activar la cuenta, ya con el color de la sucursal.
+5. Cuenta activada → dashboard vacío de su propia base.
+
+Comprobé además:
+- el nuevo ADMIN entra con su contraseña, y esa cuenta no existe en `calacoto`;
+- un enlace ya usado lleva al login con aviso;
+- el panel da 404 en el subdominio de una sucursal;
+- todo queda en la auditoría del panel y en la de la sucursal.
+
+**Ajustes relacionados:**
+- La importación de Supabase reemplaza al ADMIN por defecto si la cuenta sigue "por activar".
+- `create-admin` deja la cuenta activada.
+- En nginx, `/admin/` queda **cerrado por IP**.
+
+**Pendiente:**
+- Subir el logo desde el panel: hoy el panel solo acepta una URL. El logo se sube en la app, en "Marca de la sucursal".
+- Correo de bienvenida al administrador, cuando haya servicio de correo.
+
 ## Fase 6 — Eliminar todo lo de Lovable
 
 **¿Por qué al final y no ahora?** Hoy el frontend necesita Lovable para funcionar: el login y los datos están en Lovable Cloud (Supabase), Vite se configura con un paquete de Lovable y el logo está guardado en los servidores de Lovable. Si se borra antes de la Fase 5, la app deja de funcionar. Lo que sí se puede adelantar en `dev` está marcado como **(se puede adelantar)**.
@@ -559,6 +596,17 @@ Se deciden cuando lleguemos ahí, con el módulo de tenancy-node:
 - **Cómo se reproduce:** `tenancy.run(id, () => tenancy.pool().query("SELECT 1"))` → `tenancy.close()` → queda un socket abierto al puerto de MySQL y el proceso no termina.
 - **Arreglo sugerido en `db-mysql`:** que `destroy` cierre el pool nativo directamente (`native.end()`) en vez de hacerlo a través de Kysely, o forzar la inicialización de Kysely.
 - **Parche aplicado aquí:** `src/db.ts` hace una consulta mínima por Kysely la primera vez que usa cada pool. Verificado: después de `tenancy.close()` no queda ninguna conexión abierta. Quitarlo cuando salga la corrección.
+
+**Bug 2 (v0.8.0, `@tenancy-node/admin-api`): el límite de intentos de login del panel no sirve detrás de un proxy.**
+- **Qué pasa:** la IP sale de `req.socket.remoteAddress` (`admin.ts`) y no hay opción `trustProxy` / `X-Forwarded-For`. Detrás de nginx todas las peticiones llegan desde `127.0.0.1`: 5 fallos de cualquiera bloquean el login del panel para todos durante 15 minutos (el límite por email sigue funcionando). La auditoría también guarda `127.0.0.1` como IP.
+- **Arreglo sugerido:** una opción `trustProxy` (o una función `clientIp(req)`) en `createAdminApi`, como la que ya tienen los adaptadores.
+- **Aquí:** `/admin/` se limita por IP en nginx.
+
+**Detalles del panel (mejoras sugeridas):**
+- El editor de tema muestra como color por defecto `#2563EB` (`DEFAULT_THEME`), no `theme.defaults` de la configuración (`#0F172A` aquí). Si se guarda sin tocar el color, la sucursal queda azul.
+- La vista previa del tema muestra `<id>.tuapp.com` en lugar del dominio real.
+- El formulario "Nuevo tenant" no permite cargar `data` (la API sí lo acepta). Serviría, por ejemplo, para pasar el email del administrador al `seed`.
+- El editor de tema no permite **subir** el logo, solo escribir una ruta o URL.
 
 **Detalle de uso (no es un bug):** dentro de una petición, `tenancy.theme()` devuelve el tema con que empezó la petición. Después de `theme.update()` hay que usar el valor que devuelve `update`.
 

@@ -29,6 +29,15 @@ export const config = {
     centralDomains: list(process.env.CENTRAL_DOMAINS ?? "localhost"),
     storageDir: process.env.STORAGE_DIR ?? "./storage",
   },
+  // Panel de la plataforma de tenancy-node (dominio central /admin): crear sucursales, tema,
+  // suspender, auditoría y "Entrar como…". Vacío = panel apagado.
+  admin: {
+    sessionSecret: process.env.TENANCY_ADMIN_SECRET ?? "",
+    // Cookies con Secure (HTTPS). Solo en desarrollo por http: false
+    secureCookies: (process.env.ADMIN_SECURE_COOKIES ?? "true") !== "false",
+    // URL pública de cada sucursal: {tenant} se reemplaza por el id (calacoto → https://calacoto.dominio.com)
+    tenantUrl: process.env.TENANT_PUBLIC_URL ?? "https://{tenant}.localhost",
+  },
   // Archivos privados (comprobantes): nunca se sirven sin un enlace firmado
   privateStorageDir: process.env.PRIVATE_STORAGE_DIR ?? "./storage-private",
   jwt: {
@@ -39,6 +48,10 @@ export const config = {
 
 if (!/^[+-]\d{2}:\d{2}$/.test(config.businessUtcOffset)) {
   throw new Error("BUSINESS_UTC_OFFSET debe tener la forma -04:00");
+}
+
+if (config.admin.sessionSecret && config.admin.sessionSecret.length < 32) {
+  throw new Error("TENANCY_ADMIN_SECRET debe tener al menos 32 caracteres");
 }
 
 if (config.jwt.secret.length < 32) {
