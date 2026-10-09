@@ -10,6 +10,23 @@ import { requireAuth, requirePermission } from "../middleware/auth.js";
 // Estudios y tarifas. Lectura para cualquier usuario autenticado (como la RLS "Read studies").
 export const studiesRouter = Router();
 export const studyPricesRouter = Router();
+/** Portada pública: solo nombre y descripción de los estudios activos (sin precios). */
+export const publicStudiesRouter = Router();
+
+publicStudiesRouter.get("/", async (_req, res) => {
+  const rows = await cache().remember(CacheKeys.studiesList, CacheTtl.studiesList, () =>
+    db().query(
+      `SELECT s.*, sp.id AS active_price_id, sp.price_with_report, sp.price_without_report, sp.effective_date
+         FROM studies s
+         LEFT JOIN study_prices sp ON sp.study_id = s.id AND sp.is_active = 1
+        ORDER BY s.name`,
+    ),
+  );
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json((rows as { id: string; name: string; description: string | null; active: boolean }[])
+    .filter((s) => s.active)
+    .map(({ id, name, description }) => ({ id, name, description })));
+});
 studiesRouter.use(requireAuth);
 studyPricesRouter.use(requireAuth);
 

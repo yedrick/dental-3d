@@ -1,93 +1,109 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session, User } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { apiGet, apiPost, LOGOUT_EVENT, tokenStore } from "@/lib/api";
 
-export type AppRole = Database["public"]["Enums"]["app_role"];
+export const ROLES = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"] as const;
+export type AppRole = (typeof ROLES)[number];
+
+export interface SessionUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email: string;
+  active: boolean;
+  approved: boolean;
+  created_at: string;
+}
+
+interface MeResponse {
+  user: SessionUser;
+  roles: AppRole[];
+  permissions: string[];
+  tenant: { id: string; name: string };
+  impersonated_by: string | null;
+}
 
 interface AuthCtx {
-  user: User | null;
-  session: Session | null;
+  user: SessionUser | null;
   roles: AppRole[];
   permissions: Set<string>;
+  tenant: { id: string; name: string } | null;
+  /** ADMIN que está "iniciando sesión como" este usuario. */
+  impersonatedBy: string | null;
   loading: boolean;
   hasRole: (r: AppRole) => boolean;
   hasAny: (r: AppRole[]) => boolean;
   can: (permKey: string) => boolean;
   reloadPermissions: () => Promise<void>;
+  signIn: (login: string, password: string) => Promise<void>;
+  /** Reemplaza el token (cambio de contraseña, suplantación) y recarga la sesión. */
+  setSessionToken: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-async function loadPermissionsFor(roles: AppRole[]): Promise<Set<string>> {
-  if (roles.length === 0) return new Set();
-  const { data } = await supabase.from("role_permissions").select("permission_key").in("role", roles);
-  return new Set((data ?? []).map((r: any) => r.permission_key as string));
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
-  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadRolesAndPerms = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    const rs = (data ?? []).map((r: any) => r.role as AppRole);
-    setRoles(rs);
-    setPermissions(await loadPermissionsFor(rs));
-  };
-
-  const checkApproved = async (userId: string): Promise<boolean> => {
-    const { data } = await supabase.from("profiles").select("approved").eq("id", userId).maybeSingle();
-    if (data && data.approved === false) {
-      await supabase.auth.signOut();
-      if (typeof window !== "undefined") {
-        const { toast } = await import("sonner");
-        toast.error("Tu cuenta aún no ha sido aprobada por un administrador.", { duration: 6000 });
-      }
-      return false;
+  const load = useCallback(async () => {
+    if (!tokenStore.get()) {
+      setMe(null);
+      return;
     }
-    return true;
-  };
-
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (s?.user) {
-        setTimeout(async () => {
-          const ok = await checkApproved(s.user.id);
-          if (ok) await loadRolesAndPerms(s.user.id);
-        }, 0);
-      } else {
-        setRoles([]); setPermissions(new Set());
-      }
-    });
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        const ok = await checkApproved(data.session.user.id);
-        if (ok) await loadRolesAndPerms(data.session.user.id);
-        else setSession(null);
-      }
-      setLoading(false);
-    });
-    return () => sub.subscription.unsubscribe();
+    try {
+      setMe(await apiGet<MeResponse>("/api/auth/me"));
+    } catch {
+      tokenStore.clear();
+      setMe(null);
+    }
   }, []);
 
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+    // La API avisa cuando la sesión venció o se cerró (contraseña nueva, rol cambiado…)
+    const onLogout = async (e: Event) => {
+      setMe(null);
+      const { toast } = await import("sonner");
+      toast.error((e as CustomEvent<string>).detail || "Tu sesión terminó. Vuelve a iniciar sesión.");
+    };
+    window.addEventListener(LOGOUT_EVENT, onLogout);
+    return () => window.removeEventListener(LOGOUT_EVENT, onLogout);
+  }, [load]);
 
+  const setSessionToken = useCallback(async (token: string) => {
+    tokenStore.set(token);
+    await load();
+  }, [load]);
+
+  const signIn = useCallback(async (login: string, password: string) => {
+    const { token } = await apiPost<{ token: string }>("/api/auth/login", { login, password });
+    await setSessionToken(token);
+  }, [setSessionToken]);
+
+  const signOut = useCallback(async () => {
+    tokenStore.clear();
+    tokenStore.clearAdmin();
+    setMe(null);
+  }, []);
+
+  const roles = me?.roles ?? [];
+  const permissions = new Set(me?.permissions ?? []);
   const value: AuthCtx = {
-    user: session?.user ?? null,
-    session,
+    user: me?.user ?? null,
     roles,
     permissions,
+    tenant: me?.tenant ?? null,
+    impersonatedBy: me?.impersonated_by ?? null,
     loading,
     hasRole: (r) => roles.includes(r),
     hasAny: (rs) => rs.some((r) => roles.includes(r)),
-    can: (k) => roles.includes("ADMIN") || permissions.has(k),
-    reloadPermissions: async () => { if (session?.user) await loadRolesAndPerms(session.user.id); },
-    signOut: async () => { await supabase.auth.signOut(); },
+    // La API ya devuelve todos los permisos para ADMIN
+    can: (k) => permissions.has(k),
+    reloadPermissions: load,
+    signIn,
+    setSessionToken,
+    signOut,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

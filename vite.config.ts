@@ -7,6 +7,16 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    server: {
+      // En desarrollo: abrir http://<sucursal>.localhost:8080. Vite reenvía /api y /tenancy a la
+      // API Node conservando el Host, así la API sabe de qué sucursal es cada petición.
+      proxy: {
+        "/api": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
+        "/tenancy": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
+      },
+    },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

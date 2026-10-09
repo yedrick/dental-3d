@@ -6,10 +6,11 @@ export const getRouter = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 60_000,
+        // Por defecto, datos de operación diaria; cada pantalla usa STALE (src/lib/query-config.ts)
+        staleTime: 20_000,
         gcTime: 30 * 60_000,
-        refetchOnWindowFocus: false,
-        refetchOnMount: false,
+        refetchOnWindowFocus: true,
+        refetchOnMount: true,
         refetchOnReconnect: false,
         retry: 1,
       },

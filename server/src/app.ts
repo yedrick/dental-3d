@@ -24,7 +24,7 @@ import { rolesRouter } from "./routes/roles.routes.js";
 import { usersRouter } from "./routes/users.routes.js";
 import { patientsRouter } from "./routes/patients.routes.js";
 import { RECEIPT_MAX_BYTES, RECEIPT_TYPES, receiptsRouter } from "./routes/receipts.routes.js";
-import { studiesRouter, studyPricesRouter } from "./routes/studies.routes.js";
+import { publicStudiesRouter, studiesRouter, studyPricesRouter } from "./routes/studies.routes.js";
 import { tenancy } from "./tenancy/index.js";
 
 // Mensajes de validación en español
@@ -54,8 +54,8 @@ app.get("/api/health", async (_req, res) => {
 app.use(tenancyMiddleware(tenancy, { skip: (req) => req.path === "/api/health" }));
 
 // Datos de pacientes y dinero: el navegador revalida siempre (ETag) y ningún proxy los guarda
-app.use("/api", (_req, res, next) => {
-  res.setHeader("Cache-Control", "private, no-cache");
+app.use("/api", (req, res, next) => {
+  if (!req.path.startsWith("/public/")) res.setHeader("Cache-Control", "private, no-cache");
   next();
 });
 
@@ -79,6 +79,7 @@ app.use("/api", (req, res, next) => {
 app.use("/api/auth", authRouter);
 app.use("/api/doctors", doctorsRouter);
 app.use("/api/patients", patientsRouter);
+app.use("/api/public/studies", publicStudiesRouter);
 app.use("/api/studies", studiesRouter);
 app.use("/api/study-prices", studyPricesRouter);
 app.use("/api/attentions", attentionsRouter);
