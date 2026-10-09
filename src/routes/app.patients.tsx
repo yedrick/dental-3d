@@ -1,10 +1,11 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiDelete, apiGet, apiPatch, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useList, calcAge, formatDate } from "@/lib/data";
+import { calcAge, formatDate } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,35 +17,51 @@ import { Table, TableHead, TableHeader, TableRow, TableBody, TableCell } from "@
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Eye, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/patients")({ component: PatientsPage });
 
 type PForm = { id?: string; doctor_id: string; full_name: string; birth_date: string; phone: string; email: string; notes: string; status: boolean };
 const empty: PForm = { doctor_id: "", full_name: "", birth_date: "", phone: "", email: "", notes: "", status: true };
+const PAGE_SIZE = 50;
 
 function PatientsPage() {
-  const { user, hasAny, can } = useAuth();
-  const canCreate = hasAny(["ADMIN", "RECEPCION"]);
-  const canEdit = can("patients.edit") || hasAny(["ADMIN", "RECEPCION"]);
-  const canDelete = can("patients.delete") || hasAny(["ADMIN"]);
+  const { can } = useAuth();
+  // Los permisos los controla la API; aquí solo se ocultan los botones
+  const canCreate = can("patients.create");
+  const canEdit = can("patients.edit");
+  const canDelete = can("patients.delete");
   const qc = useQueryClient();
-  const { data = [], isLoading } = useList<any>("patients");
-  const { data: doctors = [] } = useList<any>("doctors", "full_name", true);
-  const activeDoctors = doctors.filter((d: any) => d.status);
-  const doctorMap = useMemo(() => new Map(doctors.map((d: any) => [d.id, d.full_name])), [doctors]);
 
   const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [form, setForm] = useState<PForm>(empty);
   const [open, setOpen] = useState(false);
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return data;
-    return (data as any[]).filter((p) =>
-      p.full_name?.toLowerCase().includes(s) || p.phone?.includes(s) || p.email?.toLowerCase().includes(s));
-  }, [data, q]);
+  // Búsqueda en el servidor (nombre, teléfono o email), con una pequeña espera al escribir
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(q.trim()); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const { data: res, isLoading } = useQuery({
+    queryKey: ["patients", { q: search, page }],
+    queryFn: () => apiGet<Paged<any>>("/api/patients", { q: search, page, limit: PAGE_SIZE, sort: "recent" }),
+    staleTime: STALE.master,
+    placeholderData: keepPreviousData,
+  });
+  const filtered = res?.data ?? [];
+  const pages = res?.pages ?? 1;
+  const total = res?.total ?? 0;
+
+  const { data: doctors = [] } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
+  const activeDoctors = doctors.filter((d: any) => d.status);
 
   const openNew = () => { setForm(empty); setOpen(true); };
   const openEdit = (p: any) => {
@@ -63,29 +80,38 @@ function PatientsPage() {
       notes: form.notes || null,
       status: form.status,
     };
-    if (form.id) {
-      const { error } = await supabase.from("patients").update(payload).eq("id", form.id);
-      if (error) return toast.error(translateError(error));
-      toast.success("Paciente actualizado");
-    } else {
-      payload.created_by = user!.id;
-      const { error } = await supabase.from("patients").insert(payload);
-      if (error) return toast.error(translateError(error));
-      toast.success("Paciente registrado");
+    try {
+      if (form.id) {
+        await apiPatch(`/api/patients/${form.id}`, payload);
+        toast.success("Paciente actualizado");
+      } else {
+        // created_by lo pone la API con el usuario de la sesión
+        await apiPost("/api/patients", payload);
+        toast.success("Paciente registrado");
+      }
+    } catch (e) {
+      return toast.error(translateError(e));
     }
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["patients"] });
   };
 
   const toggleStatus = async (p: any, v: boolean) => {
-    await supabase.from("patients").update({ status: v }).eq("id", p.id);
+    try {
+      await apiPatch(`/api/patients/${p.id}`, { status: v });
+    } catch (e) {
+      toast.error(translateError(e));
+    }
     qc.invalidateQueries({ queryKey: ["patients"] });
   };
 
   const del = async (p: any) => {
-    if (!confirm(`¿Eliminar paciente "${p.full_name}"? Esta acción también elimina su historial.`)) return;
-    const { error } = await supabase.from("patients").delete().eq("id", p.id);
-    if (error) return toast.error(translateError(error));
+    if (!confirm(`¿Eliminar paciente "${p.full_name}"? Si tiene atenciones registradas no se podrá eliminar: desactívalo en su lugar.`)) return;
+    try {
+      await apiDelete(`/api/patients/${p.id}`);
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Paciente eliminado");
     qc.invalidateQueries({ queryKey: ["patients"] });
   };
@@ -120,7 +146,7 @@ function PatientsPage() {
                   {p.full_name}
                   {p.email && <div className="text-[11px] text-muted-foreground">{p.email}</div>}
                 </TableCell>
-                <TableCell className="text-sm">{doctorMap.get(p.doctor_id) || "—"}</TableCell>
+                <TableCell className="text-sm">{p.doctor_name || "—"}</TableCell>
                 <TableCell className="text-sm">{p.birth_date ? `${calcAge(p.birth_date)}a` : "—"}</TableCell>
                 <TableCell className="text-sm">{p.phone || "—"}</TableCell>
                 <TableCell>
@@ -144,6 +170,14 @@ function PatientsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {pages > 1 && (
+        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
+          <span>{total} pacientes · Página {page} de {pages}</span>
+          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">

@@ -1,17 +1,19 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiDelete, apiGet, apiPut } from "@/lib/api";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useAuth, type AppRole } from "@/lib/auth";
+import { useAuth, ROLES, type AppRole } from "@/lib/auth";
 import { Eye, Plus, Pencil, Trash2, DollarSign, PackageCheck, Settings2, UserCog, ShieldCheck, FileDown, Send, CheckCircle2, LogIn, type LucideIcon } from "lucide-react";
 
-const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
+type Permission = { key: string; description: string | null; category: string | null };
+type RolesResponse = { roles: AppRole[]; permissions: Permission[]; matrix: Record<string, string[]> };
 
 const MODULE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -72,41 +74,32 @@ function RolesPage() {
   const canEdit = can("roles.manage_permissions");
   const qc = useQueryClient();
 
-  const { data: permissions = [] } = useQuery({
-    queryKey: ["permissions"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("permissions").select("*").order("key");
-      if (error) throw error;
-      return data as any[];
-    },
+  const { data } = useQuery({
+    queryKey: ["roles-matrix"],
+    queryFn: () => apiGet<RolesResponse>("/api/roles"),
+    staleTime: STALE.catalog,
   });
-  const { data: rolePerms = [] } = useQuery({
-    queryKey: ["role_permissions"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("role_permissions").select("*");
-      if (error) throw error;
-      return data as any[];
-    },
-  });
+  const permissions = data?.permissions ?? [];
+  const roles: readonly AppRole[] = data?.roles ?? ROLES;
 
-  const has = (role: AppRole, key: string) => rolePerms.some((r) => r.role === role && r.permission_key === key);
+  const has = (role: AppRole, key: string) => data?.matrix[role]?.includes(key) ?? false;
 
   const toggle = async (role: AppRole, key: string, on: boolean) => {
     if (!canEdit) return toast.error("Sin permiso");
     if (role === "ADMIN") return toast.error("ADMIN siempre tiene todos los permisos");
-    if (on) {
-      const { error } = await supabase.from("role_permissions").insert({ role, permission_key: key });
-      if (error) return toast.error(translateError(error));
-    } else {
-      const { error } = await supabase.from("role_permissions").delete().eq("role", role).eq("permission_key", key);
-      if (error) return toast.error(translateError(error));
+    const path = `/api/roles/${role}/permissions/${encodeURIComponent(key)}`;
+    try {
+      if (on) await apiPut(path);
+      else await apiDelete(path);
+    } catch (e) {
+      return toast.error(translateError(e));
     }
-    qc.invalidateQueries({ queryKey: ["role_permissions"] });
+    qc.invalidateQueries({ queryKey: ["roles-matrix"] });
     await reloadPermissions();
   };
 
   // Group by module
-  const byModule = permissions.reduce<Record<string, any[]>>((acc, p) => {
+  const byModule = permissions.reduce<Record<string, Permission[]>>((acc, p) => {
     const { module } = parseKey(p.key);
     (acc[module] ||= []).push(p);
     return acc;
@@ -137,7 +130,7 @@ function RolesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[45%]">Acción</TableHead>
-                    {ROLES.map((r) => (
+                    {roles.map((r) => (
                       <TableHead key={r} className="text-center px-1 text-[10px] font-medium">{r.slice(0, 3)}</TableHead>
                     ))}
                   </TableRow>
@@ -153,11 +146,11 @@ function RolesPage() {
                             <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             <div className="min-w-0">
                               <div className="text-sm leading-tight">{meta.label}</div>
-                              <div className="text-[10px] text-muted-foreground truncate" title={p.description}>{p.description}</div>
+                              <div className="text-[10px] text-muted-foreground truncate" title={p.description ?? ""}>{p.description}</div>
                             </div>
                           </div>
                         </TableCell>
-                        {ROLES.map((r) => (
+                        {roles.map((r) => (
                           <TableCell key={r} className="text-center px-1 py-2">
                             <Checkbox
                               checked={r === "ADMIN" ? true : has(r, p.key)}

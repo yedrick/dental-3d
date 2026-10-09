@@ -263,6 +263,7 @@ Aquí `from`/`to` filtran por la fecha del depósito o del pago (columnas DATE, 
 | GET | `/api/notifications/unread-count` (para consultar cada 30 s; responde 304 si no cambió) | cualquier usuario |
 | POST | `/api/notifications/:id/read` · `/api/notifications/read-all` | cualquier usuario (solo las propias) |
 | GET | `/api/notifications/recipients` (usuarios activos) · `/api/notifications/sent` | `notifications.send` |
+| GET | `/api/notifications/:id/recipients` (de una enviada: quién y cuándo la leyó) | `notifications.send` |
 | POST | `/api/notifications` `{ title, body, target: "all" \| [userIds] }` | `notifications.send` |
 
 ### Usuarios 🔒
