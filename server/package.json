@@ -12,7 +12,8 @@
     "db:migrate": "tenancy migrate",
     "tenant:create": "tenancy create",
     "tenant:list": "tenancy list",
-    "tenant:create-admin": "tsx src/scripts/create-admin.ts"
+    "tenant:create-admin": "tsx src/scripts/create-admin.ts",
+    "tenant:import-supabase": "tsx src/scripts/import-supabase.ts"
   },
   "dependencies": {
     "@tenancy-node/adapter-express": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-adapter-express-0.8.0.tgz",
@@ -38,6 +39,8 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

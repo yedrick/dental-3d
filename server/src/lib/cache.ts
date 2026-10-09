@@ -13,6 +13,9 @@ export const CacheKeys = {
   rolePerms: (roles: string[]) => `perms:${[...roles].sort().join(",")}`,
   doctorsList: "doctors:list",
   studiesList: "studies:list",
+  params: "params",
+  reportsVersion: "reports:v",
+  report: (version: number, name: string, from: string, to: string) => `report:${version}:${name}:${from}:${to}`,
 } as const;
 
 export const CacheTtl = {
@@ -20,6 +23,8 @@ export const CacheTtl = {
   rolePerms: 600,
   doctorsList: 300,
   studiesList: 600,
+  params: 600,
+  report: 3600,
 } as const;
 
 export function cache() {
@@ -31,3 +36,16 @@ export async function invalidate(...keys: string[]) {
   await Promise.all(keys.map((k) => c.delete(k)));
 }
 
+
+/**
+ * Versión de los reportes: cualquier cambio de datos (POST/PATCH/PUT/DELETE exitoso) la
+ * incrementa, y como la versión va en la llave, un reporte nunca se sirve desactualizado
+ * (ni siquiera de meses pasados con un depósito cargado con fecha atrasada).
+ */
+export async function reportsVersion(): Promise<number> {
+  return (await tenancy.cache().get<number>(CacheKeys.reportsVersion)) ?? 0;
+}
+
+export async function bumpReportsVersion() {
+  await tenancy.cache().set(CacheKeys.reportsVersion, Date.now());
+}

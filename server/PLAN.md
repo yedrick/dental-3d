@@ -151,18 +151,87 @@ La prueba de la Fase 2 se volvió a correr sin regresiones. En local, todo respo
 - **Respaldo** de `PRIVATE_STORAGE_DIR` junto con las bases de datos.
 - Pasar a Server-Sent Events si 30 s de demora en la campana resulta mucho.
 
-## Fase 4 — Administración, reportes y copia de datos
+## Fase 4 — Administración, reportes y copia de datos ✅ hecha
 
-- **Usuarios de la sucursal:** crear, editar, eliminar, aprobar y asignar roles. Cada cambio **borra la caché de sesión** del usuario (`invalidate(CacheKeys.auth(id))`), así desactivar a alguien tiene efecto inmediato. Para **impersonar** se emite un JWT del usuario elegido, solo con el permiso `users.impersonate`, y queda auditado.
-- **Roles y permisos** (`role_permissions`) y **parámetros** (`app_params`), con caché de 10 min que se borra al editar.
-- **Auditoría:** vista con filtros.
-- **Reportes:** se cachean solo los de meses ya cerrados.
-- **Administración de sucursales** (crear, suspender, mantenimiento): con la CLI (`npx tenancy ...`) o con el panel de administración de tenancy-node (`@tenancy-node/admin-api` / `admin-ui`), accesible solo por VPN o túnel SSH.
-- **Copia de datos desde Supabase:**
-  - Todos los datos actuales van a **una sucursal** (por ejemplo, `central`).
-  - Script que lee PostgreSQL y escribe en `dental_central` conservando los mismos IDs.
-  - **Contraseñas:** Supabase las guarda con bcrypt en `auth.users.encrypted_password`. Si se copian a `users.password_hash`, nadie tiene que cambiarla.
-  - Verificar que el conteo de filas y la suma de montos sean iguales en ambas bases.
+**Migración:** `db/tenant/005_admin.sql` agrega `users.token_version` (versión de sesión) y un índice de auditoría por acción.
+
+**Endpoints:** `/api/users`, `/api/roles`, `/api/params`, `/api/audit`, `/api/dashboard`, `/api/reports/summary` y `PATCH /api/auth/me`. Además, el script `npm run tenant:import-supabase`. Detalle en el README.
+
+**Probado:**
+- **46 verificaciones de la API: 45 OK.** Corrieron sobre una sucursal importada desde una base con la estructura de Supabase. La restante estaba mal planteada (el único ADMIN intentaba suplantarse a sí mismo y la API respondió "ya eres este usuario"). Se comprobó aparte, con un segundo ADMIN, que suplantar a un ADMIN se rechaza.
+- **Importación** contra un PostgreSQL local con datos de ejemplo (`test/fixtures/supabase-fixture.sql`):
+  - simulación y copia real;
+  - comprobantes servidos por un servidor que imita Supabase Storage;
+  - todas las sumas de dinero cuadran o su diferencia queda explicada;
+  - segunda importación rechazada.
+- Las pruebas de las Fases 2 y 3 se volvieron a correr sin regresiones.
+- En local, todo responde en menos de 3 ms (p95).
+
+### Usuarios y seguridad
+
+| Antes (Supabase / Lovable) | Ahora |
+|---|---|
+| Todas las acciones exigían ser ADMIN (`assertAdmin`) | Permisos por acción (`users.create`, `users.edit`, `users.approve`, `users.manage_roles`, `users.delete`, `users.impersonate`). ADMIN los tiene todos. |
+| Un rol por usuario en la pantalla | Varios roles por usuario (`PUT /api/users/:id/roles`). |
+| Desactivar a alguien no cerraba su sesión | **Versión de sesión en el JWT:** contraseña nueva, desactivación, desaprobación o cambio de roles cierran **al instante** todas sus sesiones. |
+| Cambiar la propia contraseña no cerraba otras sesiones | Cierra las demás y devuelve un token nuevo. |
+| Suplantación con un "magic link" de Supabase | Token de 1 hora marcado como suplantación. Todo lo que se hace queda auditado con `_impersonated_by`. No se puede suplantar a un ADMIN ni encadenar suplantaciones. |
+
+**Protecciones nuevas contra escalada de privilegios:**
+- Solo un ADMIN puede dar o quitar el rol ADMIN, o tocar a otro ADMIN.
+- Nadie puede eliminarse, desactivarse ni desaprobarse a sí mismo.
+- Siempre queda al menos un ADMIN activo. Se verifica con bloqueo, así dos ADMIN no pueden quitarse el rol a la vez.
+
+### Roles, parámetros y auditoría
+
+- Al cambiar un permiso, vale desde la siguiente petición: se vacía la caché de la sucursal.
+- El rol ADMIN no se edita (siempre tiene todos).
+- Cada parámetro tiene su rango validado. Por ejemplo, un recargo de 200% se rechaza.
+- La auditoría tiene filtros por fecha local, usuario, tabla, acción y registro, con paginación. Desde la API no se puede editar ni borrar.
+
+### Dashboard y reportes
+
+- Todo se suma en MySQL. El frontend actual traía **todas** las filas del período al navegador para sumarlas.
+- **Agrupación por día local** (Bolivia), no por día UTC.
+- **Corrección:** el dashboard actual suma solo el precio como "ingresos hoy". Ahora entrega lo facturado (precio + recargo − descuento) y lo cobrado por separado.
+- **Controles nuevos**, además de los actuales (pacientes sin doctor, registros sin usuario, tarifas en cero):
+  - entregas anteriores al registro;
+  - pagos a terceros anteriores al servicio;
+  - fechas futuras;
+  - estudios activos sin tarifa;
+  - atenciones cobradas de más.
+- Caché de 1 h con una **versión de datos**: cualquier cambio exitoso la incrementa, así el reporte nunca sale desactualizado, ni siquiera el de un mes pasado al que se le cargó un depósito con fecha atrasada.
+
+### Copia de datos desde Supabase (`npm run tenant:import-supabase`)
+
+- Copia usuarios con sus contraseñas bcrypt (probado: se inicia sesión con la contraseña original), roles, la matriz de permisos personalizada, parámetros y todas las tablas, con los mismos IDs, en **una sola transacción**.
+- `--dry-run` hace todo y deshace. Una sucursal que ya tiene datos se rechaza.
+- Copia los comprobantes del bucket `receipts` al almacenamiento privado. Los que fallen quedan listados y se reintentan con `--receipts-only`.
+- **Informe final:** conteos por tabla, sumas de dinero Supabase vs MySQL y observaciones.
+
+**Lo que el script corrige o avisa** (todo queda listado en el informe):
+
+| Caso en los datos de Supabase | Qué hace |
+|---|---|
+| Atención cobrada de más (bug del descuento por convenio) | Registra lo cobrado hasta el total y **lista el saldo a favor** de cada paciente, para devolverlo o aplicarlo. |
+| Saldo de caja descuadrado (bug de movimientos simultáneos) | Conserva el saldo guardado e informa el saldo recalculado, para que se registre un ajuste. |
+| Movimientos de caja, depósitos o pagos en cero | No se importan (no afectan saldos). |
+| Usuarios que solo difieren en mayúsculas | Renombra el segundo (`recep-3`): MySQL no distingue mayúsculas. |
+| Usuario sin contraseña bcrypt | Se importa sin poder entrar hasta que un ADMIN le asigne una. |
+| Cita con duración o estado inválido | Ajusta la duración y pone el estado `SCHEDULED`. |
+| Referencias a usuarios borrados | Quedan en NULL. El historial se conserva y la auditoría guarda el id original. |
+
+### Decisiones para ti
+
+- **Saldo de caja al importar:** ¿se deja el saldo **guardado** (lo que hoy ve la clínica) o el **recalculado** (la suma real de los movimientos)? Por defecto se deja el guardado y se informa la diferencia.
+- **Saldos a favor por sobrepago:** ¿se devuelven, o se registran como crédito del paciente? Hoy solo se listan.
+- **DOCTOR ve las comisiones de todos:** para que cada doctor vea solo las suyas, hay que vincular `users` ↔ `doctors`. No se hizo, para no cambiar el comportamiento sin tu decisión.
+
+### Pendiente
+
+- **Administración de sucursales desde la interfaz**, en vez de la CLI: el panel de tenancy-node (`@tenancy-node/admin-api` / `admin-ui`), detrás de VPN.
+- Recuperar contraseña por email (sigue esperando la elección del servicio de correo).
+- Probar la importación contra la **base real de Supabase** con `--dry-run`. Necesita la cadena de conexión del proyecto (Lovable Cloud → Supabase → Database).
 
 ## Fase 5 — Cambiar el frontend y salir a producción
 
@@ -244,7 +313,7 @@ En este orden, **sin saltarse pasos**:
 - **HTTPS** obligatorio y `TRUST_PROXY=1` detrás de nginx. `trustProxy` de tenancy-node queda **apagado** salvo que nginx reescriba el `Host`; si estuviera encendido sin proxy, cualquiera podría elegir la sucursal con `X-Forwarded-Host`.
 - **Recuperar contraseña por email** (ver [Pendientes](#pendientes-y-temas-abiertos)).
 - **Bloqueo por usuario** después de N intentos fallidos, además del límite por IP.
-- **Refresh tokens** o un JWT más corto (1–2 h), y revocar sesiones al cambiar la contraseña.
+- **Refresh tokens** o un JWT más corto (1–2 h). ✅ Ya se revocan las sesiones al cambiar la contraseña, desactivar o cambiar roles (Fase 4).
 - **2FA** para ADMIN (TOTP).
 - ✅ **Archivos privados** fuera de `tenancy.storage()`, con enlaces firmados (Fase 3). En producción con varias réplicas: S3 privado con URLs prefirmadas.
 - **Dependencias:** `npm audit` en CI y fijar tenancy-node a una versión exacta.
@@ -260,12 +329,12 @@ Implementada en `src/lib/cache.ts`. Las llaves llevan el prefijo de la sucursal 
 
 | Dato | Llave | TTL | Se borra cuando… | Estado |
 |---|---|---|---|---|
-| Sesión: activo, aprobado, roles, permisos | `auth:<userId>` | 60 s | se edita, aprueba, desactiva o elimina el usuario, o cambian sus roles | ✅ (borrado inmediato en Fase 4) |
-| Permisos por combinación de roles | `perms:<roles>` | 10 min | se edita `role_permissions` | ✅ (borrado en Fase 4) |
+| Sesión: activo, aprobado, versión, roles, permisos | `auth:<userId>` | 60 s | se edita, aprueba, desactiva o elimina el usuario, o cambian sus roles | ✅ |
+| Permisos por combinación de roles | `perms:<roles>` | 10 min | se edita `role_permissions` (se vacía la caché de la sucursal) | ✅ |
 | Lista de doctores | `doctors:list` | 5 min | se crea, edita o elimina un doctor | ✅ |
-| Parámetros (`app_params`) | `params` | 10 min | se edita un parámetro | Fase 4 |
+| Parámetros (`app_params`) | `params` | 10 min | se edita un parámetro | ✅ |
 | Estudios + tarifa activa (para mostrar) | `studies:list` | 10 min | se crea, edita o borra un estudio o una tarifa | ✅ |
-| Reportes de **meses cerrados** | `report:<tipo>:<desde>:<hasta>` | 1 h | se registra un cambio con fecha en ese período | Fase 4 |
+| Reportes (cualquier período) | `report:<versión>:<tipo>:<desde>:<hasta>` | 1 h | cualquier cambio de datos incrementa la versión | ✅ |
 
 Reglas:
 - Las llaves se borran **después del commit**. El TTL es solo una red de seguridad.
@@ -420,7 +489,7 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 - `git checkout src/routeTree.gen.ts`
 
 ### 5. Otros
-- Tests automáticos en el repo (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba. Las verificaciones de las Fases 2 (33) y 3 (47) se corrieron con scripts locales. Conviene pasarlas al repo antes de la Fase 4.
+- Tests automáticos en el repo (Vitest + Supertest), con `@tenancy-node/testing` para crear sucursales de prueba. Las verificaciones de las Fases 2 (33), 3 (47) y 4 (46, más la importación) se corrieron con scripts locales. Conviene pasarlas al repo antes de la Fase 5. La base de ejemplo de Supabase ya está en `test/fixtures/`.
 - Usar `pino` como logger de tenancy-node en producción y enviar los logs a un sistema donde se pueda filtrar por sucursal.
 
 ## Orden siguiente
@@ -428,8 +497,16 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 1. ✅ Commit de la Fase 1, el plan y la Fase 1.5 en `dev`.
 2. ✅ Fase 2 (núcleo clínico y comisiones) en `dev`.
 3. ✅ Fase 3 (finanzas, agenda y notificaciones) en `dev`.
-4. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
-5. Decidir: regla de comisiones, servicio de correo, caja en negativo, anulaciones y comprobantes para AUDITOR.
-6. Pasar las pruebas de las Fases 2 y 3 a tests automáticos en el repo.
-7. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
-8. Empezar la Fase 4 (usuarios, roles, parámetros, auditoría, reportes y copia de datos).
+4. ✅ Fase 4 (usuarios, roles, parámetros, auditoría, reportes y copia de datos) en `dev`.
+5. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
+6. Decidir:
+   - regla de comisiones;
+   - servicio de correo;
+   - caja en negativo y anulaciones;
+   - comprobantes para AUDITOR;
+   - saldo de caja y saldos a favor al importar;
+   - comisiones por doctor.
+7. Correr la importación contra la base real de Supabase con `--dry-run` y revisar el informe.
+8. Pasar las pruebas de las Fases 2 a 4 a tests automáticos en el repo.
+9. Adelantar en `dev` lo urgente de la Fase 6: **descargar el logo** dentro del proyecto.
+10. Empezar la Fase 5 (cambiar el frontend para que use la API).
