@@ -2,7 +2,7 @@ import { app } from "./app.js";
 import { config } from "./config.js";
 import { tenancy } from "./tenancy/index.js";
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, config.host ?? "::", () => {
   console.log(`API Dental-3D escuchando en http://localhost:${config.port} (sucursal: http://<id>.localhost:${config.port})`);
 });
 

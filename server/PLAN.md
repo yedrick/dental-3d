@@ -300,7 +300,38 @@ La prueba de la Fase 2 se volvió a correr sin regresiones. En local, todo respo
 - Lista de proveedores para el autocompletado de pagos a terceros (hoy usa los últimos 500 pagos).
 - Corregir el error de tipos que ya existía en `src/routes/__root.tsx` (`errorComponent`).
 
-### 5.2 Salir a producción (pendiente)
+### 5.2 Salir a producción — preparado ✅ (falta publicar)
+
+Decisión: **servidor propio** (nginx + systemd). Por ahora solo se dejó listo compilar y publicar; no se publicó nada. Guía paso a paso: [`deploy/DEPLOY.md`](../deploy/DEPLOY.md).
+
+**Hecho y probado en local** con el mismo esquema que producción (API compilada + frontend compilado + nginx real en Docker con `deploy/nginx/dental3d.conf`):
+- **Frontend:** `npm run build` genera un **servidor Node** (`.output/server/index.mjs`, preset `node-server`) en lugar de Cloudflare. Dentro de Lovable se sigue forzando Cloudflare.
+- **Backend:** `npm run build` compila a `dist/`.
+  - La CLI de tenancy-node y `pg` pasaron a dependencias de producción.
+  - Scripts compilados `prod:create-admin` y `prod:import-supabase`.
+  - Instalación de producción simulada con `npm ci --omit=dev`: la CLI y los scripts funcionan sin `tsx`.
+  - Nueva variable `HOST` para escuchar solo en `127.0.0.1`.
+- **nginx** (`deploy/nginx/dental3d.conf`):
+  - Subdominio comodín, `/api` y `/tenancy` a la API conservando el `Host`, y el resto al frontend.
+  - Límite de 6 MB, HSTS, `/api/health` solo local.
+  - Pasa `nginx -t` también con TLS.
+  - Probado: login y dashboard en el navegador, sucursales distintas, sucursal inexistente (404) y cuerpo de 7 MB (413).
+- **systemd:** `deploy/systemd/dental3d-api.service` y `dental3d-web.service`, con apagado ordenado y endurecimiento.
+- **Respaldos:** `deploy/backup.sh` respalda la base central, cada sucursal y los archivos, conservando 30 días.
+
+**Encontrado al probar:** un `add_header` dentro de un bloque `location` de nginx anula los encabezados de seguridad del servidor (HSTS, nosniff). Se quitó ese bloque; el frontend ya entrega `/assets/*` con caché de 1 año.
+
+**Falta (lo haces tú en el servidor):**
+- DNS comodín.
+- MySQL en UTC con el usuario `tenancy_admin`.
+- `.env` de producción.
+- Certificado comodín.
+- Activar los servicios y el cron de respaldos.
+- El día del corte: importar desde Supabase.
+
+Todo está en `deploy/DEPLOY.md`.
+
+Pasos originales de esta fase:
 
 - **Un subdominio por sucursal**, y el frontend y la API **en el mismo host**: nginx manda `/api` y `/tenancy` a Node y el resto al frontend. Así `/tenancy/me` y el login reconocen la sucursal por el host.
 - Publicar la API con:
@@ -579,4 +610,5 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 8. Pasar las pruebas de las Fases 2 a 4 a tests automáticos en el repo.
 9. ✅ Logo descargado dentro del proyecto (`src/assets/logo-3d.png`).
 10. ✅ Fase 5.1: el frontend usa la API (rama `dev`).
-11. Elegir el hosting y hacer la Fase 5.2 (producción); después, la Fase 6 (quitar Lovable).
+11. ✅ Fase 5.2 preparada para servidor propio (`deploy/`). Falta publicar: seguir `deploy/DEPLOY.md`.
+12. Fase 6: quitar Lovable. Incluye elegir **un** gestor de paquetes y subir su lockfile, para builds reproducibles.

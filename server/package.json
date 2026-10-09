@@ -13,10 +13,13 @@
     "tenant:create": "tenancy create",
     "tenant:list": "tenancy list",
     "tenant:create-admin": "tsx src/scripts/create-admin.ts",
-    "tenant:import-supabase": "tsx src/scripts/import-supabase.ts"
+    "tenant:import-supabase": "tsx src/scripts/import-supabase.ts",
+    "prod:create-admin": "node dist/scripts/create-admin.js",
+    "prod:import-supabase": "node dist/scripts/import-supabase.js"
   },
   "dependencies": {
     "@tenancy-node/adapter-express": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-adapter-express-0.8.0.tgz",
+    "@tenancy-node/cli": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-cli-0.8.0.tgz",
     "@tenancy-node/core": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-core-0.8.0.tgz",
     "@tenancy-node/db": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-db-0.8.0.tgz",
     "@tenancy-node/db-mysql": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-db-mysql-0.8.0.tgz",
@@ -30,18 +33,20 @@
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.28.17",
     "mysql2": "^3.24.5",
+    "pg": "^8.23.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@tenancy-node/cli": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-cli-0.8.0.tgz",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.43",
     "@types/pg": "^8.23.1",
-    "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

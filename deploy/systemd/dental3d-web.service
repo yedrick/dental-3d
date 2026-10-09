@@ -1,0 +1,23 @@
+# Frontend (build de TanStack Start para Node). Copiar a /etc/systemd/system/ y:
+# systemctl enable --now dental3d-web
+[Unit]
+Description=Dental-3D frontend (TanStack Start, Node)
+After=network.target
+
+[Service]
+Type=simple
+User=dental3d
+WorkingDirectory=/opt/dental3d
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/node .output/server/index.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
