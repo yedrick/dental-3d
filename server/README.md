@@ -26,7 +26,7 @@ npx tenancy key:generate      # pega el resultado en TENANCY_KEY
 # MySQL local (puerto 3307)
 docker run -d --name dental3d-mysql \
   -e MYSQL_ROOT_PASSWORD=root_dev_password -e MYSQL_DATABASE=dental3d_central \
-  -p 3307:3306 mysql:8.4
+  -p 3307:3306 mysql:8.4 --default-time-zone=+00:00
 # (o: docker compose up -d)
 
 npm run db:install            # tablas tenancy_* en la base central
@@ -59,8 +59,9 @@ Los navegadores y `curl` resuelven `*.localhost` a `127.0.0.1` sin configurar na
 server/
 ├── tenancy.config.ts        config que lee la CLI (npx tenancy)
 ├── db/tenant/               migraciones de la base de CADA sucursal
-│   ├── 001_schema.sql       tablas e índices
-│   └── 002_seed.sql         permisos, permisos por rol y parámetros
+│   ├── 001_schema.sql       usuarios, roles, permisos, doctores, auditoría
+│   ├── 002_seed.sql         permisos, permisos por rol y parámetros
+│   └── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
 └── src/
     ├── index.ts             arranque y apagado ordenado
     ├── app.ts               Express: seguridad, compresión, tenancy, rutas
@@ -71,8 +72,10 @@ server/
     │   ├── auth.ts          requireTenant, requireAuth (JWT ligado a la sucursal), permisos
     │   ├── rate-limit.ts    límites de intentos (login, registro, contraseña)
     │   └── error.ts         errores { error: { code, message } } en español
-    ├── lib/                 audit, cache, permissions, http-error
-    ├── routes/              auth, doctors, branding
+    ├── lib/                 audit, cache, permissions, money, query, schemas, http-error
+    ├── services/
+    │   └── attentions.ts    precio, recargo, descuento y comisión (antes triggers)
+    ├── routes/              auth, doctors, patients, studies, attentions, commissions, branding
     └── scripts/             create-admin.ts
 ```
 
@@ -116,6 +119,80 @@ El token **solo sirve en la sucursal que lo emitió**.
 | POST | `/api/doctors` | `doctors.create` |
 | PATCH | `/api/doctors/:id` (parcial, p. ej. `{ "status": false }`) | `doctors.edit` |
 | DELETE | `/api/doctors/:id` | `doctors.delete` |
+
+### Listas paginadas
+
+Pacientes, atenciones y comisiones usan `?page=1&limit=50` (máximo 500) y responden:
+
+```json
+{ "data": [ ... ], "page": 1, "limit": 50, "total": 120, "pages": 3, "summary": { ... } }
+```
+
+Los filtros `from` y `to` (`YYYY-MM-DD`) son **días en la hora de la clínica** (`BUSINESS_UTC_OFFSET`, Bolivia -04:00).
+
+### Pacientes 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/patients?q=&doctor_id=&status=&sort=recent\|name&page=&limit=` | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, DOCTOR, AUDITOR |
+| GET | `/api/patients/:id` (con `doctor_name`) | ídem |
+| GET | `/api/patients/:id/attentions` (historial con `total` y `debt`) | ídem |
+| POST | `/api/patients` (`doctor_id` obligatorio) | `patients.create` |
+| PATCH | `/api/patients/:id` | `patients.edit` |
+| DELETE | `/api/patients/:id` (409 si tiene atenciones: desactivarlo) | `patients.delete` |
+
+### Estudios y tarifas 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/studies?active=true` (con tarifa activa, en caché 10 min) | cualquier usuario |
+| GET | `/api/studies/:id` · `/api/studies/:id/prices` (historial) | cualquier usuario |
+| POST · PATCH · DELETE | `/api/studies` · `/api/studies/:id` (DELETE: 409 si tiene atenciones) | `studies.create` / `studies.edit` |
+| POST | `/api/studies/:id/prices` `{ price_with_report, price_without_report, effective_date, is_active }` | `studies.edit` |
+| PATCH · DELETE | `/api/study-prices/:id` | `studies.edit` |
+
+**Una sola tarifa activa por estudio:** al crear o activar una tarifa, la anterior se desactiva en la misma transacción (y un índice único lo garantiza en la base).
+
+### Atenciones 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/attentions?from=&to=&q=&patient_id=&doctor_id=&status=debt\|paid\|pending_delivery\|delivered` (con `summary`: total, pagado, saldo) | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, AUDITOR, DOCTOR |
+| POST | `/api/attentions` | `attention.create` |
+| POST | `/api/attentions/:id/charge` `{ amount, payment_method? }` | `attention.charge` |
+| POST | `/api/attentions/charge-all` `{ patient_id }` | `attention.charge` |
+| POST | `/api/attentions/deliver` `{ ids: [...] }` | `attention.deliver` |
+
+Registrar una atención:
+
+```json
+{
+  "patient_id": "…", "doctor_id": null, "clinic_name": null,
+  "with_invoice": true, "invoice_number": "F-123",
+  "payment_method": "cash", "amount_paid": 515,
+  "items": [ { "study_id": "…", "has_report": true, "is_voucher": false } ]
+}
+```
+
+El cliente **no envía precios**. El servidor calcula, dentro de la transacción:
+- precio de la tarifa activa (con o sin informe);
+- recargo por factura (`invoice_surcharge_pct`);
+- descuento por convenio del doctor (`agreement_discount_pct`);
+- reparto del pago entre los estudios;
+- comisión de cada estudio.
+
+`total = precio + recargo − descuento`.
+
+### Comisiones 🔒 (permiso `view.commissions`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/commissions?from=&to=&doctor_id=&page=&limit=` | Filas con paciente y estudio, y `summary` con total y totales por doctor |
+
+Las comisiones se crean solas al registrar una atención:
+- **Vale:** monto fijo de `voucher_amount` (50 Bs).
+- **Doctor con porcentaje:** su % del precio, o `first_patient_commission_pct` (50%) en su primera atención.
+- **Doctor sin porcentaje:** la comisión fija del estudio.
 
 ### Marca de la sucursal 🔒 (permiso `branding.edit`)
 

@@ -12,12 +12,14 @@ export const CacheKeys = {
   auth: (userId: string) => `auth:${userId}`,
   rolePerms: (roles: string[]) => `perms:${[...roles].sort().join(",")}`,
   doctorsList: "doctors:list",
+  studiesList: "studies:list",
 } as const;
 
 export const CacheTtl = {
   auth: 60,
   rolePerms: 600,
   doctorsList: 300,
+  studiesList: 600,
 } as const;
 
 export function cache() {

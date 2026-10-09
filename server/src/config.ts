@@ -15,6 +15,8 @@ export const config = {
   corsOrigin: list(process.env.CORS_ORIGIN),
   // Saltos de proxy de confianza para leer la IP real (rate limit). 0 = tráfico directo.
   trustProxy: Number(process.env.TRUST_PROXY ?? 0),
+  // Zona horaria del negocio para los filtros por día (Bolivia = -04:00, sin horario de verano)
+  businessUtcOffset: process.env.BUSINESS_UTC_OFFSET ?? "-04:00",
   tenancy: {
     // Base central de tenancy-node (tablas tenancy_*). El usuario necesita CREATE DATABASE,
     // CREATE USER y GRANT OPTION para crear la base y el usuario de cada sucursal.
@@ -30,6 +32,10 @@ export const config = {
     expiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
   },
 };
+
+if (!/^[+-]\d{2}:\d{2}$/.test(config.businessUtcOffset)) {
+  throw new Error("BUSINESS_UTC_OFFSET debe tener la forma -04:00");
+}
 
 if (config.jwt.secret.length < 32) {
   throw new Error("JWT_SECRET debe tener al menos 32 caracteres");
