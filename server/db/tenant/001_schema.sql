@@ -1,9 +1,9 @@
--- Dental-3D — esquema MySQL (Fase 1: usuarios, roles, permisos, parámetros, doctores, auditoría)
--- Equivalente a las tablas de supabase/migrations. Los IDs siguen siendo UUID (CHAR(36))
--- para poder migrar los datos existentes sin cambiar referencias.
+-- Dental-3D — esquema de la base de CADA tenant (sucursal).
+-- tenancy-node crea la base del tenant y aplica estas migraciones en orden
+-- (npx tenancy create / npx tenancy migrate). Las tablas tenancy_* viven en la base central.
+-- Los IDs siguen siendo UUID (CHAR(36)) para poder copiar los datos de Supabase sin cambiar referencias.
 -- Fechas: DATE (YYYY-MM-DD) y DATETIME en UTC.
-
-SET NAMES utf8mb4;
+-- Regla del parser de tenancy-node: cada sentencia termina con ';' al final de una línea.
 
 -- ============ USERS ============
 -- Reemplaza auth.users + profiles de Supabase.
@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS doctors (
   created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY doctors_full_name_idx (full_name),
+  KEY doctors_status_name_idx (status, full_name),
   CONSTRAINT doctors_created_by_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT doctors_pct_max_20 CHECK (default_commission_pct >= 0 AND default_commission_pct <= 20)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -94,5 +95,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   `timestamp` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY audit_logs_table_record_idx (table_name, record_id),
-  KEY audit_logs_timestamp_idx (`timestamp`)
+  KEY audit_logs_timestamp_idx (`timestamp`),
+  KEY audit_logs_user_idx (user_id, `timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

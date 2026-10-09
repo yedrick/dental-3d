@@ -1,106 +1,151 @@
-# API Dental-3D (Node + Express + MySQL)
+# API Dental-3D (Node + Express + MySQL + tenancy-node)
 
-Backend propio que reemplaza a Supabase. Se migra **por fases**.
+Backend propio que reemplaza a Supabase, **multi-sucursal** con [tenancy-node](https://github.com/yedrick/tenat-node) v0.8.0:
 
-| Fase | Contenido | Estado |
-|---|---|---|
-| 1 | Login JWT, usuarios, roles y permisos, parámetros, Doctores, auditoría | ✅ Hecho |
-| 2 | Pacientes, Estudios y tarifas, Atenciones (precio automático), Comisiones | Pendiente |
-| 3 | Caja chica, Depósitos, Pagos a terceros, Citas, Notificaciones | Pendiente |
-| 4 | Reportes, Auditoría (vista), Usuarios/Roles (admin), migración de datos desde Supabase | Pendiente |
-| 5 | Cambiar el frontend (`src/`) para consumir esta API en lugar de Supabase | Pendiente |
-| 6 | Eliminar todo lo relacionado con Lovable y Supabase | Pendiente |
+- Cada **sucursal es un tenant** y tiene su **propia base MySQL** (`dental_<sucursal>`), con un **usuario MySQL propio** que solo puede entrar a esa base.
+- La sucursal se identifica por **subdominio**: `sur.dental3d.com` → sucursal `sur`. En local: `sur.localhost:4000`.
+- Caché, archivos (logo) y logs van **aislados por sucursal**.
 
-Detalle completo en [PLAN.md](PLAN.md).
-
-Mientras el frontend no se cambie (fase 5), la app publicada en Lovable sigue usando Supabase.
+Fases y pendientes: [PLAN.md](PLAN.md).
 
 ## Requisitos
 
 - Node.js 20+
 - MySQL 8.0.13+ (usa `DEFAULT (UUID())`)
+- Docker (opcional, para el MySQL local)
 
-## Puesta en marcha
+## Puesta en marcha (local)
 
 ```sh
 cd server
-npm install
-cp .env.example .env          # y cambia JWT_SECRET y las credenciales
+npm install                   # instala tenancy-node desde GitHub Releases
+cp .env.example .env
+npx tenancy key:generate      # pega el resultado en TENANCY_KEY
+# y pon un JWT_SECRET de 32+ caracteres
 
-# MySQL local con Docker (puerto 3307):
+# MySQL local (puerto 3307)
 docker run -d --name dental3d-mysql \
-  -e MYSQL_ROOT_PASSWORD=root_dev_password -e MYSQL_DATABASE=dental3d \
-  -e MYSQL_USER=dental -e MYSQL_PASSWORD=dental_dev_password \
+  -e MYSQL_ROOT_PASSWORD=root_dev_password -e MYSQL_DATABASE=dental3d_central \
   -p 3307:3306 mysql:8.4
 # (o: docker compose up -d)
 
-npm run db:migrate            # crea tablas y datos iniciales (se puede repetir)
-npm run dev                   # http://localhost:4000
+npm run db:install            # tablas tenancy_* en la base central
+npm run tenant:create -- central --name="3D Dental Central"   # crea dental_central + migraciones
+npm run tenant:create -- sur --name="3D Dental Sur"
+ADMIN_PASSWORD='Admin123!xyz' npm run tenant:create-admin -- central admin@clinica.com admin "Nombre Apellido"
+
+npm run dev                   # http://central.localhost:4000 , http://sur.localhost:4000
 ```
 
-El primer usuario que se registre queda como ADMIN aprobado. También se puede crear uno desde la terminal:
+Los navegadores y `curl` resuelven `*.localhost` a `127.0.0.1` sin configurar nada.
 
-```sh
-npm run db:create-admin -- admin@clinica.com admin "Nombre Apellido" 'Contraseña123!'
-```
+## Comandos
 
-Producción: `npm run build && npm start`.
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` / `build` / `start` | Desarrollo con recarga / compilar / producción |
+| `npm run db:install` | Tablas `tenancy_*` en la base central (idempotente) |
+| `npm run db:migrate` | Aplica las migraciones pendientes de `db/tenant/` en **todas** las sucursales |
+| `npm run tenant:create -- <id> --name="..."` | Crea una sucursal: base, usuario MySQL y migraciones |
+| `npm run tenant:list` | Lista las sucursales |
+| `npm run tenant:create-admin -- <id> <email> <usuario> "<nombre>"` | Crea o asciende el ADMIN de una sucursal (contraseña en `ADMIN_PASSWORD`) |
+| `npx tenancy --help` | Toda la CLI de tenancy-node: `migrate:status`, `rollback`, `delete`, `move`, etc. |
+
+**Cambios de base de datos:** se agrega un archivo nuevo en `db/tenant/` (`003_algo.sql`, ...) y se corre `npm run db:migrate`. Nunca se edita una migración ya aplicada.
 
 ## Estructura
 
 ```
 server/
-├── db/
-│   ├── schema.sql          tablas MySQL
-│   └── seed.sql            permisos, permisos por rol y parámetros
+├── tenancy.config.ts        config que lee la CLI (npx tenancy)
+├── db/tenant/               migraciones de la base de CADA sucursal
+│   ├── 001_schema.sql       tablas e índices
+│   └── 002_seed.sql         permisos, permisos por rol y parámetros
 └── src/
-    ├── index.ts            arranca el servidor
-    ├── app.ts              Express: middlewares y rutas
-    ├── config.ts           variables de entorno
-    ├── db.ts               pool MySQL + withTransaction()
+    ├── index.ts             arranque y apagado ordenado
+    ├── app.ts               Express: seguridad, compresión, tenancy, rutas
+    ├── config.ts            variables de entorno
+    ├── db.ts                consultas y transacciones en la base de la sucursal actual
+    ├── tenancy/             configuración e instancia de tenancy-node
     ├── middleware/
-    │   ├── auth.ts         requireAuth (JWT), requirePermission, requireRole
-    │   └── error.ts        errores en español (validación, MySQL, 404)
-    ├── lib/
-    │   ├── audit.ts        escribe en audit_logs
-    │   └── permissions.ts  roles y permisos del usuario
-    ├── routes/
-    │   ├── auth.routes.ts
-    │   └── doctors.routes.ts
-    └── scripts/            migrate.ts, create-admin.ts
+    │   ├── auth.ts          requireTenant, requireAuth (JWT ligado a la sucursal), permisos
+    │   ├── rate-limit.ts    límites de intentos (login, registro, contraseña)
+    │   └── error.ts         errores { error: { code, message } } en español
+    ├── lib/                 audit, cache, permissions, http-error
+    ├── routes/              auth, doctors, branding
+    └── scripts/             create-admin.ts
 ```
 
 ## Endpoints
 
-Todas las rutas, salvo `register`, `login` y `health`, requieren el header `Authorization: Bearer <token>`.
-Los errores siempre vuelven como `{ "error": "mensaje" }` (y `details` en errores de validación).
+Todas las rutas `/api/*` (salvo `/api/health`) se llaman **desde el subdominio de la sucursal**. Las que llevan 🔒 requieren `Authorization: Bearer <token>`.
+
+Los errores siempre tienen la misma forma (igual que tenancy-node):
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "Datos inválidos", "details": [ ... ] } }
+```
+
+### Públicas (tenancy-node)
+
+| Método | Ruta | Qué devuelve |
+|---|---|---|
+| GET | `/tenancy/me` | Nombre, dirección y teléfono de la sucursal, y su tema (colores y URL del logo) |
+| GET | `/tenancy/theme.css` | Variables CSS: `--color-primary`, `--color-secondary`, `--radius`, ... |
+| GET | `/tenancy/assets/branding/...` | El logo de la sucursal |
+| GET | `/api/health` | `{ ok }`, sin detalles internos (para el balanceador) |
 
 ### Autenticación
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/auth/register` | `{ email, password, username, full_name }`. Contraseña: 10+ caracteres, mayúscula, minúscula, número y símbolo |
-| POST | `/api/auth/login` | `{ login, password }` (`login` = email o usuario) → `{ token }` |
-| GET | `/api/auth/me` | Perfil, roles y permisos del usuario actual |
-| POST | `/api/auth/change-password` | `{ current_password, new_password }` |
+| POST | `/api/auth/register` | `{ email, password, username, full_name }`. Queda como RECEPCION **pendiente de aprobación**. Máximo 5 por hora por IP |
+| POST | `/api/auth/login` | `{ login, password }` (email o usuario) → `{ token }`. Máximo 10 intentos cada 15 min por IP y sucursal |
+| GET 🔒 | `/api/auth/me` | Perfil, roles, permisos y sucursal |
+| POST 🔒 | `/api/auth/change-password` | `{ current_password, new_password }` |
 
-### Doctores
+El token **solo sirve en la sucursal que lo emitió**.
+
+### Doctores 🔒
 
 | Método | Ruta | Permiso |
 |---|---|---|
-| GET | `/api/doctors?q=texto&status=true` | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, AUDITOR |
+| GET | `/api/doctors` (lista completa, en caché, header `X-Cache`) | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, AUDITOR |
+| GET | `/api/doctors?q=texto&status=true` (búsqueda, sin caché) | ídem |
 | GET | `/api/doctors/:id` | ídem |
 | POST | `/api/doctors` | `doctors.create` |
-| PATCH | `/api/doctors/:id` | `doctors.edit` (acepta campos parciales, p. ej. `{ "status": false }`) |
+| PATCH | `/api/doctors/:id` (parcial, p. ej. `{ "status": false }`) | `doctors.edit` |
 | DELETE | `/api/doctors/:id` | `doctors.delete` |
 
-Campos: `full_name` (obligatorio), `clinic_address`, `phone`, `email`, `bank_account`, `status`,
-`use_percentage`, `default_commission_pct` (0–20), `agreement_discount_pct` (0–100).
+### Marca de la sucursal 🔒 (permiso `branding.edit`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| PATCH | `/api/branding` | `{ name?, address?, phone?, theme?: { primary, secondary, accent, background, text, font, radius, mode } }` |
+| PUT | `/api/branding/logo` | Cuerpo binario `image/png`, `image/jpeg` o `image/webp`, máximo 1 MB. **No acepta SVG** |
+| DELETE | `/api/branding/logo` | Quita el logo |
+
+Ejemplo:
+
+```sh
+curl -X PUT http://sur.localhost:4000/api/branding/logo \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: image/png" --data-binary @logo.png
+```
+
+## Seguridad (resumen)
+
+- Una base y un usuario MySQL por sucursal (`credentials: 'per-tenant'`). Las credenciales se guardan cifradas con `TENANCY_KEY`.
+- JWT HS256 con la sucursal en el token (`tid`). Se verifica en cada petición.
+- Usuario desactivado o cambio de roles: efecto en ≤ 60 s, y al instante cuando se haga desde los endpoints de usuarios (Fase 4).
+- Contraseñas con bcrypt (12 rondas) y respuesta de login sin revelar si el usuario existe.
+- Límites de intentos por IP y sucursal, `helmet`, CORS restringido y límites de tamaño del cuerpo.
+- Logo: se valida el contenido real del archivo, no solo el `Content-Type`. Sin SVG.
+- Todo cambio queda en `audit_logs` de la sucursal.
+- Respuestas con datos: `Cache-Control: private, no-cache`.
 
 ## Diferencias con Supabase
 
-- **Seguridad:** las reglas RLS de PostgreSQL ahora son middlewares de Express (`requirePermission` / `requireRole`). ADMIN tiene todos los permisos.
-- **Auditoría:** MySQL no sabe qué usuario de la app hace cada cambio, así que la API escribe `audit_logs` dentro de la misma transacción del cambio, en vez de usar un trigger.
-- **Usuarios:** `auth.users` + `profiles` se unen en una sola tabla `users` con `password_hash` (bcrypt).
-- **Sesión:** el JWT dura `JWT_EXPIRES_IN` (8h por defecto). Roles, estado activo y aprobación se revisan en cada petición, así que desactivar a un usuario o quitarle un rol tiene efecto inmediato.
-- **Pendiente:** recuperar contraseña por email (necesita un servicio SMTP).
+- Las políticas RLS ahora son middlewares (`requirePermission` / `requireRole`). ADMIN tiene todos los permisos.
+- La auditoría la escribe la API dentro de la misma transacción de cada cambio, no un trigger.
+- `auth.users` + `profiles` se unen en una sola tabla `users`, dentro de la base de cada sucursal.
+- **Pendiente:** recuperar contraseña por email (necesita un servicio de correo).

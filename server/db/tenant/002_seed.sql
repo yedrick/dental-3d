@@ -1,5 +1,6 @@
--- Datos iniciales: catálogo de permisos, permisos por rol y parámetros.
--- Reproduce el estado final de supabase/migrations. Se puede ejecutar varias veces (INSERT IGNORE).
+-- Datos de referencia de cada tenant: catálogo de permisos, permisos por rol y parámetros.
+-- Va como migración (no como seed) para que los permisos nuevos lleguen a todas las
+-- sucursales con `npx tenancy migrate`. Reproduce el estado final de supabase/migrations.
 -- ADMIN no necesita filas aquí: la API le concede todos los permisos.
 
 INSERT IGNORE INTO permissions (`key`, description, category) VALUES
@@ -47,7 +48,8 @@ INSERT IGNORE INTO permissions (`key`, description, category) VALUES
   ('users.impersonate','Iniciar sesión como otro usuario','admin'),
   ('users.manage_roles','Asignar roles a usuarios','admin'),
   ('roles.manage_permissions','Modificar permisos de roles','admin'),
-  ('params.edit','Modificar parámetros del sistema','admin');
+  ('params.edit','Modificar parámetros del sistema','admin'),
+  ('branding.edit','Cambiar nombre, logo y colores de la sucursal','admin');
 
 INSERT IGNORE INTO role_permissions (role, permission_key) VALUES
   ('RECEPCION','view.dashboard'),('RECEPCION','view.doctors'),('RECEPCION','view.patients'),

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import type { RowDataPacket } from "mysql2";
 import { z } from "zod";
-import { pool, withTransaction, type Conn } from "../db.js";
+import { db, withTransaction, type Db } from "../db.js";
 import { audit } from "../lib/audit.js";
+import { cache, CacheKeys, CacheTtl, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
 
@@ -30,8 +30,8 @@ const doctorSchema = z.object({
 
 const COLUMNS = Object.keys(doctorSchema.shape) as (keyof typeof doctorSchema.shape)[];
 
-async function findDoctor(conn: Conn | typeof pool, id: string) {
-  const [rows] = await conn.query<RowDataPacket[]>("SELECT * FROM doctors WHERE id = ?", [id]);
+async function findDoctor(q: Db, id: string) {
+  const rows = await q.query("SELECT * FROM doctors WHERE id = ?", [id]);
   return rows[0] ?? null;
 }
 
@@ -41,6 +41,18 @@ const canRead = requireRole("ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILI
 doctorsRouter.get("/", canRead, async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const status = req.query.status;
+
+  // La lista completa se cachea (la usan varias pantallas); las búsquedas van directo a MySQL
+  if (!q && status === undefined) {
+    let hit = true;
+    const rows = await cache().remember(CacheKeys.doctorsList, CacheTtl.doctorsList, () => {
+      hit = false;
+      return db().query("SELECT * FROM doctors ORDER BY full_name");
+    });
+    res.setHeader("X-Cache", hit ? "HIT" : "MISS");
+    return res.json(rows);
+  }
+
   const where: string[] = [];
   const params: unknown[] = [];
   if (q) {
@@ -51,7 +63,7 @@ doctorsRouter.get("/", canRead, async (req, res) => {
     where.push("status = ?");
     params.push(status === "true");
   }
-  const [rows] = await pool.query<RowDataPacket[]>(
+  const rows = await db().query(
     `SELECT * FROM doctors ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY full_name`,
     params,
   );
@@ -59,25 +71,24 @@ doctorsRouter.get("/", canRead, async (req, res) => {
 });
 
 doctorsRouter.get("/:id", canRead, async (req, res) => {
-  const id = String(req.params.id);
-  const doctor = await findDoctor(pool, id);
+  const doctor = await findDoctor(db(), String(req.params.id));
   if (!doctor) throw new HttpError(404, "Doctor no encontrado");
   res.json(doctor);
 });
 
 doctorsRouter.post("/", requirePermission("doctors.create"), async (req, res) => {
   const data = doctorSchema.parse(req.body);
-  const doctor = await withTransaction(async (conn) => {
-    const [idRow] = await conn.query<RowDataPacket[]>("SELECT UUID() AS id");
-    const id = idRow[0].id as string;
-    await conn.query(
+  const doctor = await withTransaction(async (tx) => {
+    const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
+    await tx.query(
       `INSERT INTO doctors (id, ${COLUMNS.join(", ")}, created_by) VALUES (?, ${COLUMNS.map(() => "?").join(", ")}, ?)`,
       [id, ...COLUMNS.map((c) => data[c]), req.user!.id],
     );
-    const created = await findDoctor(conn, id);
-    await audit(conn, req.user!.id, "INSERT", "doctors", id, created);
+    const created = await findDoctor(tx, id);
+    await audit(tx, req.user!.id, "INSERT", "doctors", id, created);
     return created;
   });
+  await invalidate(CacheKeys.doctorsList);
   res.status(201).json(doctor);
 });
 
@@ -88,26 +99,28 @@ doctorsRouter.patch("/:id", requirePermission("doctors.edit"), async (req, res) 
   const fields = COLUMNS.filter((c) => req.body?.[c] !== undefined);
   if (fields.length === 0) throw new HttpError(400, "No hay campos para actualizar");
 
-  const doctor = await withTransaction(async (conn) => {
-    if (!(await findDoctor(conn, id))) throw new HttpError(404, "Doctor no encontrado");
-    await conn.query(`UPDATE doctors SET ${fields.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [
+  const doctor = await withTransaction(async (tx) => {
+    if (!(await findDoctor(tx, id))) throw new HttpError(404, "Doctor no encontrado");
+    await tx.query(`UPDATE doctors SET ${fields.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [
       ...fields.map((c) => data[c]),
       id,
     ]);
-    const updated = await findDoctor(conn, id);
-    await audit(conn, req.user!.id, "UPDATE", "doctors", id, updated);
+    const updated = await findDoctor(tx, id);
+    await audit(tx, req.user!.id, "UPDATE", "doctors", id, updated);
     return updated;
   });
+  await invalidate(CacheKeys.doctorsList);
   res.json(doctor);
 });
 
 doctorsRouter.delete("/:id", requirePermission("doctors.delete"), async (req, res) => {
   const id = String(req.params.id);
-  await withTransaction(async (conn) => {
-    const existing = await findDoctor(conn, id);
+  await withTransaction(async (tx) => {
+    const existing = await findDoctor(tx, id);
     if (!existing) throw new HttpError(404, "Doctor no encontrado");
-    await conn.query("DELETE FROM doctors WHERE id = ?", [id]);
-    await audit(conn, req.user!.id, "DELETE", "doctors", id, existing);
+    await tx.query("DELETE FROM doctors WHERE id = ?", [id]);
+    await audit(tx, req.user!.id, "DELETE", "doctors", id, existing);
   });
+  await invalidate(CacheKeys.doctorsList);
   res.status(204).end();
 });

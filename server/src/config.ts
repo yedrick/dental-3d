@@ -6,18 +6,31 @@ function required(name: string): string {
   return v;
 }
 
+function list(value: string | undefined): string[] {
+  return (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  corsOrigin: (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-  db: {
-    host: process.env.DB_HOST ?? "127.0.0.1",
-    port: Number(process.env.DB_PORT ?? 3306),
-    user: required("DB_USER"),
-    password: required("DB_PASSWORD"),
-    database: required("DB_NAME"),
+  corsOrigin: list(process.env.CORS_ORIGIN),
+  // Saltos de proxy de confianza para leer la IP real (rate limit). 0 = tráfico directo.
+  trustProxy: Number(process.env.TRUST_PROXY ?? 0),
+  tenancy: {
+    // Base central de tenancy-node (tablas tenancy_*). El usuario necesita CREATE DATABASE,
+    // CREATE USER y GRANT OPTION para crear la base y el usuario de cada sucursal.
+    databaseUrl: required("DATABASE_URL"),
+    // Llave AES-256-GCM: cifra la contraseña del usuario MySQL de cada sucursal.
+    encryptionKey: required("TENANCY_KEY"),
+    // Dominios que nunca son una sucursal; las sucursales son subdominios de estos.
+    centralDomains: list(process.env.CENTRAL_DOMAINS ?? "localhost"),
+    storageDir: process.env.STORAGE_DIR ?? "./storage",
   },
   jwt: {
     secret: required("JWT_SECRET"),
     expiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
   },
 };
+
+if (config.jwt.secret.length < 32) {
+  throw new Error("JWT_SECRET debe tener al menos 32 caracteres");
+}

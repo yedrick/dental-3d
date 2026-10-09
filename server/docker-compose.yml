@@ -1,13 +1,13 @@
 # MySQL local para desarrollo: docker compose up -d
+# La API usa root solo en desarrollo, para que tenancy-node pueda crear la base y el
+# usuario de cada sucursal. En producción usa un usuario dedicado (ver PLAN.md).
 services:
   mysql:
     image: mysql:8.4
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root_dev_password
-      MYSQL_DATABASE: dental3d
-      MYSQL_USER: dental
-      MYSQL_PASSWORD: dental_dev_password
+      MYSQL_DATABASE: dental3d_central
     ports:
       - "3307:3306"
     volumes:
