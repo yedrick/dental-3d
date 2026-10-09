@@ -1,13 +1,13 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api";
+import { useBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
 import {
   Activity, ShieldCheck, Clock, MapPin, Phone, MessageCircle,
   ScanLine, Sparkles, ArrowRight, CheckCircle2, Loader2,
 } from "lucide-react";
-import logoAsset from "@/assets/logo-3d.png.asset.json";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -57,11 +57,17 @@ const CONTACT = {
 
 function Landing() {
   const { user, loading } = useAuth();
+  const branding = useBranding();
+  const logoAsset = { url: branding.logo };
+  // Estudios activos de la sucursal (sin precios). En el dominio central no hay sucursal: la sección queda vacía.
   const { data: studies, isLoading: sLoading } = useQuery({
     queryKey: ["public-studies"],
     queryFn: async () => {
-      const { data } = await supabase.from("studies").select("id,name,description").eq("active", true).order("name");
-      return data ?? [];
+      try {
+        return await apiGet<{ id: string; name: string; description: string | null }[]>("/api/public/studies");
+      } catch {
+        return [];
+      }
     },
   });
 

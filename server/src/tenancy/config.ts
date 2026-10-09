@@ -22,7 +22,7 @@ export const tenancyConfig = defineConfig({
     cacheControl: "public, max-age=60",
   },
   publicFields: ["name", "address", "phone"],
-  theme: { defaults: { primary: "#0E7490", secondary: "#64748B", radius: "md" } },
+  theme: { defaults: { primary: "#0F172A", secondary: "#64748B", radius: "md" } }, // #0F172A = color actual de la app
   plugins: [
     database({
       driver: mysql(),

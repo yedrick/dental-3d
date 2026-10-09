@@ -2,7 +2,7 @@ import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
+import { apiPatch, apiPost } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +16,14 @@ export const Route = createFileRoute("/app/profile")({
 });
 
 function ProfilePage() {
-  const { user, roles } = useAuth();
+  const { user, roles, setSessionToken, reloadPermissions } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
 
+  const [currentPw, setCurrentPw] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -30,23 +31,18 @@ function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    (async () => {
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-      setFullName(data?.full_name ?? "");
-      setUsername(data?.username ?? "");
-      setEmail(data?.email ?? user.email ?? "");
-      setLoading(false);
-    })();
+    setFullName(user.full_name ?? "");
+    setUsername(user.username ?? "");
+    setEmail(user.email ?? "");
+    setLoading(false);
   }, [user?.id]);
 
   const saveProfile = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from("profiles").update({
-        full_name: fullName, username,
-      }).eq("id", user.id);
-      if (error) throw error;
+      await apiPatch("/api/auth/me", { full_name: fullName, username });
+      await reloadPermissions();
       toast.success("Perfil actualizado");
     } catch (e: any) {
       toast.error(translateError(e) || "Error al guardar");
@@ -54,14 +50,16 @@ function ProfilePage() {
   };
 
   const changePassword = async () => {
-    if (pw.length < 8) return toast.error("La contraseña debe tener al menos 8 caracteres");
+    if (!currentPw) return toast.error("Ingresa tu contraseña actual");
+    if (pw.length < 10) return toast.error("La contraseña debe tener al menos 10 caracteres, mayúscula, minúscula, número y símbolo");
     if (pw !== pw2) return toast.error("Las contraseñas no coinciden");
     setSavingPw(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: pw });
-      if (error) throw error;
-      setPw(""); setPw2("");
-      toast.success("Contraseña actualizada");
+      // La API cierra tus otras sesiones y devuelve un token nuevo para esta
+      const { token } = await apiPost<{ token: string }>("/api/auth/change-password", { current_password: currentPw, new_password: pw });
+      await setSessionToken(token);
+      setCurrentPw(""); setPw(""); setPw2("");
+      toast.success("Contraseña actualizada. Se cerraron tus sesiones en otros dispositivos.");
     } catch (e: any) {
       toast.error(translateError(e) || "Error al cambiar contraseña");
     } finally { setSavingPw(false); }
@@ -110,9 +108,13 @@ function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Cambiar contraseña</CardTitle>
-          <CardDescription>Mínimo 8 caracteres</CardDescription>
+          <CardDescription>Mínimo 10 caracteres, con mayúscula, minúscula, número y símbolo. Se cerrarán tus sesiones en otros dispositivos.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Contraseña actual</Label>
+            <Input type={showPw ? "text" : "password"} value={currentPw} autoComplete="current-password" onChange={e => setCurrentPw(e.target.value)} />
+          </div>
           <div className="space-y-2">
             <Label>Nueva contraseña</Label>
             <div className="relative">

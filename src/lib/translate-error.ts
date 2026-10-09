@@ -1,5 +1,12 @@
-// Traduce mensajes de error comunes (Supabase / Postgres / red) al español.
+import { ApiError } from "./api";
+
+// Mensaje para mostrar al usuario. Los errores de la API ya vienen en español; si traen
+// detalles de validación, se muestra el primero. El resto (red, librerías) se traduce aquí.
 export function translateError(input: unknown): string {
+  if (input instanceof ApiError) {
+    const first = input.details?.[0];
+    return first ? `${input.message}: ${first.message}${first.field ? ` (${first.field})` : ""}` : input.message;
+  }
   const raw =
     typeof input === "string"
       ? input

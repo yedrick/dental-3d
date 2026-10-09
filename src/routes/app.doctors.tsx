@@ -1,10 +1,10 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useList } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,17 @@ type DForm = { id?: string; full_name: string; clinic_address: string; phone: st
 const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", use_percentage: false, default_commission_pct: 0, agreement_discount_pct: 0, status: true };
 
 function DoctorsPage() {
-  const { user, hasAny, can } = useAuth();
-  const canCreate = hasAny(["ADMIN", "RECEPCION"]);
-  const canEdit = can("doctors.edit") || hasAny(["ADMIN"]);
-  const canDelete = can("doctors.delete") || hasAny(["ADMIN"]);
+  const { can } = useAuth();
+  // Los permisos los controla la API; aquí solo se ocultan los botones
+  const canCreate = can("doctors.create");
+  const canEdit = can("doctors.edit");
+  const canDelete = can("doctors.delete");
   const qc = useQueryClient();
-  const { data = [], isLoading } = useList<any>("doctors");
+  const { data = [], isLoading } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
   const [q, setQ] = useState("");
   const [form, setForm] = useState<DForm>(empty);
   const [open, setOpen] = useState(false);
@@ -47,32 +52,40 @@ function DoctorsPage() {
 
   const save = async () => {
     if (!form.full_name) return toast.error("Nombre requerido");
-    const payload: any = { ...form };
-    delete payload.id;
-    if (form.id) {
-      const { error } = await supabase.from("doctors").update(payload).eq("id", form.id);
-      if (error) return toast.error(translateError(error));
-      toast.success("Doctor actualizado");
-    } else {
-      payload.created_by = user!.id;
-      const { error } = await supabase.from("doctors").insert(payload);
-      if (error) return toast.error(translateError(error));
-      toast.success("Doctor registrado");
+    const { id, ...payload } = form;
+    try {
+      if (id) {
+        await apiPatch(`/api/doctors/${id}`, payload);
+        toast.success("Doctor actualizado");
+      } else {
+        // created_by lo pone la API con el usuario de la sesión
+        await apiPost("/api/doctors", payload);
+        toast.success("Doctor registrado");
+      }
+    } catch (e) {
+      return toast.error(translateError(e));
     }
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
   const del = async (d: any) => {
-    if (!confirm(`¿Eliminar doctor "${d.full_name}"? Los pacientes vinculados quedarán sin doctor y podría fallar si tiene registros históricos.`)) return;
-    const { error } = await supabase.from("doctors").delete().eq("id", d.id);
-    if (error) return toast.error("No se puede eliminar: " + translateError(error));
+    if (!confirm(`¿Eliminar doctor "${d.full_name}"? Si tiene pacientes o atenciones no se podrá eliminar: desactívalo en su lugar.`)) return;
+    try {
+      await apiDelete(`/api/doctors/${d.id}`);
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Doctor eliminado");
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
   const toggle = async (d: any, v: boolean) => {
-    await supabase.from("doctors").update({ status: v }).eq("id", d.id);
+    try {
+      await apiPatch(`/api/doctors/${d.id}`, { status: v });
+    } catch (e) {
+      toast.error(translateError(e));
+    }
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
