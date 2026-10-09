@@ -28,6 +28,8 @@ export const config = {
     // Dominios que nunca son una sucursal; las sucursales son subdominios de estos.
     centralDomains: list(process.env.CENTRAL_DOMAINS ?? "localhost"),
     storageDir: process.env.STORAGE_DIR ?? "./storage",
+    // Caché compartida en Redis (recomendado en producción). Vacío = caché en memoria del proceso.
+    redisUrl: process.env.REDIS_URL || undefined,
   },
   // Panel de la plataforma de tenancy-node (dominio central /admin): crear sucursales, tema,
   // suspender, auditoría y "Entrar como…". Vacío = panel apagado.

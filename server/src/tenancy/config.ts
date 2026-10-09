@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, LocalStorage } from "@tenancy-node/core";
 import { database } from "@tenancy-node/db";
 import { mysql } from "@tenancy-node/db-mysql";
+import { redis, redisInvalidation } from "@tenancy-node/cache-redis";
 import { config } from "../config.js";
 import { seedTenant } from "./seed.js";
 
@@ -23,6 +24,14 @@ export const tenancyConfig = defineConfig({
     cacheControl: "public, max-age=60",
   },
   publicFields: ["name", "address", "phone"],
+  // Caché por sucursal (tenant:<id>:…) en Redis si hay REDIS_URL; si no, en memoria. Con Redis,
+  // los cambios de sucursales y dominios también llegan al instante a todas las réplicas.
+  ...(config.tenancy.redisUrl
+    ? {
+        cache: redis({ url: config.tenancy.redisUrl, keyPrefix: "dental3d:" }),
+        invalidation: redisInvalidation({ url: config.tenancy.redisUrl }),
+      }
+    : {}),
   theme: { defaults: { primary: "#0F172A", secondary: "#64748B", radius: "md" } }, // #0F172A = color actual de la app
   plugins: [
     database({

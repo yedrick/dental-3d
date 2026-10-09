@@ -21,6 +21,7 @@
     "@tenancy-node/adapter-express": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-adapter-express-0.8.0.tgz",
     "@tenancy-node/admin-api": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-admin-api-0.8.0.tgz",
     "@tenancy-node/admin-ui": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-admin-ui-0.8.0.tgz",
+    "@tenancy-node/cache-redis": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-cache-redis-0.8.0.tgz",
     "@tenancy-node/cli": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-cli-0.8.0.tgz",
     "@tenancy-node/core": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-core-0.8.0.tgz",
     "@tenancy-node/db": "https://github.com/yedrick/tenat-node/releases/download/v0.8.0/tenancy-node-db-0.8.0.tgz",

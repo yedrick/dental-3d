@@ -18,6 +18,7 @@ En esta guía, `dental3d.com` es un ejemplo: reemplázalo por tu dominio en todo
 - **Node.js 20 o superior** (recomendado 22 LTS).
 - **MySQL 8.0.13 o superior** (recomendado 8.4).
 - nginx 1.25 o superior.
+- Redis 7 (recomendado: `apt install redis-server`, escuchando solo en `127.0.0.1`).
 - certbot con el plugin DNS de tu proveedor (para el certificado comodín).
 - Un dominio con dos registros DNS apuntando a la IP del servidor: `dental3d.com` y `*.dental3d.com`.
 - Firewall: abrir solo los puertos 22, 80 y 443. **MySQL no debe quedar expuesto.**
@@ -84,6 +85,7 @@ Edita `server/.env`:
 | `TENANCY_KEY` | generada con `npx tenancy key:generate`. **Guárdala también fuera del servidor** (gestor de secretos): sin ella no se pueden abrir las bases de las sucursales |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `STORAGE_DIR` / `PRIVATE_STORAGE_DIR` | `./storage` / `./storage-private` |
+| `REDIS_URL` | `redis://127.0.0.1:6379`: caché compartida por sucursal (sesiones, catálogos, página web, reportes) |
 | `TENANCY_ADMIN_SECRET` | `openssl rand -base64 48`: enciende el **panel de la plataforma** en `https://dental3d.com/admin/` |
 | `ADMIN_SECURE_COOKIES` | `true` |
 | `TENANT_PUBLIC_URL` | `https://{tenant}.dental3d.com` ("Entrar como…" abre esta dirección) |

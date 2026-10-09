@@ -30,6 +30,7 @@ import { Route as AppPatientsRouteImport } from './routes/app.patients'
 import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppRolesRouteImport } from './routes/app.roles'
+import { Route as AppSiteRouteImport } from './routes/app.site'
 import { Route as AppStudiesRouteImport } from './routes/app.studies'
 import { Route as AppThirdPartyRouteImport } from './routes/app.third-party'
 import { Route as AppUsersRouteImport } from './routes/app.users'
@@ -141,6 +142,11 @@ const AppRolesRoute = AppRolesRouteImport.update({
   path: '/roles',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSiteRoute = AppSiteRouteImport.update({
+  id: '/site',
+  path: '/site',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppStudiesRoute = AppStudiesRouteImport.update({
   id: '/studies',
   path: '/studies',
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/site': typeof AppSiteRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/site': typeof AppSiteRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -244,6 +252,7 @@ export interface FileRoutesById {
   '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/site': typeof AppSiteRoute
   '/app/studies': typeof AppStudiesRoute
   '/app/third-party': typeof AppThirdPartyRoute
   '/app/users': typeof AppUsersRoute
@@ -274,6 +283,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
+    | '/app/site'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
+    | '/app/site'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reports'
     | '/app/roles'
+    | '/app/site'
     | '/app/studies'
     | '/app/third-party'
     | '/app/users'
@@ -495,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRolesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/site': {
+      id: '/app/site'
+      path: '/site'
+      fullPath: '/app/site'
+      preLoaderRoute: typeof AppSiteRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/studies': {
       id: '/app/studies'
       path: '/studies'
@@ -561,6 +580,7 @@ interface AppRouteChildren {
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
   AppRolesRoute: typeof AppRolesRoute
+  AppSiteRoute: typeof AppSiteRoute
   AppStudiesRoute: typeof AppStudiesRoute
   AppThirdPartyRoute: typeof AppThirdPartyRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -583,6 +603,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
   AppRolesRoute: AppRolesRoute,
+  AppSiteRoute: AppSiteRoute,
   AppStudiesRoute: AppStudiesRoute,
   AppThirdPartyRoute: AppThirdPartyRoute,
   AppUsersRoute: AppUsersRoute,

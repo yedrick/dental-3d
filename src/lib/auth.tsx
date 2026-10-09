@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiGet, apiPost, LOGOUT_EVENT, tokenStore } from "@/lib/api";
 
 export const ROLES = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"] as const;
@@ -47,6 +47,10 @@ const Ctx = createContext<AuthCtx | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Solo se avisa "tu sesión terminó" si había una sesión en uso; un token viejo guardado se
+  // descarta en silencio (por ejemplo, al abrir la portada pública).
+  const hadSession = useRef(false);
+  useEffect(() => { hadSession.current = me !== null; }, [me]);
 
   const load = useCallback(async () => {
     if (!tokenStore.get()) {
@@ -65,7 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     load().finally(() => setLoading(false));
     // La API avisa cuando la sesión venció o se cerró (contraseña nueva, rol cambiado…)
     const onLogout = async (e: Event) => {
+      const wasLoggedIn = hadSession.current;
       setMe(null);
+      if (!wasLoggedIn) return;
       const { toast } = await import("sonner");
       toast.error((e as CustomEvent<string>).detail || "Tu sesión terminó. Vuelve a iniciar sesión.");
     };
