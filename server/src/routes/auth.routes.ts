@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
+import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
 import { loadPermissions, loadRoles } from "../lib/permissions.js";
 import { requireAuth, signToken } from "../middleware/auth.js";
@@ -70,8 +71,8 @@ const DUMMY_HASH = bcrypt.hashSync("dummy-password-not-used", 12);
 
 authRouter.post("/login", loginLimiter, async (req, res) => {
   const { login, password } = loginSchema.parse(req.body);
-  const rows = await db().query<{ id: string; password_hash: string; active: boolean; approved: boolean }[]>(
-    "SELECT id, password_hash, active, approved FROM users WHERE email = ? OR username = ? LIMIT 1",
+  const rows = await db().query<{ id: string; password_hash: string; active: boolean; approved: boolean; token_version: number }[]>(
+    "SELECT id, password_hash, active, approved, token_version FROM users WHERE email = ? OR username = ? LIMIT 1",
     [login.toLowerCase(), login],
   );
   const u = rows[0];
@@ -80,7 +81,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   if (!u.active) throw new HttpError(403, "Tu usuario está desactivado", "USER_INACTIVE");
   if (!u.approved) throw new HttpError(403, "Tu cuenta aún no ha sido aprobada por un administrador.", "USER_NOT_APPROVED");
 
-  res.json({ token: signToken(u.id) });
+  res.json({ token: signToken(u.id, u.token_version) });
 });
 
 /** Datos de la sesión actual: perfil, roles, permisos y sucursal. */
@@ -95,6 +96,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     roles,
     permissions: await loadPermissions(roles),
     tenant: { id: req.tenant!.id.value, name: req.tenant!.name },
+    impersonated_by: req.user!.impersonatedBy ?? null,
   });
 });
 
@@ -112,9 +114,32 @@ authRouter.post("/change-password", sensitiveLimiter, requireAuth, async (req, r
     throw new HttpError(400, "La contraseña actual no es correcta", "INVALID_CREDENTIALS");
   }
   const hash = await bcrypt.hash(data.new_password, 12);
-  await withTransaction(async (tx) => {
-    await tx.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, req.user!.id]);
+  // Cierra todas las sesiones anteriores (token_version + 1) y entrega un token nuevo para esta
+  const version = await withTransaction(async (tx) => {
+    await tx.query("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?", [hash, req.user!.id]);
     await audit(tx, req.user!.id, "PASSWORD_CHANGE", "users", req.user!.id, null);
+    const [u] = await tx.query<{ token_version: number }[]>("SELECT token_version FROM users WHERE id = ?", [req.user!.id]);
+    return u.token_version;
   });
-  res.json({ ok: true });
+  await invalidate(CacheKeys.auth(req.user!.id));
+  res.json({ ok: true, token: signToken(req.user!.id, version) });
+});
+
+const profileSchema = z.object({
+  full_name: z.string().trim().min(1).max(200).optional(),
+  username: z.string().trim().min(1).max(100).optional(),
+});
+
+/** El usuario edita su propio nombre y usuario (el email y los roles los cambia un ADMIN). */
+authRouter.patch("/me", requireAuth, async (req, res) => {
+  const data = profileSchema.parse(req.body);
+  const fields = (["full_name", "username"] as const).filter((c) => data[c] !== undefined);
+  if (fields.length === 0) throw new HttpError(400, "No hay campos para actualizar");
+  const user = await withTransaction(async (tx) => {
+    await tx.query(`UPDATE users SET ${fields.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...fields.map((c) => data[c]), req.user!.id]);
+    const [u] = await tx.query("SELECT id, username, full_name, email, active, approved, created_at FROM users WHERE id = ?", [req.user!.id]);
+    await audit(tx, req.user!.id, "PROFILE_UPDATE", "users", req.user!.id, data);
+    return u;
+  });
+  res.json(user);
 });

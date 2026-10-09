@@ -49,6 +49,7 @@ Los navegadores y `curl` resuelven `*.localhost` a `127.0.0.1` sin configurar na
 | `npm run tenant:create -- <id> --name="..."` | Crea una sucursal: base, usuario MySQL y migraciones |
 | `npm run tenant:list` | Lista las sucursales |
 | `npm run tenant:create-admin -- <id> <email> <usuario> "<nombre>"` | Crea o asciende el ADMIN de una sucursal (contraseña en `ADMIN_PASSWORD`) |
+| `npm run tenant:import-supabase -- <id> [--dry-run]` | Copia los datos de Supabase a una sucursal nueva (ver [Copiar datos desde Supabase](#copiar-datos-desde-supabase)) |
 | `npx tenancy --help` | Toda la CLI de tenancy-node: `migrate:status`, `rollback`, `delete`, `move`, etc. |
 
 **Cambios de base de datos:** se agrega un archivo nuevo en `db/tenant/` (`003_algo.sql`, ...) y se corre `npm run db:migrate`. Nunca se edita una migración ya aplicada.
@@ -62,7 +63,8 @@ server/
 │   ├── 001_schema.sql       usuarios, roles, permisos, doctores, auditoría
 │   ├── 002_seed.sql         permisos, permisos por rol y parámetros
 │   ├── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
-│   └── 004_finanzas.sql     caja chica, depósitos, pagos a terceros, citas, notificaciones
+│   ├── 004_finanzas.sql     caja chica, depósitos, pagos a terceros, citas, notificaciones
+│   └── 005_admin.sql        versión de sesión de usuarios, índice de auditoría
 └── src/
     ├── index.ts             arranque y apagado ordenado
     ├── app.ts               Express: seguridad, compresión, tenancy, rutas
@@ -78,8 +80,9 @@ server/
     │   └── attentions.ts    precio, recargo, descuento y comisión (antes triggers)
     ├── routes/              auth, doctors, patients, studies, attentions, commissions, cashbox,
     │                        finance (depósitos y pagos a terceros), receipts, appointments,
-    │                        notifications, branding
-    └── scripts/             create-admin.ts
+    │                        notifications, users, roles, params, audit, reports (dashboard), branding
+    └── scripts/             create-admin.ts, import-supabase.ts
+test/fixtures/               base de ejemplo con estructura de Supabase (para probar la importación)
 ```
 
 ## Endpoints
@@ -107,10 +110,11 @@ Los errores siempre tienen la misma forma (igual que tenancy-node):
 |---|---|---|
 | POST | `/api/auth/register` | `{ email, password, username, full_name }`. Queda como RECEPCION **pendiente de aprobación**. Máximo 5 por hora por IP |
 | POST | `/api/auth/login` | `{ login, password }` (email o usuario) → `{ token }`. Máximo 10 intentos cada 15 min por IP y sucursal |
-| GET 🔒 | `/api/auth/me` | Perfil, roles, permisos y sucursal |
-| POST 🔒 | `/api/auth/change-password` | `{ current_password, new_password }` |
+| GET 🔒 | `/api/auth/me` | Perfil, roles, permisos, sucursal e `impersonated_by` |
+| PATCH 🔒 | `/api/auth/me` | `{ full_name?, username? }`: el usuario edita su propio perfil |
+| POST 🔒 | `/api/auth/change-password` | `{ current_password, new_password }` → `{ token }` nuevo; **cierra las demás sesiones** |
 
-El token **solo sirve en la sucursal que lo emitió**.
+El token **solo sirve en la sucursal que lo emitió**. Además lleva la versión de sesión del usuario: al cambiar su contraseña, desactivarlo, desaprobarlo o cambiar sus roles, **todas sus sesiones se cierran** (`SESSION_REVOKED`).
 
 ### Doctores 🔒
 
@@ -261,6 +265,61 @@ Aquí `from`/`to` filtran por la fecha del depósito o del pago (columnas DATE, 
 | GET | `/api/notifications/recipients` (usuarios activos) · `/api/notifications/sent` | `notifications.send` |
 | POST | `/api/notifications` `{ title, body, target: "all" \| [userIds] }` | `notifications.send` |
 
+### Usuarios 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/users?q=&approved=&role=` · `/api/users/:id` | `view.users` |
+| POST | `/api/users` `{ email, username, full_name, password, roles: [...] }` (queda aprobado) | `users.create` |
+| PATCH | `/api/users/:id` `{ email?, username?, full_name?, password?, active? }` | `users.edit` |
+| POST | `/api/users/:id/approve` `{ approved }` | `users.approve` |
+| PUT | `/api/users/:id/roles` `{ roles: [...] }` | `users.manage_roles` |
+| DELETE | `/api/users/:id` (lo que registró se conserva) | `users.delete` |
+| POST | `/api/users/:id/impersonate` → `{ token }` de 1 hora | `users.impersonate` |
+
+Protecciones:
+- Solo un ADMIN puede dar o quitar el rol ADMIN, o modificar, eliminar o suplantar a otro ADMIN.
+- Nadie puede eliminarse, desactivarse ni desaprobarse a sí mismo.
+- Siempre queda al menos un ADMIN activo (`LAST_ADMIN`).
+- No se puede suplantar a un ADMIN ni suplantar desde una sesión suplantada. Todo lo que se hace suplantando queda en la auditoría con `_impersonated_by`.
+
+### Roles y permisos 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/roles` → `{ roles, permissions, matrix }` | `view.roles` |
+| PUT · DELETE | `/api/roles/:rol/permissions/:permiso` (dar o quitar; ADMIN no se edita) | `roles.manage_permissions` |
+
+El cambio vale desde la siguiente petición: se vacía la caché de la sucursal.
+
+### Parámetros 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/params` (en caché 10 min) | cualquier usuario |
+| PATCH | `/api/params/:key` `{ value_num }` o `{ value_bool }`, con rango validado por parámetro | `params.edit` |
+
+### Auditoría 🔒 (permiso `view.audit`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/audit?from=&to=&user_id=&table_name=&action=&record_id=&page=&limit=` | Registros con el nombre del usuario |
+| GET | `/api/audit/facets` | Tablas y acciones existentes, para los filtros |
+
+### Dashboard y reportes 🔒
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/dashboard` (hoy, hora local: pacientes, doctores, atenciones, facturado, cobrado, comisiones, depósitos, saldo de caja) | `view.dashboard` |
+| GET | `/api/reports/summary?from=&to=` | `view.reports` |
+
+El reporte se calcula en MySQL y tiene tres partes:
+- **operativo:** atenciones, entregas, pacientes nuevos, por día y por estudio;
+- **financiero:** facturado, cobrado, saldo, comisiones por doctor, caja, depósitos, pagos a terceros, neto y por método de pago;
+- **control:** pacientes sin doctor, registros sin usuario, errores de fecha, tarifas en cero o faltantes, y atenciones cobradas de más.
+
+Se cachea 1 hora, pero **cualquier cambio de datos lo invalida** (header `X-Cache`). La exportación a PDF o Excel la hace el frontend con estos datos.
+
 ### Marca de la sucursal 🔒 (permiso `branding.edit`)
 
 | Método | Ruta | Descripción |
@@ -276,11 +335,34 @@ curl -X PUT http://sur.localhost:4000/api/branding/logo \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: image/png" --data-binary @logo.png
 ```
 
+## Copiar datos desde Supabase
+
+```sh
+# 1. Sucursal NUEVA (no crear el ADMIN: los usuarios vienen de Supabase)
+npm run tenant:create -- central --name="3D Dental Central"
+
+# 2. Simulación: hace todo, muestra el informe y no guarda nada
+SUPABASE_DB_URL='postgresql://postgres:<clave>@db.<proyecto>.supabase.co:5432/postgres?sslmode=require' \
+  npm run tenant:import-supabase -- central --dry-run
+
+# 3. Importación real, con los comprobantes del bucket "receipts"
+SUPABASE_DB_URL=... SUPABASE_URL=https://<proyecto>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... \
+  npm run tenant:import-supabase -- central
+```
+
+Cómo funciona:
+- Copia usuarios (con sus **contraseñas bcrypt**: nadie tiene que cambiarla), roles, la matriz de permisos, parámetros y todas las tablas, con los **mismos IDs**.
+- Todo va en **una transacción**: si algo falla, no queda nada a medias. Una sucursal con datos se rechaza.
+- Al final compara **conteos y sumas de dinero** entre las dos bases y lista las observaciones: sobrepagos ajustados, caja descuadrada, filas inválidas omitidas, usuarios renombrados, comprobantes que no se pudieron copiar.
+- Los comprobantes que fallen se reintentan con `--receipts-only`.
+- Para probarlo sin tocar Supabase, hay una base de ejemplo con la misma estructura en `test/fixtures/supabase-fixture.sql`.
+
 ## Seguridad (resumen)
 
 - Una base y un usuario MySQL por sucursal (`credentials: 'per-tenant'`). Las credenciales se guardan cifradas con `TENANCY_KEY`.
-- JWT HS256 con la sucursal en el token (`tid`). Se verifica en cada petición.
-- Usuario desactivado o cambio de roles: efecto en ≤ 60 s, y al instante cuando se haga desde los endpoints de usuarios (Fase 4).
+- JWT HS256 con la sucursal (`tid`) y la versión de sesión (`ver`). Se verifican en cada petición.
+- Contraseña nueva, desactivación, desaprobación o cambio de roles **cierran al instante** todas las sesiones del usuario.
+- Protección contra escalada de privilegios en la administración de usuarios, y suplantación auditada.
 - Contraseñas con bcrypt (12 rondas) y respuesta de login sin revelar si el usuario existe.
 - Límites de intentos por IP y sucursal, `helmet`, CORS restringido y límites de tamaño del cuerpo.
 - Logo: se valida el contenido real del archivo, no solo el `Content-Type`. Sin SVG.
