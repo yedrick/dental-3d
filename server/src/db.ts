@@ -1,30 +1,60 @@
-import mysql from "mysql2/promise";
-import { config } from "./config.js";
+import { CompiledQuery } from "kysely";
+import type { Pool } from "mysql2";
+import type { Pool as PromisePool, PoolConnection, TypeCast } from "mysql2/promise";
+import { tenancy } from "./tenancy/index.js";
 
-export const pool = mysql.createPool({
-  ...config.db,
-  connectionLimit: 10,
-  timezone: "Z",
-  dateStrings: ["DATE"],
-  decimalNumbers: true,
-  // TINYINT(1) -> boolean, como en PostgreSQL
-  typeCast(field, next) {
-    if (field.type === "TINY" && field.length === 1) {
-      const v = field.string();
-      return v === null ? null : v === "1";
-    }
-    return next();
-  },
-});
+// TINYINT(1) → boolean y DATE → 'YYYY-MM-DD' (sin conversión de zona horaria), como en PostgreSQL.
+// Va por consulta porque el pool lo crea tenancy-node.
+const typeCast: TypeCast = (field, next) => {
+  if (field.type === "TINY" && field.length === 1) {
+    const v = field.string();
+    return v === null ? null : v === "1";
+  }
+  if (field.type === "DATE") return field.string();
+  return next();
+};
 
-export type Conn = mysql.PoolConnection;
+export interface Db {
+  query<T = any[]>(sql: string, values?: unknown[]): Promise<T>;
+}
 
-/** Ejecuta fn dentro de una transacción; hace rollback si lanza error. */
-export async function withTransaction<T>(fn: (conn: Conn) => Promise<T>): Promise<T> {
-  const conn = await pool.getConnection();
+function wrap(target: () => Promise<PromisePool | PoolConnection>): Db {
+  return {
+    async query<T>(sql: string, values: unknown[] = []) {
+      const [rows] = await (await target()).query({ sql, values, typeCast });
+      return rows as T;
+    },
+  };
+}
+
+// Parche para tenancy-node 0.8.0 (@tenancy-node/db-mysql): al cerrar el pool de una sucursal
+// (por inactividad o en tenancy.close()) solo se llama a kysely.destroy(), y Kysely no cierra
+// un pool que nunca usó. Si solo usamos el pool nativo, sus conexiones MySQL quedan abiertas.
+// Una consulta mínima por Kysely, una vez por pool, hace que el cierre lo termine de verdad.
+// Quitar cuando db-mysql cierre el pool nativo en destroy().
+const closableNativePools = new WeakSet<object>();
+
+/** Pool MySQL de la sucursal actual (lo entrega tenancy-node según el subdominio). */
+async function tenantPool(): Promise<PromisePool> {
+  const native = tenancy.pool<Pool>();
+  if (!closableNativePools.has(native)) {
+    await tenancy.db().executeQuery(CompiledQuery.raw("SELECT 1"));
+    closableNativePools.add(native);
+  }
+  return native.promise();
+}
+
+/** Consultas sobre la base de la sucursal actual. */
+export function db(): Db {
+  return wrap(tenantPool);
+}
+
+/** Ejecuta fn dentro de una transacción en la base de la sucursal; rollback si lanza error. */
+export async function withTransaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+  const conn = await (await tenantPool()).getConnection();
   try {
     await conn.beginTransaction();
-    const result = await fn(conn);
+    const result = await fn(wrap(async () => conn));
     await conn.commit();
     return result;
   } catch (e) {
