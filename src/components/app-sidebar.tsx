@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Stethoscope, Users, TestTube2, ClipboardList, Percent,
   Wallet, Landmark, Receipt, BarChart3, ShieldCheck, UserCog, LogOut,
-  PackageCheck, KeyRound, Settings2, CalendarDays, Bell, UserCircle, Palette,
+  PackageCheck, KeyRound, Settings2, CalendarDays, Bell, UserCircle, Palette, Globe,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ const nav: { label: string; items: Item[] }[] = [
     { title: "Roles y permisos", url: "/app/roles", icon: KeyRound, perm: "view.roles" },
     { title: "Parámetros", url: "/app/params", icon: Settings2, perm: "view.params" },
     { title: "Marca de la sucursal", url: "/app/branding", icon: Palette, perm: "branding.edit" },
+    { title: "Página web", url: "/app/site", icon: Globe, perm: "site.edit" },
   ]},
 ];
 

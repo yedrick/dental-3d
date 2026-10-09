@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { useBranding } from "@/lib/branding";
+import { DEFAULT_SITE, useSiteContent, whatsappLink } from "@/lib/site";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Activity, ShieldCheck, Clock, MapPin, Phone, MessageCircle,
@@ -14,7 +16,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "3 Dental Imagen · Radiología Dental 2D y 3D en Bolivia" },
-      { name: "description", content: "Centro de radiología dental en Bolivia. Estudios 2D y 3D (CBCT) con entrega ágil. Agenda por WhatsApp al 77726685." },
+      { name: "description", content: "Centro de radiología dental en Bolivia. Estudios 2D y 3D (CBCT) con entrega ágil. Agenda por WhatsApp." },
       { property: "og:title", content: "3 Dental Imagen · Radiología Dental 2D y 3D" },
       { property: "og:description", content: "Estudios radiológicos dentales 2D y 3D con la última tecnología. Agenda tu cita por WhatsApp." },
       { property: "og:url", content: "https://3d.kollatek.com/" },
@@ -32,7 +34,6 @@ export const Route = createFileRoute("/")({
           name: "3 Dental Imagen",
           description: "Centro radiológico dental especializado en imagen 2D y 3D.",
           url: "https://3d.kollatek.com/",
-          telephone: "+591-77726685",
           address: { "@type": "PostalAddress", addressCountry: "BO" },
           openingHours: ["Mo-Fr 08:00-19:00", "Sa 08:00-13:00"],
         }),
@@ -42,23 +43,19 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-const CONTACT = {
-  name: "3 Dental Imagen",
-  tagline: "Centro Radiológico Dental",
-  phone: "77726685",
-  whatsapp: "59177726685",
-  address: "Bolivia",
-  hours: [
-    { d: "Lunes a Viernes", h: "08:00 – 19:00" },
-    { d: "Sábado", h: "08:00 – 13:00" },
-    { d: "Domingo", h: "Cerrado" },
-  ],
-};
 
 function Landing() {
   const { user, loading } = useAuth();
   const branding = useBranding();
   const logoAsset = { url: branding.logo };
+  // Contenido editable de la página web de la sucursal (tabla site_content en su base)
+  const { data: siteData } = useSiteContent();
+  const site = siteData ?? DEFAULT_SITE;
+  const CONTACT = { name: site.footer.name || branding.name, tagline: "Centro Radiológico Dental" };
+  useEffect(() => {
+    if (site.seo.title) document.title = site.seo.title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", site.seo.description);
+  }, [site.seo.title, site.seo.description]);
   // Estudios activos de la sucursal (sin precios). En el dominio central no hay sucursal: la sección queda vacía.
   const { data: studies, isLoading: sLoading } = useQuery({
     queryKey: ["public-studies"],
@@ -91,7 +88,7 @@ function Landing() {
         {/* NAV */}
         <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 sm:py-6">
           <Link to="/" className="flex items-center gap-2 sm:gap-3">
-            <img src={logoAsset.url} alt="3 Dental Imagen" className="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-[0_4px_20px_rgba(79,70,229,0.5)]" />
+            <img src={logoAsset.url} alt={CONTACT.name} className="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-[0_4px_20px_rgba(79,70,229,0.5)]" />
             <div className="leading-tight">
               <div className="text-sm sm:text-base font-bold tracking-tight">{CONTACT.name}</div>
               <div className="text-[10px] sm:text-xs text-white/60">{CONTACT.tagline}</div>
@@ -99,7 +96,7 @@ function Landing() {
           </Link>
           <div className="flex items-center gap-2">
             <a
-              href={`https://wa.me/${CONTACT.whatsapp}`}
+              href={whatsappLink(site)}
               target="_blank" rel="noreferrer"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium hover:bg-white/10"
             >
@@ -117,25 +114,24 @@ function Landing() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs backdrop-blur">
                 <Sparkles className="h-3 w-3 text-[#8ba9ff]" />
-                Radiología dental de alta precisión
+                {site.hero.badge}
               </div>
               <h1 className="mt-5 text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
-                Imagen dental{" "}
+                {site.hero.title}{" "}
                 <span className="bg-gradient-to-r from-[#8ba9ff] via-[#5b7fd6] to-[#3b6fa0] bg-clip-text text-transparent">
-                  clara, rápida y confiable.
+                  {site.hero.highlight}
                 </span>
               </h1>
               <p className="mt-5 max-w-lg text-base text-white/70 sm:text-lg">
-                Estudios radiológicos 2D y 3D para profesionales y pacientes.
-                Diagnóstico preciso con la última tecnología en imagen dental.
+                {site.hero.subtitle}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <a
-                  href={`https://wa.me/${CONTACT.whatsapp}?text=Hola,%20quisiera%20agendar%20un%20estudio`}
+                  href={whatsappLink(site, true)}
                   target="_blank" rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#0a1230] shadow-[0_10px_40px_-10px_rgba(255,255,255,0.4)] transition hover:scale-[1.02]"
                 >
-                  <MessageCircle className="h-4 w-4" /> Agendar por WhatsApp
+                  <MessageCircle className="h-4 w-4" /> {site.hero.cta_label}
                 </a>
                 <a
                   href="#estudios"
@@ -146,14 +142,10 @@ function Landing() {
               </div>
 
               <div className="mt-10 grid grid-cols-3 gap-3 sm:gap-6">
-                {[
-                  { n: "10+", l: "Años de experiencia" },
-                  { n: "3D", l: "Tomografía CBCT" },
-                  { n: "24h", l: "Entrega ágil" },
-                ].map((s) => (
-                  <div key={s.l} className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 backdrop-blur">
-                    <div className="text-xl font-bold sm:text-2xl">{s.n}</div>
-                    <div className="mt-0.5 text-[10px] text-white/60 sm:text-xs">{s.l}</div>
+                {site.stats.map((st, i) => (
+                  <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 backdrop-blur">
+                    <div className="text-xl font-bold sm:text-2xl">{st.value}</div>
+                    <div className="mt-0.5 text-[10px] text-white/60 sm:text-xs">{st.label}</div>
                   </div>
                 ))}
               </div>
@@ -165,12 +157,20 @@ function Landing() {
               <div className="relative">
                 <div className="absolute -inset-8 rounded-full border border-white/10" />
                 <div className="absolute -inset-16 rounded-full border border-white/5" />
-                <img
-                  src={logoAsset.url}
-                  alt="3 Dental Imagen"
-                  className="relative h-64 w-64 sm:h-80 sm:w-80 drop-shadow-[0_20px_60px_rgba(79,70,229,0.5)] animate-[spin_40s_linear_infinite]"
-                  style={{ animationDirection: "reverse" }}
-                />
+                {site.hero.image ? (
+                  <img
+                    src={site.hero.image}
+                    alt={CONTACT.name}
+                    className="relative h-64 w-64 sm:h-80 sm:w-80 rounded-3xl object-cover drop-shadow-[0_20px_60px_rgba(79,70,229,0.5)]"
+                  />
+                ) : (
+                  <img
+                    src={logoAsset.url}
+                    alt={CONTACT.name}
+                    className="relative h-64 w-64 sm:h-80 sm:w-80 drop-shadow-[0_20px_60px_rgba(79,70,229,0.5)] animate-[spin_40s_linear_infinite]"
+                    style={{ animationDirection: "reverse" }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -180,9 +180,9 @@ function Landing() {
         <section id="estudios" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <div className="mb-8 sm:mb-12">
             <div className="text-xs font-semibold uppercase tracking-widest text-[#8ba9ff]">Servicios</div>
-            <h2 className="mt-2 text-3xl font-bold sm:text-4xl">Estudios disponibles</h2>
+            <h2 className="mt-2 text-3xl font-bold sm:text-4xl">{site.studies.title}</h2>
             <p className="mt-3 max-w-2xl text-sm text-white/60 sm:text-base">
-              Contáctanos por WhatsApp para consultar precios, disponibilidad y agendar tu estudio.
+              {site.studies.subtitle}
             </p>
           </div>
 
@@ -218,7 +218,7 @@ function Landing() {
             </div>
           ) : (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-sm text-white/60">
-              Estamos actualizando nuestro catálogo. Escríbenos por WhatsApp.
+              {site.studies.empty}
             </div>
           )}
         </section>
@@ -228,35 +228,46 @@ function Landing() {
           <div className="grid gap-4 md:grid-cols-3">
             <InfoCard icon={Clock} title="Horarios de atención">
               <ul className="space-y-1.5 text-sm">
-                {CONTACT.hours.map((h) => (
-                  <li key={h.d} className="flex justify-between gap-3">
-                    <span className="text-white/70">{h.d}</span>
-                    <span className="font-medium">{h.h}</span>
+                {site.hours.map((h, i) => (
+                  <li key={i} className="flex justify-between gap-3">
+                    <span className="text-white/70">{h.day}</span>
+                    <span className="font-medium">{h.hours}</span>
                   </li>
                 ))}
               </ul>
             </InfoCard>
             <InfoCard icon={Phone} title="Contáctanos">
               <div className="space-y-2 text-sm">
-                <a href={`tel:${CONTACT.phone}`} className="flex items-center gap-2 hover:text-[#8ba9ff]">
-                  <Phone className="h-4 w-4 text-[#8ba9ff]" /> {CONTACT.phone}
-                </a>
+                {site.contact.phone && (
+                  <a href={`tel:${site.contact.phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 hover:text-[#8ba9ff]">
+                    <Phone className="h-4 w-4 text-[#8ba9ff]" /> {site.contact.phone}
+                  </a>
+                )}
                 <a
-                  href={`https://wa.me/${CONTACT.whatsapp}`}
+                  href={whatsappLink(site)}
                   target="_blank" rel="noreferrer"
                   className="flex items-center gap-2 hover:text-[#8ba9ff]"
                 >
                   <MessageCircle className="h-4 w-4 text-[#8ba9ff]" /> WhatsApp directo
                 </a>
+                {site.contact.email && (
+                  <a href={`mailto:${site.contact.email}`} className="flex items-center gap-2 hover:text-[#8ba9ff]">{site.contact.email}</a>
+                )}
+                {[["Facebook", site.social.facebook], ["Instagram", site.social.instagram], ["TikTok", site.social.tiktok]]
+                  .filter(([, url]) => url)
+                  .map(([label, url]) => (
+                    <a key={label} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-[#8ba9ff]">{label}</a>
+                  ))}
               </div>
             </InfoCard>
             <InfoCard icon={MapPin} title="Ubicación">
               <p className="text-sm text-white/70">
-                {CONTACT.address}
+                {site.contact.address}
               </p>
-              <p className="mt-2 text-xs text-white/50">
-                Consulta la dirección exacta al agendar.
-              </p>
+              {site.contact.address_note && <p className="mt-2 text-xs text-white/50">{site.contact.address_note}</p>}
+              {site.contact.map_url && (
+                <a href={site.contact.map_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-[#8ba9ff] hover:underline">Ver en el mapa</a>
+              )}
             </InfoCard>
           </div>
         </section>
@@ -267,12 +278,12 @@ function Landing() {
             <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-[#4f46e5]/30 blur-3xl" />
             <div className="absolute -bottom-10 -left-10 h-48 w-48 rounded-full bg-[#3b6fa0]/40 blur-3xl" />
             <div className="relative">
-              <h2 className="text-2xl font-bold sm:text-4xl">¿Listo para tu estudio?</h2>
+              <h2 className="text-2xl font-bold sm:text-4xl">{site.cta.title}</h2>
               <p className="mt-3 max-w-lg text-sm text-white/70 sm:text-base">
-                Escríbenos por WhatsApp y agenda tu cita. Recibirás tus imágenes en formato digital y físico.
+                {site.cta.subtitle}
               </p>
               <a
-                href={`https://wa.me/${CONTACT.whatsapp}?text=Hola,%20quisiera%20agendar%20un%20estudio`}
+                href={whatsappLink(site, true)}
                 target="_blank" rel="noreferrer"
                 className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-[#0a1230] transition hover:scale-[1.03]"
               >

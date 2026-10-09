@@ -384,6 +384,25 @@ Comprobé además:
 - Subir el logo desde el panel: hoy el panel solo acepta una URL. El logo se sube en la app, en "Marca de la sucursal".
 - Correo de bienvenida al administrador, cuando haya servicio de correo.
 
+## Página web por sucursal y caché en Redis ✅ hecho
+
+**Antes:** la portada pública tenía todo escrito fijo en el código (teléfono 77726685, WhatsApp, horarios, títulos) y era igual en todas las sucursales.
+
+**Ahora:**
+- Cada sucursal edita su portada en **"Página web"** (permiso `site.edit`).
+- El contenido se guarda en la tabla `site_content` de **su propia base** (migración 007).
+- Se cachea con `tenancy.cache()`, que usa **Redis** si existe `REDIS_URL` (`@tenancy-node/cache-redis` + `redisInvalidation`).
+- Las imágenes van al almacenamiento de la sucursal.
+
+**Probado con Redis real:**
+- "chasquipampa" cambió título, teléfono y horarios, y su portada los muestra; "calacoto" no cambió.
+- Las llaves de Redis están separadas por sucursal (`dental3d:tenant:<id>:…`).
+- Una imagen de "chasquipampa" da 404 desde "calacoto".
+- Se rechazan los enlaces `javascript:`.
+- En el navegador: editar el teléfono en "Página web", guardar y ver la portada actualizada.
+
+**Corrección de paso:** abrir la portada con una sesión vieja guardada mostraba "Sesión inválida o expirada". Ahora el token viejo se descarta en silencio.
+
 ## Fase 6 — Eliminar todo lo de Lovable
 
 **¿Por qué al final y no ahora?** Hoy el frontend necesita Lovable para funcionar: el login y los datos están en Lovable Cloud (Supabase), Vite se configura con un paquete de Lovable y el logo está guardado en los servidores de Lovable. Si se borra antes de la Fase 5, la app deja de funcionar. Lo que sí se puede adelantar en `dev` está marcado como **(se puede adelantar)**.
@@ -589,6 +608,8 @@ Se deciden cuando lleguemos ahí, con el módulo de tenancy-node:
 - **Dominio propio por sucursal** (`clinicasur.com`) además del subdominio: tenancy-node lo soporta con el resolver `domain`.
 
 ## Reporte para tenancy-node
+
+> Versión completa, lista para copiar como *issues*: [TENANCY-NODE-REPORTE.md](TENANCY-NODE-REPORTE.md).
 
 **Bug (v0.8.0, `@tenancy-node/db-mysql`): fuga de conexiones al usar `tenancy.pool()`.**
 

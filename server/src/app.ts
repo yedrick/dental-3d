@@ -25,6 +25,7 @@ import { rolesRouter } from "./routes/roles.routes.js";
 import { usersRouter } from "./routes/users.routes.js";
 import { patientsRouter } from "./routes/patients.routes.js";
 import { RECEIPT_MAX_BYTES, RECEIPT_TYPES, receiptsRouter } from "./routes/receipts.routes.js";
+import { publicSiteRouter, SITE_IMAGE_MAX_BYTES, siteRouter } from "./routes/site.routes.js";
 import { publicStudiesRouter, studiesRouter, studyPricesRouter } from "./routes/studies.routes.js";
 import { tenancy } from "./tenancy/index.js";
 
@@ -57,6 +58,7 @@ app.use(compression()); // JSON de listas grandes: 5-10 veces menos bytes
 // Los body parsers van ANTES de tenancy: leer el body después pierde el contexto del tenant.
 app.use("/api/branding/logo", express.raw({ type: ["image/png", "image/jpeg", "image/webp"], limit: LOGO_MAX_BYTES }));
 app.use("/api/receipts", express.raw({ type: RECEIPT_TYPES, limit: RECEIPT_MAX_BYTES }));
+app.use("/api/site/images", express.raw({ type: ["image/png", "image/jpeg", "image/webp"], limit: SITE_IMAGE_MAX_BYTES }));
 app.use(express.json({ limit: "1mb" }));
 
 // Health del balanceador: sin tenant y sin detalles de los servicios internos
@@ -97,6 +99,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/doctors", doctorsRouter);
 app.use("/api/patients", patientsRouter);
 app.use("/api/public/studies", publicStudiesRouter);
+app.use("/api/public/site", publicSiteRouter);
+app.use("/api/site", siteRouter);
 app.use("/api/studies", studiesRouter);
 app.use("/api/study-prices", studyPricesRouter);
 app.use("/api/attentions", attentionsRouter);

@@ -6,7 +6,7 @@ Backend propio que reemplaza a Supabase, **multi-sucursal** con [tenancy-node](h
 - La sucursal se identifica por **subdominio**: `sur.dental3d.com` → sucursal `sur`. En local: `sur.localhost:4000`.
 - Caché, archivos (logo) y logs van **aislados por sucursal**.
 
-Fases y pendientes: [PLAN.md](PLAN.md). Publicar en un servidor propio: [deploy/DEPLOY.md](../deploy/DEPLOY.md).
+Fases y pendientes: [PLAN.md](PLAN.md). Errores y mejoras para el equipo de tenancy-node: [TENANCY-NODE-REPORTE.md](TENANCY-NODE-REPORTE.md). Publicar en un servidor propio: [deploy/DEPLOY.md](../deploy/DEPLOY.md).
 
 ## Requisitos
 
@@ -66,7 +66,8 @@ server/
 │   ├── 003_clinico.sql      pacientes, estudios, tarifas, atenciones, comisiones
 │   ├── 004_finanzas.sql     caja chica, depósitos, pagos a terceros, citas, notificaciones
 │   ├── 005_admin.sql        versión de sesión de usuarios, índice de auditoría
-│   └── 006_default_admin.sql  cuenta "por activar" (ADMIN por defecto de cada sucursal)
+│   ├── 006_default_admin.sql  cuenta "por activar" (ADMIN por defecto de cada sucursal)
+│   └── 007_site.sql         contenido de la página web pública
 └── src/
     ├── index.ts             arranque y apagado ordenado
     ├── app.ts               Express: seguridad, compresión, tenancy, rutas
@@ -354,6 +355,27 @@ En el **dominio central** (`dominio.com/admin/`; en local `http://localhost:8080
 | Suspender, mantenimiento, migraciones, explorar datos, auditoría, usuarios del panel con 2FA | Funciones propias del panel |
 
 Usuarios del panel (son distintos de los usuarios de cada sucursal): `npx tenancy admin:user tu@email.com --role=owner`.
+
+## Página web pública de cada sucursal
+
+La portada de `https://<sucursal>.dominio.com` se edita en la app, en **"Página web"** (permiso `site.edit`):
+- títulos, textos, cifras destacadas;
+- teléfono, WhatsApp y su mensaje, email, dirección y mapa;
+- horarios, redes sociales, SEO e imagen principal.
+
+| Qué | Dónde |
+|---|---|
+| Contenido | Tabla `site_content` en la **base de la sucursal** (migración 007): un documento JSON validado |
+| Caché | `tenancy.cache()`, llave `tenant:<id>:site:content`, 1 hora. Se borra al guardar. Con `REDIS_URL`, en Redis |
+| Imágenes | Almacenamiento público de la sucursal (`storage/<sucursal>/site/…`). Solo PNG, JPG o WEBP de hasta 2 MB (sin SVG) |
+| Lectura pública | `GET /api/public/site` (contenido completo, con valores por defecto) |
+| Edición | `GET` / `PUT` / `DELETE /api/site` y `POST /api/site/images` |
+
+La lista de estudios de la portada sale sola del catálogo activo de la sucursal. Los enlaces solo aceptan `https://` y el contenido se muestra como texto, así que no se puede inyectar código.
+
+## Redis (caché compartida)
+
+Con `REDIS_URL=redis://127.0.0.1:6379`, tenancy-node usa `@tenancy-node/cache-redis` para toda la caché por sucursal (sesiones, permisos, catálogos, página web y reportes). Además usa `redisInvalidation`, así los cambios de sucursales llegan al instante a todas las réplicas. Sin `REDIS_URL` se usa la memoria del proceso.
 
 ## Copiar datos desde Supabase
 
