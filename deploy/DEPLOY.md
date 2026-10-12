@@ -12,6 +12,8 @@ API ──► MySQL 127.0.0.1:3306: dental3d_central + dental_<sucursal> (una ba
 
 En esta guía, `dental3d.com` es un ejemplo: reemplázalo por tu dominio en todos los archivos.
 
+**No usa Docker:** MySQL, Redis y nginx se instalan directo en el servidor, y la API y el frontend corren como servicios de systemd.
+
 ## 0. Requisitos
 
 - Linux (Ubuntu 22.04/24.04 o Debian 12), con acceso `sudo`.
@@ -23,6 +25,23 @@ En esta guía, `dental3d.com` es un ejemplo: reemplázalo por tu dominio en todo
 - Un dominio con dos registros DNS apuntando a la IP del servidor: `dental3d.com` y `*.dental3d.com`.
 - Firewall: abrir solo los puertos 22, 80 y 443. **MySQL no debe quedar expuesto.**
 
+### Instalar los requisitos (Ubuntu 24.04)
+
+```sh
+sudo apt update && sudo apt upgrade -y
+# Node.js 22 (queda en /usr/bin/node, que es lo que usan los servicios de systemd)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs git
+# MySQL, Redis y nginx
+sudo apt install -y mysql-server redis-server nginx
+# Firewall
+sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
+node -v && mysql --version && redis-cli ping && nginx -v
+```
+
+- Ubuntu 24.04 trae MySQL 8.0, que sirve: hace falta 8.0.13 o más nuevo. Como root de MySQL se entra con `sudo mysql`.
+- Redis queda escuchando solo en `127.0.0.1`, que es lo correcto. Se comprueba con `ss -ltn | grep 6379`.
+
 ## 1. Usuario y carpeta
 
 ```sh
@@ -30,6 +49,13 @@ sudo useradd --system --create-home --home-dir /opt/dental3d --shell /usr/sbin/n
 sudo -u dental3d git clone <url-del-repo> /opt/dental3d
 cd /opt/dental3d && sudo -u dental3d git checkout dev   # o la rama que se publique
 ```
+
+**Si el repositorio es privado** (GitHub), el servidor necesita permiso de lectura. Usa una *deploy key*:
+- `sudo -u dental3d ssh-keygen -t ed25519 -f /opt/dental3d/.ssh/id_ed25519 -N ""`;
+- pega `/opt/dental3d/.ssh/id_ed25519.pub` en GitHub → el repo → Settings → Deploy keys (solo lectura);
+- clona con `git@github.com:<usuario>/<repo>.git`.
+
+**Sin git en el servidor:** desde tu máquina, `rsync -az --exclude node_modules --exclude .output --exclude server/dist --exclude server/.env --exclude server/storage --exclude server/storage-private ./ usuario@servidor:/tmp/dental3d/`. Después, en el servidor, `sudo rsync -a /tmp/dental3d/ /opt/dental3d/ && sudo chown -R dental3d: /opt/dental3d`, y sigue con los pasos 3 y 4: se compila en el servidor.
 
 ## 2. MySQL
 
@@ -116,8 +142,8 @@ sudo -u dental3d OWNER_PASS='<contraseña de 12+ caracteres>' npx tenancy admin:
    - crea la base `dental_calacoto` y su usuario MySQL;
    - aplica las migraciones;
    - crea el **ADMIN por defecto** (`admin`, cuenta "por activar").
-3. **Tema**: color principal y demás colores. El logo se sube después desde la app, en "Marca de la sucursal".
-4. **Resumen → Entrar como…** con el usuario `admin` → "Generar enlace". El enlace abre `https://calacoto.dental3d.com` con la sesión iniciada y pide **activar la cuenta**: nombre, usuario, email y contraseña.
+3. **Tema**: color principal, demás colores y logo. El logo también se puede cambiar después desde la app, en "Marca de la sucursal".
+4. **Usuarios → Entrar como** en el usuario "Administrador". Se abre `https://calacoto.dental3d.com` con la sesión iniciada y la app pide **activar la cuenta**: nombre, usuario, email y contraseña. En la misma pestaña se pueden crear más usuarios para la sucursal.
 5. Listo: `https://calacoto.dental3d.com` ya funciona con ese usuario.
 
 Desde el panel también se puede suspender una sucursal o ponerla en mantenimiento, ver su auditoría y sus migraciones, y explorar sus datos (solo lectura).
@@ -169,7 +195,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Puntos clave de la configuración:
 - `proxy_set_header Host $host` en `/api` y `/tenancy`: la API reconoce la sucursal por el subdominio. **No actives `trustProxy` de tenancy-node.**
-- `/admin/` (panel de la plataforma) está **cerrado por IP**. Agrega `allow <IP de tu oficina o VPN>;` antes de `deny all;`. El módulo recomienda no exponerlo a internet, y su límite de intentos de login no distingue IPs detrás de nginx.
+- `/admin/` (panel de la plataforma) está **cerrado por IP**. Agrega `allow <IP de tu oficina o VPN>;` antes de `deny all;`. El módulo recomienda no exponerlo a internet. Con `TRUST_PROXY=1`, su límite de intentos de login ve la IP real de cada persona (corregido en tenancy-node 0.9).
 
 ## 7. Certificado HTTPS comodín
 
@@ -183,6 +209,8 @@ sudo systemctl reload nginx
 ```
 
 La renovación es automática (`systemctl list-timers | grep certbot`).
+
+**Si tu proveedor de DNS no tiene plugin de certbot:** saca un certificado normal con todos los nombres, sin comodín: `sudo certbot certonly --nginx -d dental3d.com -d calacoto.dental3d.com -d chasquipampa.dental3d.com`. Cada sucursal nueva necesita su registro DNS y volver a correr el comando, sumando el nombre nuevo con `--expand`. En `dental3d.conf`, la ruta del certificado es la que muestra certbot.
 
 ## 8. Respaldos
 
