@@ -1,14 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useBranding } from "@/lib/branding";
+import { translateError } from "@/lib/translate-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Eye, EyeOff, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -26,18 +29,6 @@ export const Route = createFileRoute("/auth")({
   }),
   component: AuthPage,
 });
-
-function translateError(msg: string): string {
-  const m = msg.toLowerCase();
-  if (m.includes("invalid login")) return "Email o contraseña incorrectos.";
-  if (m.includes("missing email")) return "Debes ingresar el email y la contraseña.";
-  if (m.includes("weak_password") || m.includes("pwned") || m.includes("known to be weak"))
-    return "Esta contraseña aparece en filtraciones públicas conocidas. Usa una NUEVA y ÚNICA (no la que usas en otros sitios).";
-  if (m.includes("password should be at least")) return "La contraseña debe tener al menos 8 caracteres.";
-  if (m.includes("already registered") || m.includes("user already")) return "Este email ya está registrado. Ingresa en su lugar.";
-  if (m.includes("email")) return "Email inválido o no permitido.";
-  return msg;
-}
 
 type PasswordChecks = {
   len: boolean;
@@ -57,41 +48,30 @@ function Req({ ok, children }: { ok: boolean; children: ReactNode }) {
   );
 }
 
-function PasswordInput({
+function PasswordField({
   password,
-  showPwd,
   showHelp = false,
   checks,
   onPasswordChange,
-  onToggleShow,
+  onEnter,
 }: {
   password: string;
-  showPwd: boolean;
   showHelp?: boolean;
   checks: PasswordChecks;
   onPasswordChange: (value: string) => void;
-  onToggleShow: () => void;
+  onEnter?: () => void;
 }) {
+  const id = useId();
   return (
     <div>
-      <Label>Contraseña</Label>
-      <div className="relative">
-        <Input
-          type={showPwd ? "text" : "password"}
-          value={password}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          className="pr-10"
-          autoComplete={showHelp ? "new-password" : "current-password"}
-        />
-        <button
-          type="button"
-          onClick={onToggleShow}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
-        >
-          {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      </div>
+      <Label htmlFor={id}>Contraseña</Label>
+      <PasswordInput
+        id={id}
+        value={password}
+        onChange={(e) => onPasswordChange(e.target.value)}
+        autoComplete={showHelp ? "new-password" : "current-password"}
+        onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
+      />
       {showHelp && (
         <div className="mt-2 rounded-md border bg-muted/40 p-2 text-xs">
           <p className="mb-1 font-medium">Tu contraseña debe cumplir:</p>
@@ -104,7 +84,7 @@ function PasswordInput({
             
           </ul>
           <p className="mt-2 text-muted-foreground">
-            ⚠️ El sistema rechaza contraseñas que aparecen en <b>filtraciones públicas</b> (base HaveIBeenPwned). Inventa una nueva que NO uses en otros sitios. Ejemplo válido: <code className="rounded bg-background px-1">Dental3D#Clinica-2026!</code>
+            Inventa una contraseña nueva que NO uses en otros sitios. Ejemplo válido: <code className="rounded bg-background px-1">Dental3D#Clinica-2026!</code>
           </p>
         </div>
       )}
@@ -113,13 +93,19 @@ function PasswordInput({
 }
 
 function AuthPage() {
-  const { user, loading } = useAuth();
+  const ids = useId(); // etiquetas unidas a sus campos (lectores de pantalla y clic en la etiqueta)
+  const { user, loading, signIn: login } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   useEffect(() => { if (!loading && user) navigate({ to: "/app" }); }, [user, loading, navigate]);
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get("error");
+    if (err === "impersonation") toast.error("El enlace de \"Entrar como…\" venció o ya se usó (dura 60 segundos). Genera otro desde el panel.");
+    if (err === "impersonation_user") toast.error("El usuario indicado en \"Entrar como…\" no existe o está inactivo en esta sucursal.");
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -133,48 +119,64 @@ function AuthPage() {
     
   }), [password]);
   const allOk = Object.values(checks).every(Boolean);
-  const togglePasswordVisibility = () => setShowPwd((v) => !v);
 
   const signIn = async () => {
-    if (!email || !password) { toast.error("Ingresa email y contraseña."); return; }
+    if (!email || !password) { toast.error("Ingresa tu email o usuario y la contraseña."); return; }
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) toast.error(translateError(error.message));
-    else navigate({ to: "/app" });
+    try {
+      await login(email.trim(), password);
+      navigate({ to: "/app" });
+    } catch (e) {
+      toast.error(translateError(e));
+    } finally {
+      setBusy(false);
+    }
   };
-  const forgotPassword = async () => {
-    if (!email) { toast.error("Ingresa tu email arriba y vuelve a hacer clic en '¿Olvidaste tu contraseña?'."); return; }
-    setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setBusy(false);
-    if (error) toast.error(translateError(error.message));
-    else toast.success("Te enviamos un correo con el enlace para restablecer tu contraseña.", { duration: 7000 });
+  // Pendiente: recuperar por email (necesita un servicio de correo). Mientras tanto, un ADMIN
+  // asigna una contraseña nueva desde Usuarios.
+  const forgotPassword = () => {
+    navigate({ to: "/reset-password" });
   };
   const signUp = async () => {
     if (!allOk) { toast.error("Tu contraseña no cumple los requisitos mínimos."); return; }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/app`,
-        data: { username, full_name: fullName },
-      },
-    });
-    setBusy(false);
-    if (error) toast.error(translateError(error.message), { duration: 8000 });
-    else toast.success("Cuenta creada. Revisa tu correo o inicia sesión.");
+    try {
+      const res = await apiPost<{ message: string }>("/api/auth/register", { email, password, username, full_name: fullName });
+      toast.success(res.message, { duration: 8000 });
+    } catch (e) {
+      toast.error(translateError(e), { duration: 8000 });
+    } finally {
+      setBusy(false);
+    }
   };
+
+  if (branding.loaded && branding.tenantMissing) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-muted/40 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Elige tu sucursal</CardTitle>
+            <CardDescription>
+              Este sistema se usa desde la dirección de tu sucursal, por ejemplo <b>calacoto.{window.location.host}</b>.
+              Pide la dirección a tu administrador.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Panel de tenancy-node: crear sucursales, tema, "Entrar como…" (solo en el dominio central) */}
+            <a href="/admin/" className="text-sm text-primary underline underline-offset-2">Administración de la plataforma</a>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid min-h-screen place-items-center bg-muted/40 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground text-sm">D3</div>
-            Dental-3D
+            <img src={branding.logo} alt="" className="h-8 w-8 rounded-md object-contain" />
+            {branding.name}
           </CardTitle>
           <CardDescription>Sistema de gestión radiológica dental</CardDescription>
         </CardHeader>
@@ -185,8 +187,8 @@ function AuthPage() {
               <TabsTrigger value="up">Registrar</TabsTrigger>
             </TabsList>
             <TabsContent value="in" className="space-y-3">
-              <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-              <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
+              <div><Label htmlFor={`${ids}-login`}>Email o usuario</Label><Input id={`${ids}-login`} value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signIn()} /></div>
+              <PasswordField password={password} checks={checks} onPasswordChange={setPassword} onEnter={signIn} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
               <button
                 type="button"
@@ -198,12 +200,12 @@ function AuthPage() {
               </button>
             </TabsContent>
             <TabsContent value="up" className="space-y-3">
-              <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
-              <div><Label>Usuario</Label><Input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
-              <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-              <PasswordInput password={password} showPwd={showPwd} showHelp checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
+              <div><Label htmlFor={`${ids}-name`}>Nombre completo</Label><Input id={`${ids}-name`} value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
+              <div><Label htmlFor={`${ids}-user`}>Usuario</Label><Input id={`${ids}-user`} value={username} onChange={(e) => setUsername(e.target.value)} /></div>
+              <div><Label htmlFor={`${ids}-email`}>Email</Label><Input id={`${ids}-email`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+              <PasswordField password={password} showHelp checks={checks} onPasswordChange={setPassword} />
               <Button onClick={signUp} disabled={busy || !allOk} className="w-full">Crear cuenta</Button>
-              <p className="text-xs text-muted-foreground">El primer usuario registrado será ADMIN. Los siguientes serán RECEPCION por defecto y un ADMIN puede cambiar sus roles.</p>
+              <p className="text-xs text-muted-foreground">Tu cuenta quedará como RECEPCION y pendiente hasta que un administrador la apruebe.</p>
             </TabsContent>
           </Tabs>
         </CardContent>

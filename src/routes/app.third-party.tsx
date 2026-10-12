@@ -1,10 +1,11 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useId, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useList, formatDate, formatMoney } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
+import { formatDate, formatMoney, todayLocal } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,72 +17,124 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { uploadReceipt, ReceiptThumb } from "@/components/receipt-image";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/third-party")({ component: ThirdPartyPage });
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const LIMIT = 50;
+const MAX_FILE = 5 * 1024 * 1024;
+
+type Payment = {
+  id: string;
+  provider_name: string;
+  service_type: string;
+  amount: number;
+  service_date: string;
+  payment_date: string;
+  receipt_url: string | null;
+  created_by_name: string | null;
+  created_at: string;
+};
+
+/** Año/mes seleccionados → rango from/to (YYYY-MM-DD). "Todos" los años = sin filtro. */
+function periodRange(year: string, month: string): { from?: string; to?: string } {
+  if (year === "all") return {};
+  if (month === "all") return { from: `${year}-01-01`, to: `${year}-12-31` };
+  const m = Number(month);
+  const last = new Date(Number(year), m, 0).getDate();
+  const mm = String(m).padStart(2, "0");
+  return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(last).padStart(2, "0")}` };
+}
 
 function ThirdPartyPage() {
-  const { user, hasAny } = useAuth();
-  const canEdit = hasAny(["ADMIN", "CONTABILIDAD"]);
+  const uid = useId(); // ids para unir cada etiqueta con su campo
+  const { can } = useAuth();
+  // Los permisos los controla la API; aquí solo se oculta el botón
+  const canEdit = can("third_party.create");
   const qc = useQueryClient();
-  const { data: rows = [] } = useList<any>("third_party_payments", "payment_date");
 
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState<string>(String(now.getMonth() + 1));
+  const [page, setPage] = useState(1);
 
-  const years = useMemo(() => {
-    const s = new Set<string>([String(now.getFullYear())]);
-    rows.forEach((r: any) => r.payment_date && s.add(r.payment_date.slice(0, 4)));
-    return Array.from(s).sort().reverse();
-  }, [rows]);
+  // Últimos años (ya no se deducen de las filas: la API filtra por período)
+  const years = useMemo(() => Array.from({ length: 6 }, (_, i) => String(now.getFullYear() - i)), []);
+  const range = periodRange(year, month);
 
-  const filtered = useMemo(() => rows.filter((r: any) => {
-    if (!r.payment_date) return false;
-    const [y, m] = r.payment_date.split("-");
-    if (year !== "all" && y !== year) return false;
-    if (month !== "all" && String(Number(m)) !== month) return false;
-    return true;
-  }), [rows, year, month]);
+  const { data: res, isLoading } = useQuery({
+    queryKey: ["third_party_payments", range.from, range.to, page],
+    queryFn: () => apiGet<Paged<Payment, { total: number }>>("/api/third-party-payments", { ...range, page, limit: LIMIT }),
+    staleTime: STALE.money,
+    placeholderData: keepPreviousData,
+  });
+  const rows = res?.data ?? [];
+  const total = res?.summary?.total ?? 0;
+  const count = res?.total ?? 0;
 
-  const total = filtered.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+  const [open, setOpen] = useState(false);
 
-  // Autocomplete: providers + last service_type per provider
+  // Autocompletar: proveedores + último tipo de servicio de cada uno, de los pagos más recientes
+  // (se pide solo al abrir el formulario)
+  const { data: recent = [] } = useQuery({
+    queryKey: ["third_party_payments", "providers"],
+    queryFn: async () => (await apiGet<Paged<Payment>>("/api/third-party-payments", { page: 1, limit: 500 })).data,
+    staleTime: STALE.money,
+    enabled: open,
+  });
   const providers = useMemo(() => {
     const m = new Map<string, { name: string; last_service: string }>();
-    rows.forEach((r: any) => {
+    recent.forEach((r) => {
       if (r.provider_name && !m.has(r.provider_name.toLowerCase())) {
         m.set(r.provider_name.toLowerCase(), { name: r.provider_name, last_service: r.service_type ?? "" });
       }
     });
     return Array.from(m.values());
-  }, [rows]);
+  }, [recent]);
 
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
-  const emptyForm = { provider_name: "", service_type: "", amount: 0, service_date: today, payment_date: today };
-  const [f, setF] = useState<any>(emptyForm);
+  const newForm = () => {
+    const today = todayLocal();
+    return { provider_name: "", service_type: "", amount: 0, service_date: today, payment_date: today };
+  };
+  const [f, setF] = useState(newForm);
   const [file, setFile] = useState<File | null>(null);
 
   const onProviderChange = (v: string) => {
     const match = providers.find((p) => p.name.toLowerCase() === v.toLowerCase());
-    setF((prev: any) => ({ ...prev, provider_name: v, service_type: match && !prev.service_type ? match.last_service : prev.service_type }));
+    setF((prev) => ({ ...prev, provider_name: v, service_type: match && !prev.service_type ? match.last_service : prev.service_type }));
+  };
+
+  const pickFile = (fl: File | null) => {
+    if (fl && fl.size > MAX_FILE) {
+      toast.error("El comprobante no puede superar 5 MB");
+      return setFile(null);
+    }
+    setFile(fl);
   };
 
   const save = async () => {
-    if (!f.provider_name || !f.service_type) return toast.error("Proveedor y servicio son requeridos");
+    if (!f.provider_name.trim() || !f.service_type.trim()) return toast.error("Proveedor y servicio son requeridos");
+    if (!(Number(f.amount) > 0)) return toast.error("El monto debe ser mayor a 0");
+    if (!f.service_date || !f.payment_date) return toast.error("Fechas de servicio y pago requeridas");
+    if (file && file.size > MAX_FILE) return toast.error("El comprobante no puede superar 5 MB");
     setSaving(true);
     try {
-      let receipt_url: string | null = null;
-      if (file) receipt_url = await uploadReceipt(file, "third-party");
-      const { error } = await supabase.from("third_party_payments").insert({ ...f, receipt_url, created_by: user!.id });
-      if (error) throw error;
+      // Primero se sube el comprobante; la API recibe solo su llave. created_by lo pone la API.
+      const receipt_key = file ? await uploadReceipt(file) : null;
+      await apiPost("/api/third-party-payments", {
+        provider_name: f.provider_name.trim(),
+        service_type: f.service_type.trim(),
+        amount: Number(f.amount),
+        service_date: f.service_date,
+        payment_date: f.payment_date,
+        receipt_key,
+      });
       toast.success("Pago registrado");
-      setOpen(false); setF(emptyForm); setFile(null);
+      setOpen(false); setF(newForm()); setFile(null);
       qc.invalidateQueries({ queryKey: ["third_party_payments"] });
-    } catch (e: any) {
+    } catch (e) {
       toast.error(translateError(e));
     } finally { setSaving(false); }
   };
@@ -96,21 +149,21 @@ function ThirdPartyPage() {
               <DialogHeader><DialogTitle>Nuevo pago a tercero</DialogTitle></DialogHeader>
               <div className="grid gap-3">
                 <div>
-                  <Label>Proveedor</Label>
-                  <Input list="providers-list" value={f.provider_name} onChange={(e) => onProviderChange(e.target.value)} placeholder="Escriba o seleccione..." />
+                  <Label htmlFor={`${uid}-provider`}>Proveedor</Label>
+                  <Input id={`${uid}-provider`} list="providers-list" value={f.provider_name} onChange={(e) => onProviderChange(e.target.value)} placeholder="Escriba o seleccione..." />
                   <datalist id="providers-list">
                     {providers.map((p) => <option key={p.name} value={p.name} />)}
                   </datalist>
                 </div>
-                <div><Label>Tipo de servicio</Label><Input value={f.service_type} onChange={(e) => setF({ ...f, service_type: e.target.value })} /></div>
-                <div><Label>Monto</Label><Input type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
+                <div><Label htmlFor={`${uid}-service`}>Tipo de servicio</Label><Input id={`${uid}-service`} value={f.service_type} onChange={(e) => setF({ ...f, service_type: e.target.value })} /></div>
+                <div><Label htmlFor={`${uid}-amount`}>Monto</Label><Input id={`${uid}-amount`} type="number" step="0.01" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Fecha servicio</Label><Input type="date" value={f.service_date} onChange={(e) => setF({ ...f, service_date: e.target.value })} /></div>
-                  <div><Label>Fecha pago</Label><Input type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} /></div>
+                  <div><Label htmlFor={`${uid}-sdate`}>Fecha servicio</Label><Input id={`${uid}-sdate`} type="date" value={f.service_date} onChange={(e) => setF({ ...f, service_date: e.target.value })} /></div>
+                  <div><Label htmlFor={`${uid}-pdate`}>Fecha pago</Label><Input id={`${uid}-pdate`} type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} /></div>
                 </div>
                 <div>
-                  <Label>Comprobante (opcional)</Label>
-                  <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                  <Label htmlFor={`${uid}-file`}>Comprobante (opcional, imagen o PDF, máx. 5 MB)</Label>
+                  <Input id={`${uid}-file`} type="file" accept="image/*,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
                   {file && <p className="text-xs text-muted-foreground mt-1">{file.name}</p>}
                 </div>
               </div>
@@ -122,9 +175,9 @@ function ThirdPartyPage() {
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div>
-          <Label className="text-xs">Año</Label>
-          <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+          <Label htmlFor={`${uid}-year`} className="text-xs">Año</Label>
+          <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
+            <SelectTrigger id={`${uid}-year`} className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
@@ -132,9 +185,9 @@ function ThirdPartyPage() {
           </Select>
         </div>
         <div>
-          <Label className="text-xs">Mes</Label>
-          <Select value={month} onValueChange={setMonth}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <Label htmlFor={`${uid}-month`} className="text-xs">Mes</Label>
+          <Select value={year === "all" ? "all" : month} onValueChange={(v) => { setMonth(v); setPage(1); }} disabled={year === "all"}>
+            <SelectTrigger id={`${uid}-month`} className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
@@ -144,7 +197,7 @@ function ThirdPartyPage() {
         <Card className="ml-auto p-3 px-5">
           <div className="text-xs text-muted-foreground">Total del período</div>
           <div className="text-2xl font-bold">{formatMoney(total)}</div>
-          <div className="text-xs text-muted-foreground">{filtered.length} pago(s)</div>
+          <div className="text-xs text-muted-foreground">{count} pago(s)</div>
         </Card>
       </div>
 
@@ -155,7 +208,7 @@ function ThirdPartyPage() {
             <TableHead>F. Servicio</TableHead><TableHead>F. Pago</TableHead><TableHead>Comprobante</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {filtered.map((r: any) => (
+            {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="font-medium">{r.provider_name}</TableCell>
                 <TableCell>{r.service_type}</TableCell>
@@ -165,10 +218,27 @@ function ThirdPartyPage() {
                 <TableCell><ReceiptThumb path={r.receipt_url} /></TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-muted-foreground text-center py-6">Sin pagos en el período.</TableCell></TableRow>}
+            {isLoading && rows.length === 0 && <TableSkeletonRows cols={6} />}
+            {!isLoading && rows.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground text-center py-6">Sin pagos en el período.</TableCell></TableRow>
+            )}
           </TableBody>
         </Table>
+        <Pager page={page} pages={res?.pages ?? 1} onChange={setPage} />
       </Card>
+    </div>
+  );
+}
+
+function Pager({ page, pages, onChange }: { page: number; pages: number; onChange: (p: number) => void }) {
+  if (pages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 border-t p-3 text-xs text-muted-foreground">
+      <span>Página {page} de {pages}</span>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>Anterior</Button>
+        <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Siguiente</Button>
+      </div>
     </div>
   );
 }

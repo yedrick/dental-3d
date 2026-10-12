@@ -1,93 +1,129 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session, User } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost, LOGOUT_EVENT, tokenStore } from "@/lib/api";
 
-export type AppRole = Database["public"]["Enums"]["app_role"];
+export const ROLES = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"] as const;
+export type AppRole = (typeof ROLES)[number];
+
+export interface SessionUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email: string;
+  active: boolean;
+  approved: boolean;
+  /** Cuenta ADMIN por defecto de una sucursal nueva: hay que activarla antes de usar el sistema. */
+  must_change_password: boolean;
+  created_at: string;
+}
+
+interface MeResponse {
+  user: SessionUser;
+  roles: AppRole[];
+  permissions: string[];
+  tenant: { id: string; name: string };
+  impersonated_by: string | null;
+}
 
 interface AuthCtx {
-  user: User | null;
-  session: Session | null;
+  user: SessionUser | null;
   roles: AppRole[];
   permissions: Set<string>;
+  tenant: { id: string; name: string } | null;
+  /** ADMIN que está "iniciando sesión como" este usuario. */
+  impersonatedBy: string | null;
   loading: boolean;
   hasRole: (r: AppRole) => boolean;
   hasAny: (r: AppRole[]) => boolean;
   can: (permKey: string) => boolean;
   reloadPermissions: () => Promise<void>;
+  signIn: (login: string, password: string) => Promise<void>;
+  /** Reemplaza el token (cambio de contraseña, suplantación) y recarga la sesión. */
+  setSessionToken: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-async function loadPermissionsFor(roles: AppRole[]): Promise<Set<string>> {
-  if (roles.length === 0) return new Set();
-  const { data } = await supabase.from("role_permissions").select("permission_key").in("role", roles);
-  return new Set((data ?? []).map((r: any) => r.permission_key as string));
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
-  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Solo se avisa "tu sesión terminó" si había una sesión en uso; un token viejo guardado se
+  // descarta en silencio (por ejemplo, al abrir la portada pública).
+  const hadSession = useRef(false);
+  useEffect(() => { hadSession.current = me !== null; }, [me]);
 
-  const loadRolesAndPerms = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    const rs = (data ?? []).map((r: any) => r.role as AppRole);
-    setRoles(rs);
-    setPermissions(await loadPermissionsFor(rs));
-  };
+  // Datos guardados en el navegador (React Query): se borran al cambiar de usuario o cerrar sesión,
+  // así en una computadora compartida nadie ve por unos minutos lo que veía el anterior
+  const qc = useQueryClient();
 
-  const checkApproved = async (userId: string): Promise<boolean> => {
-    const { data } = await supabase.from("profiles").select("approved").eq("id", userId).maybeSingle();
-    if (data && data.approved === false) {
-      await supabase.auth.signOut();
-      if (typeof window !== "undefined") {
-        const { toast } = await import("sonner");
-        toast.error("Tu cuenta aún no ha sido aprobada por un administrador.", { duration: 6000 });
-      }
+  /** Carga la sesión; devuelve false si el token no sirve. */
+  const load = useCallback(async (): Promise<boolean> => {
+    if (!tokenStore.get()) {
+      setMe(null);
       return false;
     }
-    return true;
-  };
-
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (s?.user) {
-        setTimeout(async () => {
-          const ok = await checkApproved(s.user.id);
-          if (ok) await loadRolesAndPerms(s.user.id);
-        }, 0);
-      } else {
-        setRoles([]); setPermissions(new Set());
-      }
-    });
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        const ok = await checkApproved(data.session.user.id);
-        if (ok) await loadRolesAndPerms(data.session.user.id);
-        else setSession(null);
-      }
-      setLoading(false);
-    });
-    return () => sub.subscription.unsubscribe();
+    try {
+      setMe(await apiGet<MeResponse>("/api/auth/me"));
+      return true;
+    } catch {
+      tokenStore.clear();
+      setMe(null);
+      return false;
+    }
   }, []);
 
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+    // La API avisa cuando la sesión venció o se cerró (contraseña nueva, rol cambiado…)
+    const onLogout = async (e: Event) => {
+      const wasLoggedIn = hadSession.current;
+      setMe(null);
+      qc.clear();
+      if (!wasLoggedIn) return;
+      const { toast } = await import("sonner");
+      toast.error((e as CustomEvent<string>).detail || "Tu sesión terminó. Vuelve a iniciar sesión.");
+    };
+    window.addEventListener(LOGOUT_EVENT, onLogout);
+    return () => window.removeEventListener(LOGOUT_EVENT, onLogout);
+  }, [load, qc]);
 
+  /** Cambia de sesión ("Entrar como…", volver a la propia). Lanza un error si el token no sirve. */
+  const setSessionToken = useCallback(async (token: string) => {
+    qc.clear();
+    tokenStore.set(token);
+    if (!(await load())) throw new Error("No se pudo iniciar esa sesión. Vuelve a intentarlo.");
+  }, [load, qc]);
+
+  const signIn = useCallback(async (login: string, password: string) => {
+    const { token } = await apiPost<{ token: string }>("/api/auth/login", { login, password });
+    await setSessionToken(token);
+  }, [setSessionToken]);
+
+  const signOut = useCallback(async () => {
+    tokenStore.clear();
+    tokenStore.clearAdmin();
+    setMe(null);
+    qc.clear();
+  }, [qc]);
+
+  const roles = me?.roles ?? [];
+  const permissions = new Set(me?.permissions ?? []);
   const value: AuthCtx = {
-    user: session?.user ?? null,
-    session,
+    user: me?.user ?? null,
     roles,
     permissions,
+    tenant: me?.tenant ?? null,
+    impersonatedBy: me?.impersonated_by ?? null,
     loading,
     hasRole: (r) => roles.includes(r),
     hasAny: (rs) => rs.some((r) => roles.includes(r)),
-    can: (k) => roles.includes("ADMIN") || permissions.has(k),
-    reloadPermissions: async () => { if (session?.user) await loadRolesAndPerms(session.user.id); },
-    signOut: async () => { await supabase.auth.signOut(); },
+    // La API ya devuelve todos los permisos para ADMIN
+    can: (k) => permissions.has(k),
+    reloadPermissions: async () => { await load(); },
+    signIn,
+    setSessionToken,
+    signOut,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

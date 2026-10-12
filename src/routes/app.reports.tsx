@@ -1,14 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { translateError } from "@/lib/translate-error";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useId, useMemo, useState, type ReactNode } from "react";
+import { apiGet } from "@/lib/api";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { methodLabel } from "@/lib/payments";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate, formatMoney } from "@/lib/data";
+import { formatDate, formatMoney, todayLocal } from "@/lib/data";
+import { LinesSkeleton } from "@/components/table-skeleton";
 import {
   Download, TrendingUp, TrendingDown, Users, Wallet, Landmark, Receipt, Activity,
   AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight,
@@ -23,77 +27,93 @@ const PRESETS = [
   { key: "ytd", label: "Este año", days: null },
 ];
 
+type ReportSummary = {
+  period: { from: string; to: string };
+  operational: {
+    attentions: number;
+    delivered: number;
+    pending_delivery: number;
+    new_patients: number;
+    by_day: { day: string; count: number; income: number }[];
+    by_study: { study: string; count: number; income: number }[];
+  };
+  financial: {
+    billed: number;
+    /** Cobrado en el período por la fecha de cada pago */
+    collected: number;
+    /** De lo cobrado, lo que es de atenciones de antes del período */
+    collected_previous: number;
+    debt: number;
+    commissions: number;
+    commissions_by_doctor: { doctor: string; count: number; total: number }[];
+    cash_in: number;
+    cash_out: number;
+    third_party: number;
+    deposits: number;
+    net: number;
+    by_method: { method: string; amount: number }[];
+  };
+  control: {
+    patients_without_doctor: number;
+    attentions_without_user: number;
+    cashbox_without_user: number;
+    date_errors: {
+      delivered_before_created: number;
+      payment_before_service: number;
+      future_deposits: number;
+      future_third_party: number;
+    };
+    price_errors: { active_price_zero: number; active_study_without_price: number };
+    overpaid_attentions: number;
+  };
+};
+
+/** Día local (YYYY-MM-DD) de hace `days` días. */
+const daysAgoLocal = (days: number) => formatDate(new Date(Date.now() - days * 86400000).toISOString());
+
 function ReportsPage() {
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const [from, setFrom] = useState(monthAgo);
-  const [to, setTo] = useState(today);
+  const uid = useId(); // ids para unir cada etiqueta con su campo
+  const [from, setFrom] = useState(() => daysAgoLocal(30));
+  const [to, setTo] = useState(() => todayLocal());
 
   const setPreset = (p: (typeof PRESETS)[number]) => {
-    const now = new Date();
-    setTo(now.toISOString().slice(0, 10));
-    if (p.days) setFrom(new Date(Date.now() - p.days * 86400000).toISOString().slice(0, 10));
-    else setFrom(`${now.getFullYear()}-01-01`);
+    setTo(todayLocal());
+    if (p.days) setFrom(daysAgoLocal(p.days));
+    else setFrom(`${new Date().getFullYear()}-01-01`);
   };
 
-  const { data, isLoading } = useQuery({
+  const validRange = !!from && !!to && from <= to;
+
+  // Todo se suma en la API (MySQL); aquí solo se adapta a lo que muestra la pantalla
+  const { data: raw, isLoading, error } = useQuery({
     queryKey: ["reports", from, to],
-    queryFn: async () => {
-      const [ps, com, cash, tpp, dep, orphanPat, orphanPs, bad] = await Promise.all([
-        supabase.from("patient_studies").select("id,price,invoice_surcharge,discount,amount_paid,created_at,payment_method,delivered_at,doctor_id").gte("created_at", from).lte("created_at", to + "T23:59:59"),
-        supabase.from("commissions").select("commission_amount,created_at,doctor_id").gte("created_at", from).lte("created_at", to + "T23:59:59"),
-        supabase.from("cashbox").select("income,expense,created_at").gte("created_at", from).lte("created_at", to + "T23:59:59"),
-        supabase.from("third_party_payments").select("amount,payment_date").gte("payment_date", from).lte("payment_date", to),
-        supabase.from("bank_deposits").select("amount,deposit_date").gte("deposit_date", from).lte("deposit_date", to),
-        supabase.from("patients").select("id,doctor_id").is("doctor_id", null),
-        supabase.from("patient_studies").select("id,created_by").is("created_by", null),
-        supabase.from("study_prices").select("id,price_with_report,price_without_report").or("price_with_report.lte.0,price_without_report.lte.0"),
-      ]);
-
-      const psRows = (ps.data ?? []) as any[];
-      const totalStudies = psRows.reduce(
-        (s, r) => s + Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0),
-        0,
-      );
-      const paid = psRows.reduce((s, r) => s + Number(r.amount_paid ?? 0), 0);
-      const debt = Math.max(0, totalStudies - paid);
-      const delivered = psRows.filter((r) => r.delivered_at).length;
-      const pending = psRows.length - delivered;
-
-      const commissions = ((com.data ?? []) as any[]).reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
-      const cashIn = ((cash.data ?? []) as any[]).reduce((s, r) => s + Number(r.income ?? 0), 0);
-      const cashOut = ((cash.data ?? []) as any[]).reduce((s, r) => s + Number(r.expense ?? 0), 0);
-      const tppTotal = ((tpp.data ?? []) as any[]).reduce((s, r) => s + Number(r.amount ?? 0), 0);
-      const depTotal = ((dep.data ?? []) as any[]).reduce((s, r) => s + Number(r.amount ?? 0), 0);
-
-      const byDay: Record<string, { count: number; income: number }> = {};
-      psRows.forEach((r) => {
-        const d = String(r.created_at).slice(0, 10);
-        byDay[d] = byDay[d] ?? { count: 0, income: 0 };
-        byDay[d].count += 1;
-        byDay[d].income += Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
-      });
-
-      const byMethod: Record<string, number> = {};
-      psRows.forEach((r) => {
-        const m = r.payment_method ?? "sin pago";
-        byMethod[m] = (byMethod[m] ?? 0) + Number(r.amount_paid ?? 0);
-      });
-
-      const netFinancial = totalStudies - commissions - tppTotal;
-
-      return {
-        totalStudies, paid, debt, delivered, pending,
-        studies: psRows.length,
-        commissions, cashIn, cashOut, tppTotal, depTotal, netFinancial,
-        byDay: Object.entries(byDay).sort(([a], [b]) => b.localeCompare(a)),
-        byMethod: Object.entries(byMethod).sort((a, b) => b[1] - a[1]),
-        orphanPatients: orphanPat.data?.length ?? 0,
-        orphanPs: orphanPs.data?.length ?? 0,
-        badPrices: bad.data?.length ?? 0,
-      };
-    },
+    queryFn: () => apiGet<ReportSummary>("/api/reports/summary", { from, to }),
+    staleTime: STALE.money,
+    enabled: validRange,
   });
+
+  const data = useMemo(() => {
+    if (!raw) return undefined;
+    const { operational: op, financial: fin, control: ctl } = raw;
+    return {
+      totalStudies: fin.billed,
+      paid: fin.collected,
+      paidPrevious: fin.collected_previous ?? 0,
+      debt: fin.debt,
+      delivered: op.delivered,
+      pending: op.pending_delivery,
+      studies: op.attentions,
+      commissions: fin.commissions,
+      cashIn: fin.cash_in,
+      cashOut: fin.cash_out,
+      tppTotal: fin.third_party,
+      depTotal: fin.deposits,
+      netFinancial: fin.net,
+      byDay: op.by_day.map((d) => [d.day, { count: d.count, income: d.income }] as const),
+      byMethod: fin.by_method.map((m) => [m.method, m.amount] as const),
+      control: ctl,
+    };
+  }, [raw]);
 
   const maxDay = useMemo(
     () => (data?.byDay ?? []).reduce((m, [, v]) => Math.max(m, v.income), 0),
@@ -114,13 +134,19 @@ function ReportsPage() {
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div>
-            <Label className="text-xs">Desde</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
+            <Label htmlFor={`${uid}-from`} className="text-xs">Desde</Label>
+            <Input id={`${uid}-from`} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
           </div>
           <div>
-            <Label className="text-xs">Hasta</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
+            <Label htmlFor={`${uid}-to`} className="text-xs">Hasta</Label>
+            <Input id={`${uid}-to`} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
           </div>
+          {!validRange && (
+            <p className="text-xs text-destructive self-center">La fecha inicial debe ser anterior o igual a la final.</p>
+          )}
+          {validRange && error && (
+            <p className="text-xs text-destructive self-center">{translateError(error)}</p>
+          )}
           <div className="flex gap-1 ml-auto">
             {PRESETS.map((p) => (
               <Button key={p.key} variant="outline" size="sm" onClick={() => setPreset(p)}>{p.label}</Button>
@@ -141,14 +167,21 @@ function ReportsPage() {
         <HeroCard
           title="Cobrado"
           value={formatMoney(data?.paid)}
-          hint={<span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><ArrowUpRight className="h-3 w-3" />ingresado</span>}
+          hint={
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <ArrowUpRight className="h-3 w-3" />
+              {(data?.paidPrevious ?? 0) > 0
+                ? `incluye ${formatMoney(data?.paidPrevious)} de atenciones anteriores`
+                : "ingresado en el período"}
+            </span>
+          }
           icon={<TrendingUp className="h-4 w-4" />}
           accent="from-emerald-500/20 to-emerald-500/5"
         />
         <HeroCard
           title="Por cobrar"
           value={formatMoney(data?.debt)}
-          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />deuda pendiente</span>}
+          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />saldo de las atenciones del período</span>}
           icon={<TrendingDown className="h-4 w-4" />}
           accent="from-amber-500/20 to-amber-500/5"
         />
@@ -179,9 +212,11 @@ function ReportsPage() {
           </CardHeader>
           <CardContent>
             {(data?.byDay ?? []).length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                {isLoading ? "Cargando…" : "Sin datos en el período."}
-              </div>
+              isLoading ? (
+                <div className="py-4"><LinesSkeleton lines={6} /></div>
+              ) : (
+                <div className="py-10 text-center text-sm text-muted-foreground">Sin datos en el período.</div>
+              )
             ) : (
               <div className="space-y-1.5 max-h-[360px] overflow-auto pr-1">
                 {(data?.byDay ?? []).slice(0, 30).map(([d, v]) => {
@@ -215,7 +250,7 @@ function ReportsPage() {
                 {(data?.byMethod ?? []).map(([m, v]) => {
                   const total = (data?.byMethod ?? []).reduce((s, [, x]) => s + x, 0);
                   const pct = total > 0 ? (v / total) * 100 : 0;
-                  const label = m === "cash" ? "Efectivo" : m === "qr" ? "QR" : m === "card" ? "Tarjeta" : m;
+                  const label = methodLabel(m);
                   return (
                     <div key={m}>
                       <div className="flex justify-between text-xs mb-1">
@@ -241,10 +276,24 @@ function ReportsPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Control de integridad
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <IntegrityRow label="Pacientes sin doctor" v={data?.orphanPatients ?? 0} />
-          <IntegrityRow label="Atenciones sin usuario" v={data?.orphanPs ?? 0} />
-          <IntegrityRow label="Tarifas con precio ≤ 0" v={data?.badPrices ?? 0} />
+        <CardContent className="space-y-4">
+          <IntegrityGroup title="Registros">
+            <IntegrityRow label="Pacientes sin doctor" v={data?.control.patients_without_doctor ?? 0} />
+            <IntegrityRow label="Atenciones sin usuario" v={data?.control.attentions_without_user ?? 0} />
+            <IntegrityRow label="Movimientos de caja sin usuario" v={data?.control.cashbox_without_user ?? 0} />
+          </IntegrityGroup>
+          <IntegrityGroup title="Fechas">
+            <IntegrityRow label="Entregados antes de registrarse" v={data?.control.date_errors.delivered_before_created ?? 0} />
+            <IntegrityRow label="Pagos a terceros antes del servicio" v={data?.control.date_errors.payment_before_service ?? 0} />
+            <IntegrityRow label="Depósitos con fecha futura" v={data?.control.date_errors.future_deposits ?? 0} />
+            <IntegrityRow label="Pagos a terceros con fecha futura" v={data?.control.date_errors.future_third_party ?? 0} />
+          </IntegrityGroup>
+          <IntegrityGroup title="Tarifas y cobros">
+            <IntegrityRow label="Tarifas activas con precio ≤ 0" v={data?.control.price_errors.active_price_zero ?? 0} />
+            <IntegrityRow label="Estudios activos sin tarifa" v={data?.control.price_errors.active_study_without_price ?? 0} />
+            <IntegrityRow label="Atenciones cobradas de más" v={data?.control.overpaid_attentions ?? 0} />
+          </IntegrityGroup>
+          <p className="text-xs text-muted-foreground">Los controles revisan toda la base, no solo el período seleccionado.</p>
         </CardContent>
       </Card>
 
@@ -288,6 +337,15 @@ function MiniStat({ icon, label, value, tone }: { icon: any; label: string; valu
     <div className="rounded-lg border bg-card p-3">
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{icon}<span>{label}</span></div>
       <div className={`text-lg font-semibold mt-1 tabular-nums ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function IntegrityGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground mb-2">{title}</div>
+      <div className="grid gap-3 md:grid-cols-3">{children}</div>
     </div>
   );
 }

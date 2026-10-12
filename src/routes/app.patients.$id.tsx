@@ -1,10 +1,14 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useId, useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { methodLabel, type PaymentMethod } from "@/lib/payments";
+import { PaymentMethodSelect } from "@/components/payment-method-select";
+import { ChargeAllDialog } from "@/components/charge-all-dialog";
 import { useAuth } from "@/lib/auth";
-import { formatMoney, formatDate, calcAge } from "@/lib/data";
+import { formatMoney, formatDate, formatDateTime, calcAge } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,46 +25,55 @@ import {
   Building2, CalendarDays, FileText, Save, Percent, Stethoscope, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LinesSkeleton, TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/patients/$id")({ component: PatientProfile });
 
 function PatientProfile() {
   const { id } = Route.useParams();
-  const { can, user } = useAuth();
+  const { can } = useAuth();
   const canCharge = can("attention.charge");
   const canDeliver = can("attention.deliver");
   const canEdit = can("patients.edit");
   const qc = useQueryClient();
 
-  const { data: patient } = useQuery({
+  const { data: patient, error: patientError } = useQuery({
     queryKey: ["patient", id],
-    queryFn: async () => (await supabase.from("patients").select("*").eq("id", id).single()).data,
+    queryFn: () => apiGet<any>(`/api/patients/${id}`),
+    staleTime: STALE.master,
   });
   const { data: doctors = [] } = useQuery({
-    queryKey: ["doctors_all"],
-    queryFn: async () => (await supabase.from("doctors").select("*")).data ?? [],
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
   });
-  const { data: studies = [] } = useQuery({
-    queryKey: ["studies_all"],
-    queryFn: async () => (await supabase.from("studies").select("*")).data ?? [],
-  });
+  // Historial con study_name, total y debt de cada atención (más reciente primero)
   const { data: rows = [] } = useQuery({
-    queryKey: ["patient_studies", id],
-    queryFn: async () => (await supabase.from("patient_studies").select("*").eq("patient_id", id).order("created_at", { ascending: false })).data ?? [],
+    queryKey: ["attentions", "patient", id],
+    queryFn: () => apiGet<any[]>(`/api/patients/${id}/attentions`),
+    staleTime: STALE.ops,
+  });
+  // Pagos del paciente: uno por cada cobro, con su fecha y su método
+  const { data: payments = [], isLoading: paymentsLoading } = useQuery({
+    queryKey: ["attentions", "payments", id],
+    queryFn: () => apiGet<any[]>("/api/attentions/payments", { patient_id: id }),
+    staleTime: STALE.ops,
   });
   const { data: appointments = [] } = useQuery({
-    queryKey: ["patient_appointments", id],
-    queryFn: async () => (await supabase.from("appointments").select("*").eq("patient_id", id).order("starts_at", { ascending: false })).data ?? [],
+    queryKey: ["appointments", "patient", id],
+    queryFn: () => apiGet<any[]>("/api/appointments", { patient_id: id }),
+    staleTime: STALE.ops,
   });
 
-  const studyName = (sid: string) => (studies as any[]).find((s) => s.id === sid)?.name ?? "—";
+  const doctorName = (did?: string | null) => (doctors as any[]).find((d) => d.id === did)?.full_name;
   const doctor = (doctors as any[]).find((d) => d.id === patient?.doctor_id);
 
-  const enriched = useMemo(() => (rows as any[]).map((r) => {
-    const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
-    const paid = Number(r.amount_paid ?? 0);
-    return { ...r, total, paid, debt: Math.max(0, total - paid) };
-  }), [rows]);
+  const enriched = useMemo(() => (rows as any[]).map((r) => ({
+    ...r,
+    total: Number(r.total ?? 0),
+    paid: Number(r.amount_paid ?? 0),
+    debt: Math.max(0, Number(r.debt ?? 0)),
+  })), [rows]);
 
   const summary = useMemo(() => enriched.reduce((s, r) => ({
     total: s.total + r.total, paid: s.paid + r.paid, debt: s.debt + r.debt,
@@ -70,36 +83,56 @@ function PatientProfile() {
     vouchers: s.vouchers + (r.is_voucher ? 1 : 0),
   }), { total: 0, paid: 0, debt: 0, pendingDelivery: 0, delivered: 0, withInvoice: 0, vouchers: 0 }), [enriched]);
 
-  const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
+  // Se espera a tener los datos nuevos: mientras tanto el botón del cobro sigue bloqueado
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["attentions"] }),
+      qc.invalidateQueries({ queryKey: ["dashboard"] }),
+      qc.invalidateQueries({ queryKey: ["cashbox"] }),
+    ]);
+
+  const [charge, setCharge] = useState<{ row: any; amount: string; method: PaymentMethod } | null>(null);
   const doCharge = async () => {
     if (!charge) return;
-    const amt = Number(charge.amount || 0);
+    const amt = Math.round(Number(charge.amount || 0) * 100) / 100;
     if (amt <= 0) return toast.error("Monto inválido");
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
-    const { error } = await supabase.from("patient_studies")
-      .update({ amount_paid: Number((charge.row.paid + amt).toFixed(2)) })
-      .eq("id", charge.row.id);
-    if (error) return toast.error(translateError(error));
-    toast.success("Cobro registrado"); setCharge(null); qc.invalidateQueries();
+    try {
+      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt, payment_method: charge.method });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
+    toast.success("Cobro registrado"); setCharge(null); await refresh();
   };
 
   const deliver = async (row: any) => {
     if (row.debt > 0.009) return toast.error(`Aún debe ${formatMoney(row.debt)}. Cobra primero.`);
-    const { error } = await supabase.from("patient_studies")
-      .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
-      .eq("id", row.id);
-    if (error) return toast.error(translateError(error));
-    toast.success("Estudio entregado"); qc.invalidateQueries();
-  };
-
-  const chargeAll = async () => {
-    for (const r of enriched.filter((x) => x.debt > 0.009)) {
-      await supabase.from("patient_studies").update({ amount_paid: Number(r.total.toFixed(2)) }).eq("id", r.id);
+    try {
+      await apiPost("/api/attentions/deliver", { ids: [row.id] });
+    } catch (e) {
+      return toast.error(translateError(e));
     }
-    toast.success("Saldo total cobrado"); qc.invalidateQueries();
+    toast.success("Estudio entregado"); await refresh();
   };
 
-  if (!patient) return <div className="p-6 text-sm text-muted-foreground">Cargando…</div>;
+  // "Cobrar deuda total": primero se confirma (monto y forma de pago)
+  const [confirmAll, setConfirmAll] = useState(false);
+  const chargeAll = async (method: PaymentMethod) => {
+    try {
+      await apiPost("/api/attentions/charge-all", { patient_id: id, payment_method: method });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
+    toast.success("Saldo total cobrado"); setConfirmAll(false); await refresh();
+  };
+
+  if (patientError) return <div className="p-6 text-sm text-destructive">{translateError(patientError)}</div>;
+  if (!patient) return (
+    <div className="grid gap-4 p-2 md:grid-cols-3">
+      <div className="space-y-3 rounded-lg border bg-background p-4 md:col-span-2"><LinesSkeleton lines={6} /></div>
+      <div className="space-y-3 rounded-lg border bg-background p-4"><LinesSkeleton lines={4} /></div>
+    </div>
+  );
 
   return (
     <div>
@@ -130,7 +163,7 @@ function PatientProfile() {
             </div>
           </div>
           {summary.debt > 0.009 && canCharge && (
-            <Button onClick={chargeAll} className="bg-amber-600 hover:bg-amber-700">
+            <Button onClick={() => setConfirmAll(true)} className="bg-amber-600 hover:bg-amber-700">
               <Wallet className="h-4 w-4 mr-2" />Cobrar deuda total {formatMoney(summary.debt)}
             </Button>
           )}
@@ -167,8 +200,8 @@ function PatientProfile() {
                 {enriched.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)} {r.has_report && <Badge variant="outline" className="ml-1 text-[10px]">Inf.</Badge>} {r.is_voucher && <Badge className="ml-1 text-[10px]">Vale</Badge>}</TableCell>
-                    <TableCell className="text-xs">{(doctors as any[]).find((d) => d.id === r.doctor_id)?.full_name ?? "—"}</TableCell>
+                    <TableCell>{r.study_name ?? "—"} {r.has_report && <Badge variant="outline" className="ml-1 text-[10px]">Inf.</Badge>} {r.is_voucher && <Badge className="ml-1 text-[10px]">Vale</Badge>}</TableCell>
+                    <TableCell className="text-xs">{doctorName(r.doctor_id) ?? "—"}</TableCell>
                     <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
                     <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
                     <TableCell className="font-mono">{r.debt > 0.009 ? <Badge variant="outline" className="text-amber-600 border-amber-500">{formatMoney(r.debt)}</Badge> : <Badge variant="secondary">—</Badge>}</TableCell>
@@ -176,8 +209,8 @@ function PatientProfile() {
                     <TableCell className="text-xs">{r.delivered_at ? formatDate(r.delivered_at) : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
-                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })} title="Cobrar"><Wallet className="h-3.5 w-3.5" /></Button>}
-                        {canDeliver && !r.delivered_at && <Button size="sm" onClick={() => deliver(r)} disabled={r.debt > 0.009} title={r.debt > 0.009 ? `Saldo pendiente: ${formatMoney(r.debt)}` : "Entregar"}><PackageCheck className="h-3.5 w-3.5" /></Button>}
+                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })} title="Cobrar" aria-label={`Cobrar ${r.study_name ?? "estudio"}`}><Wallet className="h-3.5 w-3.5" /></Button>}
+                        {canDeliver && !r.delivered_at && <Button size="sm" aria-label={`Entregar ${r.study_name ?? "estudio"}`} onClick={() => deliver(r)} disabled={r.debt > 0.009} title={r.debt > 0.009 ? `Saldo pendiente: ${formatMoney(r.debt)}` : "Entregar"}><PackageCheck className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -192,21 +225,28 @@ function PatientProfile() {
           <Card>
             <Table>
               <TableHeader><TableRow>
-                <TableHead>Fecha</TableHead><TableHead>Estudio</TableHead><TableHead>Método</TableHead>
-                <TableHead>Total</TableHead><TableHead>Pagado</TableHead><TableHead>Deuda</TableHead>
+                <TableHead>Fecha del pago</TableHead><TableHead>Estudio</TableHead><TableHead>Forma de pago</TableHead>
+                <TableHead className="text-right">Monto</TableHead><TableHead>Registró</TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {enriched.filter((r) => r.paid > 0 || r.debt > 0).map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)}</TableCell>
-                    <TableCell className="text-xs uppercase">{r.payment_method || "—"}</TableCell>
-                    <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
-                    <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
-                    <TableCell className="font-mono">{r.debt > 0.009 ? formatMoney(r.debt) : "—"}</TableCell>
-                  </TableRow>
-                ))}
-                {enriched.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">Sin pagos.</TableCell></TableRow>}
+                {paymentsLoading && <TableSkeletonRows cols={5} rows={3} />}
+                {(payments as any[]).map((p) => {
+                  // Saldo de una atención de otro día pagado en esta fecha
+                  const otherDay = formatDate(p.attention_created_at) !== formatDate(p.paid_at);
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-xs">{formatDateTime(p.paid_at)}</TableCell>
+                      <TableCell>
+                        {p.study_name ?? "—"}
+                        {otherDay && <div className="text-xs text-muted-foreground">Atención del {formatDate(p.attention_created_at)}</div>}
+                      </TableCell>
+                      <TableCell className="text-xs">{methodLabel(p.method)}</TableCell>
+                      <TableCell className="text-right font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(Number(p.amount))}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{p.created_by_name ?? "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {!paymentsLoading && payments.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Sin pagos.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </Card>
@@ -223,12 +263,12 @@ function PatientProfile() {
                 {enriched.filter((r) => !r.is_voucher).map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{studyName(r.study_id)}</TableCell>
+                    <TableCell>{r.study_name ?? "—"}</TableCell>
                     <TableCell>{r.delivered_at ? <Badge>Entregado {formatDate(r.delivered_at)}</Badge> : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="font-mono">{r.debt > 0.009 ? <span className="text-amber-600 font-semibold">{formatMoney(r.debt)}</span> : "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
-                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })}><Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(r.debt)}</Button>}
+                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })}><Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(r.debt)}</Button>}
                         {canDeliver && !r.delivered_at && <Button size="sm" onClick={() => deliver(r)} disabled={r.debt > 0.009}><PackageCheck className="h-3.5 w-3.5 mr-1" />Entregar</Button>}
                       </div>
                     </TableCell>
@@ -250,9 +290,9 @@ function PatientProfile() {
               <TableBody>
                 {(appointments as any[]).map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="text-xs">{new Date(a.starts_at).toLocaleString()}</TableCell>
-                    <TableCell className="text-xs">{(doctors as any[]).find((d) => d.id === a.doctor_id)?.full_name ?? "—"}</TableCell>
-                    <TableCell className="text-xs">{a.study_id ? studyName(a.study_id) : "—"}</TableCell>
+                    <TableCell className="text-xs">{formatDateTime(a.starts_at)}</TableCell>
+                    <TableCell className="text-xs">{a.doctor_name ?? doctorName(a.doctor_id) ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{a.study_name ?? "—"}</TableCell>
                     <TableCell><Badge variant="outline">{a.status}</Badge></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{a.notes || "—"}</TableCell>
                   </TableRow>
@@ -265,8 +305,8 @@ function PatientProfile() {
 
         <TabsContent value="datos">
           <div className="grid gap-4 md:grid-cols-2">
-            <PatientDataCard patient={patient} doctors={doctors} canEdit={canEdit} onSaved={() => qc.invalidateQueries({ queryKey: ["patient", id] })} />
-            <DoctorInfoCard doctor={doctor} />
+            <PatientDataCard patient={patient} doctors={doctors} canEdit={canEdit} onSaved={() => { qc.invalidateQueries({ queryKey: ["patient", id] }); qc.invalidateQueries({ queryKey: ["patients"] }); }} />
+            <DoctorInfoCard doctor={doctor ?? (patient.doctor_name ? { full_name: patient.doctor_name, status: true } : undefined)} />
           </div>
         </TabsContent>
       </Tabs>
@@ -277,18 +317,25 @@ function PatientProfile() {
           {charge && (
             <div className="space-y-3">
               <div className="text-sm">
-                <div><span className="text-muted-foreground">Estudio:</span> {studyName(charge.row.study_id)}</div>
+                <div><span className="text-muted-foreground">Estudio:</span> {charge.row.study_name ?? "—"}</div>
                 <div><span className="text-muted-foreground">Deuda:</span> <strong className="font-mono">{formatMoney(charge.row.debt)}</strong></div>
               </div>
-              <div>
-                <Label>Monto a cobrar</Label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">Monto a cobrar</span>
                 <Input type="number" step="0.01" autoFocus value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
-              </div>
+              </label>
+              <PaymentMethodSelect value={charge.method} onChange={(m) => setCharge({ ...charge, method: m })} />
             </div>
           )}
           <DialogFooter><Button onClick={doCharge}>Registrar cobro</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChargeAllDialog
+        target={confirmAll ? { patientName: patient.full_name, debt: summary.debt, total: summary.total, paid: summary.paid } : null}
+        onCancel={() => setConfirmAll(false)}
+        onConfirm={chargeAll}
+      />
     </div>
   );
 }
@@ -307,6 +354,7 @@ function KPI({ label, value, tone }: { label: string; value: string; tone?: "ok"
 }
 
 function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const [form, setForm] = useState({
     full_name: patient.full_name ?? "",
     phone: patient.phone ?? "",
@@ -328,16 +376,21 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
   const [saving, setSaving] = useState(false);
   const save = async () => {
     setSaving(true);
-    const { error } = await supabase.from("patients").update({
-      full_name: form.full_name,
-      phone: form.phone || null,
-      email: form.email || null,
-      birth_date: form.birth_date || null,
-      doctor_id: form.doctor_id || null,
-      notes: form.notes || null,
-    }).eq("id", patient.id);
+    try {
+      await apiPatch(`/api/patients/${patient.id}`, {
+        full_name: form.full_name,
+        phone: form.phone || null,
+        email: form.email || null,
+        birth_date: form.birth_date || null,
+        // Opcional: "Sin doctor" lo deja vacío (sus atenciones van sin comisión)
+        doctor_id: form.doctor_id || null,
+        notes: form.notes || null,
+      });
+    } catch (e) {
+      setSaving(false);
+      return toast.error(translateError(e));
+    }
     setSaving(false);
-    if (error) return toast.error(translateError(error));
     toast.success("Datos actualizados");
     onSaved();
   };
@@ -348,22 +401,23 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
         <h3 className="font-semibold">Datos del paciente</h3>
       </div>
       <div className="grid gap-3">
-        <div><Label>Nombre completo</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-name`}>Nombre completo</Label><Input id={`${uid}-name`} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} disabled={!canEdit} /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Celular</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} disabled={!canEdit} /></div>
-          <div><Label>Fecha de nacimiento</Label><Input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} disabled={!canEdit} /></div>
+          <div><Label htmlFor={`${uid}-phone`}>Celular</Label><Input id={`${uid}-phone`} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} disabled={!canEdit} /></div>
+          <div><Label htmlFor={`${uid}-birth`}>Fecha de nacimiento</Label><Input id={`${uid}-birth`} type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} disabled={!canEdit} /></div>
         </div>
-        <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-email`}>Email</Label><Input id={`${uid}-email`} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEdit} /></div>
         <div>
-          <Label>Doctor referente</Label>
-          <Select value={form.doctor_id} onValueChange={(v) => setForm({ ...form, doctor_id: v })} disabled={!canEdit}>
-            <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+          <Label htmlFor={`${uid}-doctor`}>Doctor referente</Label>
+          <Select value={form.doctor_id || "none"} onValueChange={(v) => setForm({ ...form, doctor_id: v === "none" ? "" : v })} disabled={!canEdit}>
+            <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="Sin doctor" /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="none">Sin doctor</SelectItem>
               {(doctors as any[]).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div><Label>Notas clínicas</Label><Textarea rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-notes`}>Notas clínicas</Label><Textarea id={`${uid}-notes`} rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!canEdit} /></div>
         {canEdit && (
           <div className="flex justify-end"><Button onClick={save} disabled={saving}><Save className="h-4 w-4 mr-2" />{saving ? "Guardando…" : "Guardar cambios"}</Button></div>
         )}
@@ -391,7 +445,7 @@ function DoctorInfoCard({ doctor }: { doctor: any }) {
         {doctor.phone && <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /><span>{doctor.phone}</span></div>}
         {doctor.email && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /><span>{doctor.email}</span></div>}
         <div className="flex flex-wrap gap-2 pt-2">
-          <Badge variant="outline"><Percent className="h-3 w-3 mr-1" />Comisión {doctor.default_commission_pct}%</Badge>
+          {doctor.default_commission_pct != null && <Badge variant="outline"><Percent className="h-3 w-3 mr-1" />Comisión {doctor.default_commission_pct}%</Badge>}
           {Number(doctor.agreement_discount_pct) > 0 && <Badge variant="outline">Convenio {doctor.agreement_discount_pct}% desc.</Badge>}
           <Badge variant={doctor.status ? "default" : "outline"}>{doctor.status ? "Activo" : "Inactivo"}</Badge>
         </div>

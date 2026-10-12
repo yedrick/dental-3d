@@ -1,20 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-
-export function useList<T = any>(table: string, order = "created_at", ascending = false) {
-  return useQuery({
-    queryKey: [table, order, ascending],
-    queryFn: async () => {
-      const { data, error } = await (supabase.from(table as any) as any).select("*").order(order, { ascending });
-      if (error) throw error;
-      return (data ?? []) as T[];
-    },
-  });
-}
-
+/**
+ * Fecha para mostrar en formato YYYY-MM-DD.
+ * - Columnas DATE ("2026-10-08"): tal cual, sin conversión de zona horaria.
+ * - Fecha y hora de la API (ISO en UTC): se muestra el día en la hora local del navegador.
+ */
 export function formatDate(v?: string | null) {
   if (!v) return "-";
-  return v.slice(0, 10);
+  if (v.length <= 10) return v;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Fecha y hora local: "2026-10-08 14:30". */
+export function formatDateTime(v?: string | null) {
+  if (!v) return "-";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return `${formatDate(v)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Hoy en la hora local, YYYY-MM-DD (para filtros from/to). */
+export function todayLocal() {
+  return formatDate(new Date().toISOString());
 }
 
 export function formatMoney(v?: number | string | null) {

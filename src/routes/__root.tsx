@@ -6,13 +6,15 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth";
+import { BrandingProvider } from "@/lib/branding";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalLoader } from "@/components/global-loader";
 
 function NotFoundComponent() {
   return (
@@ -30,14 +32,16 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
-  useEffect(() => { reportLovableError(error, { boundary: "root" }); }, [error]);
+  // Queda en la consola del navegador
+  useEffect(() => { console.error(error); }, [error]);
+  const message = error instanceof Error ? error.message : String(error);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Error al cargar</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <button onClick={() => { router.invalidate(); reset(); }} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">Reintentar</button>
       </div>
     </div>
@@ -93,10 +97,13 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Outlet />
-        <Toaster richColors position="top-right" />
-      </AuthProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          <GlobalLoader />
+          <Outlet />
+          <Toaster richColors position="top-right" />
+        </AuthProvider>
+      </BrandingProvider>
     </QueryClientProvider>
   );
 }
