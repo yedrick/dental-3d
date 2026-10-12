@@ -1,7 +1,7 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, formatDate, todayLocal } from "@/lib/data";
@@ -38,15 +38,12 @@ function StudiesPage() {
     queryFn: () => apiGet<any[]>("/api/studies"),
     staleTime: STALE.catalog,
   });
-  // No hay un endpoint con todas las tarifas: se pide el historial de cada estudio
-  const priceQueries = useQueries({
-    queries: studies.map((x: any) => ({
-      queryKey: ["study_prices", x.id],
-      queryFn: () => apiGet<any[]>(`/api/studies/${x.id}/prices`),
-      staleTime: STALE.catalog,
-    })),
+  // Todas las tarifas (historial) en una sola petición
+  const { data: prices = [] } = useQuery({
+    queryKey: ["study_prices"],
+    queryFn: () => apiGet<any[]>("/api/study-prices"),
+    staleTime: STALE.catalog,
   });
-  const prices = priceQueries.flatMap((q) => q.data ?? []);
 
   const [openS, setOpenS] = useState(false);
   const [openP, setOpenP] = useState(false);
@@ -92,7 +89,7 @@ function StudiesPage() {
     }
     toast.success("Estudio eliminado");
     qc.invalidateQueries({ queryKey: ["studies"] });
-    qc.removeQueries({ queryKey: ["study_prices", x.id] });
+    qc.invalidateQueries({ queryKey: ["study_prices"] });
   };
 
   const openNewPrice = () => { setP({ ...emptyPrice, effective_date: todayLocal() }); setOpenP(true); };

@@ -5,10 +5,11 @@ import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { username as usernameSchema } from "../lib/schemas.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { loadPermissions, loadRoles } from "../lib/permissions.js";
 import { consumeImpersonationToken, InvalidImpersonationTokenError } from "@tenancy-node/admin-api";
-import { requireAuth, signToken } from "../middleware/auth.js";
+import { doctorScope, requireAuth, signToken } from "../middleware/auth.js";
 import { tenancy } from "../tenancy/index.js";
 import { loginLimiter, registerLimiter, sensitiveLimiter } from "../middleware/rate-limit.js";
 
@@ -27,7 +28,7 @@ export const passwordSchema = z
 const registerSchema = z.object({
   email: z.email("Email inválido").trim().toLowerCase(),
   password: passwordSchema,
-  username: z.string().trim().min(1).max(100),
+  username: usernameSchema,
   full_name: z.string().trim().min(1).max(200),
 });
 
@@ -74,9 +75,14 @@ const DUMMY_HASH = bcrypt.hashSync("dummy-password-not-used", 12);
 
 authRouter.post("/login", loginLimiter, async (req, res) => {
   const { login, password } = loginSchema.parse(req.body);
+  // Con "@" se busca por email (y si coincide también un usuario viejo con "@", gana el email);
+  // sin "@", solo por nombre de usuario. Así nadie puede "tapar" el email de otra persona.
+  const byEmail = login.includes("@");
   const rows = await db().query<{ id: string; password_hash: string; active: boolean; approved: boolean; token_version: number }[]>(
-    "SELECT id, password_hash, active, approved, token_version FROM users WHERE email = ? OR username = ? LIMIT 1",
-    [login.toLowerCase(), login],
+    byEmail
+      ? "SELECT id, password_hash, active, approved, token_version FROM users WHERE email = ? OR username = ? ORDER BY email = ? DESC LIMIT 1"
+      : "SELECT id, password_hash, active, approved, token_version FROM users WHERE username = ? LIMIT 1",
+    byEmail ? [login.toLowerCase(), login, login.toLowerCase()] : [login],
   );
   const u = rows[0];
   const ok = await verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
@@ -90,12 +96,14 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
 /** Datos de la sesión actual: perfil, roles, permisos y sucursal. */
 authRouter.get("/me", requireAuth, async (req, res) => {
   const rows = await db().query(
-    "SELECT id, username, full_name, email, active, approved, must_change_password, created_at FROM users WHERE id = ?",
+    "SELECT id, username, full_name, email, active, approved, must_change_password, doctor_id, created_at FROM users WHERE id = ?",
     [req.user!.id],
   );
   const roles = await loadRoles(req.user!.id);
   res.json({
     user: rows[0],
+    // "doctor": solo ve lo de su ficha de doctor (sus pacientes, atenciones y comisiones)
+    scope: doctorScope(req.user) !== undefined ? "doctor" : "full",
     roles,
     permissions: await loadPermissions(roles),
     tenant: { id: req.tenant!.id.value, name: req.tenant!.name },
@@ -130,7 +138,7 @@ authRouter.post("/change-password", sensitiveLimiter, requireAuth, async (req, r
 
 const profileSchema = z.object({
   full_name: z.string().trim().min(1).max(200).optional(),
-  username: z.string().trim().min(1).max(100).optional(),
+  username: usernameSchema.optional(),
 });
 
 /** El usuario edita su propio nombre y usuario (el email y los roles los cambia un ADMIN). */
@@ -166,23 +174,26 @@ authRouter.get("/impersonate", sensitiveLimiter, async (req, res) => {
     throw e;
   }
   const ident = imp.userIdentifier.trim();
+  // El panel manda el id del usuario (o su email o usuario): se busca por el campo que corresponda
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ident);
   const [user] = await db().query<{ id: string; active: boolean; approved: boolean; token_version: number }[]>(
-    "SELECT id, active, approved, token_version FROM users WHERE id = ? OR username = ? OR email = ? LIMIT 1",
-    [ident, ident, ident.toLowerCase()],
+    `SELECT id, active, approved, token_version FROM users WHERE ${isUuid ? "id = ?" : ident.includes("@") ? "email = ?" : "username = ?"} LIMIT 1`,
+    [ident.includes("@") && !isUuid ? ident.toLowerCase() : ident],
   );
   if (!user || !user.active) return res.redirect(302, "/auth?error=impersonation_user");
 
   const by = `platform:${imp.adminUserId}`;
   await withTransaction((tx) => audit(tx, user.id, "IMPERSONATE_PLATFORM", "users", user.id, { platform_admin_id: imp.adminUserId, by }));
   const appToken = signToken(user.id, user.token_version, { impersonatedBy: by, expiresIn: "1h" });
-  const redirect = imp.redirectPath && imp.redirectPath.startsWith("/") && !imp.redirectPath.startsWith("//") ? imp.redirectPath : "/app";
+  // Solo rutas de esta misma app: "/x" sí; "//otro.com" o "/\\otro.com" (que el navegador toma como otro sitio) no
+  const redirect = imp.redirectPath && /^\/(?![\/\\])/.test(imp.redirectPath) ? imp.redirectPath : "/app";
   res.setHeader("Cache-Control", "no-store");
   res.redirect(302, `/auth/impersonate#token=${encodeURIComponent(appToken)}&redirect=${encodeURIComponent(redirect)}`);
 });
 
 const setupSchema = z.object({
   email: z.email("Email inválido").trim().toLowerCase(),
-  username: z.string().trim().min(1).max(100),
+  username: usernameSchema,
   full_name: z.string().trim().min(1).max(200),
   new_password: passwordSchema,
 });

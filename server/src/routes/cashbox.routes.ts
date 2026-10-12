@@ -6,12 +6,12 @@ import { HttpError } from "../lib/http-error.js";
 import { fromCents, toCents } from "../lib/money.js";
 import { dateRangeSchema, dayRange, paged, paginate, paginationSchema } from "../lib/query.js";
 import { money } from "../lib/schemas.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { denyDoctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 
 // Caja chica: libro de movimientos. No se editan ni se borran (una corrección es un
 // movimiento nuevo). Sin caché: es dinero.
 export const cashboxRouter = Router();
-cashboxRouter.use(requireAuth);
+cashboxRouter.use(requireAuth, denyDoctorScope);
 
 const movementSchema = z
   .object({

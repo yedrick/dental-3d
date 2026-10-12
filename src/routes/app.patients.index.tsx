@@ -21,7 +21,7 @@ import { Plus, Pencil, Trash2, Eye, Search, ChevronLeft, ChevronRight } from "lu
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/table-skeleton";
 
-export const Route = createFileRoute("/app/patients")({ component: PatientsPage });
+export const Route = createFileRoute("/app/patients/")({ component: PatientsPage });
 
 type PForm = { id?: string; doctor_id: string; full_name: string; birth_date: string; phone: string; email: string; notes: string; status: boolean };
 // Radix Select no admite "" como valor: "none" representa "sin doctor"

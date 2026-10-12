@@ -5,14 +5,25 @@ import { audit } from "../lib/audit.js";
 import { HttpError } from "../lib/http-error.js";
 import { paged, paginate, paginationSchema } from "../lib/query.js";
 import { optionalEmail, optionalText, uuid } from "../lib/schemas.js";
-import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
+import { doctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 import { ATTENTION_TOTALS_SQL } from "../services/attentions.js";
 
 export const patientsRouter = Router();
 patientsRouter.use(requireAuth);
 
-// Mismos roles que la política RLS "Read patients"
-const canRead = requireRole("ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR");
+// Lectura: la pantalla Pacientes (view.patients) y las que buscan pacientes (atención, entregas, agenda).
+// Un usuario DOCTOR solo ve los pacientes que le pertenecen (ver ownPatientsSql).
+const canRead = requirePermission("view.patients", "view.attention", "view.delivery", "view.appointments", "attention.create");
+
+/** Condición SQL "pacientes de este doctor": asignados a él o con alguna atención suya. */
+function ownPatientsSql(own: string | undefined): { sql: string; params: unknown[] } | null {
+  if (own === undefined) return null;
+  if (own === "") return { sql: "1 = 0", params: [] };
+  return {
+    sql: "(p.doctor_id = ? OR EXISTS (SELECT 1 FROM patient_studies x WHERE x.patient_id = p.id AND x.doctor_id = ?))",
+    params: [own, own],
+  };
+}
 
 const patientSchema = z.object({
   // Opcional: un paciente nuevo puede no tener doctor (sus atenciones van sin comisión)
@@ -37,12 +48,14 @@ const listSchema = paginationSchema.extend({
   sort: z.enum(["recent", "name"]).default("recent"),
 });
 
-async function findPatient(q: Db, id: string) {
+/** Un paciente por id; con `own` (usuario DOCTOR), solo si es suyo. */
+async function findPatient(q: Db, id: string, own?: string) {
+  const scope = ownPatientsSql(own);
   const rows = await q.query(
     `SELECT p.*, d.full_name AS doctor_name
        FROM patients p LEFT JOIN doctors d ON d.id = p.doctor_id
-      WHERE p.id = ?`,
-    [id],
+      WHERE p.id = ?${scope ? ` AND ${scope.sql}` : ""}`,
+    [id, ...(scope?.params ?? [])],
   );
   return rows[0] ?? null;
 }
@@ -63,6 +76,8 @@ patientsRouter.get("/", canRead, async (req, res) => {
   if (f.doctor_id === "none") where.push("p.doctor_id IS NULL");
   else if (f.doctor_id) { where.push("p.doctor_id = ?"); params.push(f.doctor_id); }
   if (f.status) { where.push("p.status = ?"); params.push(f.status === "true"); }
+  const scope = ownPatientsSql(doctorScope(req.user));
+  if (scope) { where.push(scope.sql); params.push(...scope.params); }
   const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
   const { limit, offset } = paginate(f.page, f.limit);
 
@@ -81,7 +96,7 @@ patientsRouter.get("/", canRead, async (req, res) => {
 });
 
 patientsRouter.get("/:id", canRead, async (req, res) => {
-  const patient = await findPatient(db(), String(req.params.id));
+  const patient = await findPatient(db(), String(req.params.id), doctorScope(req.user));
   if (!patient) throw new HttpError(404, "Paciente no encontrado");
   res.json(patient);
 });
@@ -89,13 +104,15 @@ patientsRouter.get("/:id", canRead, async (req, res) => {
 /** Historial de atenciones del paciente, con total y saldo de cada una. */
 patientsRouter.get("/:id/attentions", canRead, async (req, res) => {
   const id = String(req.params.id);
-  if (!(await findPatient(db(), id))) throw new HttpError(404, "Paciente no encontrado");
+  const own = doctorScope(req.user);
+  if (!(await findPatient(db(), id, own))) throw new HttpError(404, "Paciente no encontrado");
+  // Un DOCTOR ve solo las atenciones que él refirió
   const rows = await db().query(
     `SELECT ps.*, s.name AS study_name, ${ATTENTION_TOTALS_SQL}
        FROM patient_studies ps JOIN studies s ON s.id = ps.study_id
-      WHERE ps.patient_id = ?
+      WHERE ps.patient_id = ?${own !== undefined ? " AND ps.doctor_id = ?" : ""}
       ORDER BY ps.created_at DESC`,
-    [id],
+    own !== undefined ? [id, own] : [id],
   );
   res.json(rows);
 });
@@ -123,7 +140,7 @@ patientsRouter.patch("/:id", requirePermission("patients.edit"), async (req, res
   if (fields.length === 0) throw new HttpError(400, "No hay campos para actualizar");
 
   const patient = await withTransaction(async (tx) => {
-    if (!(await findPatient(tx, id))) throw new HttpError(404, "Paciente no encontrado");
+    if (!(await findPatient(tx, id, doctorScope(req.user)))) throw new HttpError(404, "Paciente no encontrado");
     if (data.doctor_id) await assertDoctorExists(tx, data.doctor_id);
     await tx.query(`UPDATE patients SET ${fields.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [
       ...fields.map((c) => data[c]),
@@ -139,7 +156,7 @@ patientsRouter.patch("/:id", requirePermission("patients.edit"), async (req, res
 patientsRouter.delete("/:id", requirePermission("patients.delete"), async (req, res) => {
   const id = String(req.params.id);
   await withTransaction(async (tx) => {
-    const existing = await findPatient(tx, id);
+    const existing = await findPatient(tx, id, doctorScope(req.user));
     if (!existing) throw new HttpError(404, "Paciente no encontrado");
     const [{ n }] = await tx.query<{ n: number }[]>("SELECT COUNT(*) AS n FROM patient_studies WHERE patient_id = ?", [id]);
     if (n > 0) {

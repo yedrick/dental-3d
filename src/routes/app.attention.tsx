@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { PaymentMethodSelect } from "@/components/payment-method-select";
+import { ChargeAllDialog } from "@/components/charge-all-dialog";
+import { type PaymentMethod } from "@/lib/payments";
 import { useBranding } from "@/lib/branding";
 import { formatMoney, formatDate } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
@@ -53,6 +56,9 @@ function AttentionPage() {
 // ============================================================
 // REGISTRO TAB
 // ============================================================
+/** Valor del selector de doctor para "Doctor no registrado…" */
+const EXTERNAL = "__external";
+
 function RegistroTab() {
   const { can } = useAuth();
   const canCreate = can("attention.create");
@@ -128,16 +134,19 @@ function RegistroTab() {
 
   const [items, setItems] = useState<SelectedStudy[]>([]);
   const [doctorId, setDoctorId] = useState<string>("");
+  // Doctor que no está registrado: su nombre y su comisión para ESTA atención
+  const [ext, setExt] = useState({ name: "", type: "pct" as "pct" | "fixed", value: "" });
+  const isExternal = doctorId === EXTERNAL;
   const [clinic, setClinic] = useState<string>("");
   const [withInvoice, setWithInvoice] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [payMode, setPayMode] = useState<PayMode>("full");
   const [amountPaid, setAmountPaid] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash"|"qr"|"card">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
-    setPatient(null); setQuery(""); setItems([]); setDoctorId(""); setClinic("");
+    setPatient(null); setQuery(""); setItems([]); setDoctorId(""); setClinic(""); setExt({ name: "", type: "pct", value: "" });
     setWithInvoice(false); setInvoiceNumber(""); setPayMode("full"); setAmountPaid(""); setPaymentMethod("cash");
   };
 
@@ -152,7 +161,7 @@ function RegistroTab() {
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
 
   // Descuento por convenio del doctor que usará el servidor: el elegido o, si no, el del paciente
-  const effectiveDoctorId = doctorId || patient?.doctor_id || "";
+  const effectiveDoctorId = isExternal ? "" : doctorId || patient?.doctor_id || "";
   const discountPct = Number((doctors as any[]).find((d) => d.id === effectiveDoctorId)?.agreement_discount_pct ?? 0);
 
   /** Vista previa de una línea, en centavos y con el mismo redondeo que el servidor. */
@@ -184,19 +193,28 @@ function RegistroTab() {
     const noPrice = items.find((it) => !it.is_voucher && activePrice(it.study_id, it.has_report) == null);
     if (noPrice) return toast.error(`No hay tarifa activa para el estudio "${studyMap.get(noPrice.study_id)?.name ?? ""}"`);
     if (payMode === "advance" && (paid <= 0 || paid > totals.total)) return toast.error("Monto adelantado inválido");
+    const extValue = Number(ext.value);
+    if (isExternal) {
+      if (ext.name.trim().length < 2) return toast.error("Escribe el nombre del doctor no registrado");
+      if (ext.value === "" || !(extValue >= 0)) return toast.error("Escribe la comisión del doctor no registrado");
+      if (ext.type === "pct" && extValue > 100) return toast.error("El porcentaje no puede pasar de 100");
+    }
 
-    const hasCharge = items.some((it) => !it.is_voucher);
     setSaving(true);
     let res: any;
     try {
       // El servidor calcula precio, recargo, descuento por convenio y comisión: aquí solo se dice qué y cuánto se pagó
       res = await apiPost<any>("/api/attentions", {
         patient_id: patient.id,
-        doctor_id: doctorId || null,
+        doctor_id: isExternal ? null : doctorId || null,
+        external_doctor: isExternal
+          ? { name: ext.name.trim(), commission_type: ext.type, commission_value: Math.round(extValue * 100) / 100 }
+          : null,
         clinic_name: clinic || null,
         with_invoice: withInvoice,
         invoice_number: withInvoice ? invoiceNumber || null : null,
-        payment_method: hasCharge ? paymentMethod : null,
+        // El método solo va si se paga algo ahora ("En entrega" = 0 Bs)
+        payment_method: paid > 0 ? paymentMethod : null,
         amount_paid: Math.round(paid * 100) / 100,
         delivery_date: null,
         items: items.map((it) => ({ study_id: it.study_id, has_report: it.has_report, is_voucher: it.is_voucher })),
@@ -322,12 +340,40 @@ function RegistroTab() {
             <Label className="text-xs">Doctor referente</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
               <SelectTrigger className="h-9"><SelectValue placeholder="Sin doctor" /></SelectTrigger>
-              <SelectContent>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
+                <SelectItem value={EXTERNAL}>Doctor no registrado…</SelectItem>
+              </SelectContent>
             </Select>
-            {patient && !effectiveDoctorId && (
+            {patient && !effectiveDoctorId && !isExternal && (
               <p className="mt-1 text-xs text-muted-foreground">Sin doctor: se registra sin comisión ni descuento por convenio.</p>
             )}
           </div>
+          {isExternal && (
+            <div className="grid gap-2 rounded-md border border-dashed p-2 sm:col-span-2 sm:grid-cols-[1fr_auto_7rem]">
+              <label className="block space-y-1">
+                <span className="text-xs font-medium">Nombre del doctor</span>
+                <Input value={ext.name} onChange={(e) => setExt({ ...ext, name: e.target.value })} placeholder="Ej. Dr. Juan Pérez" className="h-9" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-medium">Comisión</span>
+                <Select value={ext.type} onValueChange={(v) => setExt({ ...ext, type: v as "pct" | "fixed" })}>
+                  <SelectTrigger className="h-9 w-full sm:w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pct">% del precio</SelectItem>
+                    <SelectItem value="fixed">Monto fijo por estudio</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-medium">{ext.type === "pct" ? "Porcentaje" : "Monto (Bs)"}</span>
+                <Input type="number" min={0} max={ext.type === "pct" ? 100 : undefined} step="0.01" value={ext.value} onChange={(e) => setExt({ ...ext, value: e.target.value })} className="h-9" />
+              </label>
+              <p className="text-xs text-muted-foreground sm:col-span-3">
+                Su comisión aparece en Comisiones con este nombre. Sin descuento por convenio.
+              </p>
+            </div>
+          )}
           <div>
             <Label className="text-xs">Clínica</Label>
             <Input value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Opcional" className="h-9" />
@@ -356,19 +402,7 @@ function RegistroTab() {
                 <Input type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-9" />
               </div>
             )}
-            {payMode !== "pending" && (
-              <div>
-                <Label className="text-xs">Forma de pago</Label>
-                <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Efectivo</SelectItem>
-                    <SelectItem value="qr">QR</SelectItem>
-                    <SelectItem value="card">Tarjeta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {payMode !== "pending" && <PaymentMethodSelect value={paymentMethod} onChange={setPaymentMethod} />}
           </div>
         </Card>
       </div>
@@ -516,13 +550,13 @@ function EntregasTab() {
     setChargeTarget(g);
   };
 
-  const confirmCharge = async () => {
+  const confirmCharge = async (method: PaymentMethod) => {
     const g = chargeTarget;
     if (!g) return;
     setBusy(g.patient.id);
     try {
       // Cobra todo el saldo del paciente en una transacción; la API registra la auditoría
-      await apiPost("/api/attentions/charge-all", { patient_id: g.patient.id });
+      await apiPost("/api/attentions/charge-all", { patient_id: g.patient.id, payment_method: method });
     } catch (e) {
       toast.error(translateError(e));
       setBusy(null);
@@ -623,33 +657,11 @@ function EntregasTab() {
         <Wallet className="h-3 w-3" /> "Cobrar" salda la deuda; "Entregar" marca los estudios como entregados e imprime el comprobante.
       </div>
 
-      <Dialog open={!!chargeTarget} onOpenChange={(o) => !o && setChargeTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Cobrar saldo</DialogTitle></DialogHeader>
-          {chargeTarget && (
-            <div className="space-y-4 py-2">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Paciente</div>
-                <div className="font-medium">{chargeTarget.patient.full_name}</div>
-              </div>
-              <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-4 text-center">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Monto a cobrar</div>
-                <div className="text-3xl font-bold font-mono text-amber-700 dark:text-amber-400">{formatMoney(chargeTarget.debt)}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><div className="text-muted-foreground text-xs">Total</div><div className="font-mono">{formatMoney(chargeTarget.total)}</div></div>
-                <div><div className="text-muted-foreground text-xs">Pagado</div><div className="font-mono">{formatMoney(chargeTarget.paid)}</div></div>
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setChargeTarget(null)} disabled={busy !== null}>Cancelar</Button>
-            <Button onClick={confirmCharge} disabled={busy !== null}>
-              <Wallet className="h-4 w-4 mr-1" />Cobrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ChargeAllDialog
+        target={chargeTarget && { patientName: chargeTarget.patient.full_name, debt: chargeTarget.debt, total: chargeTarget.total, paid: chargeTarget.paid }}
+        onCancel={() => setChargeTarget(null)}
+        onConfirm={confirmCharge}
+      />
     </Card>
   );
 }

@@ -28,7 +28,8 @@ function ImpersonatePage() {
     }
     tokenStore.clearAdmin();
     setSessionToken(token)
-      .then(() => window.location.replace(redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/app"))
+      // Solo rutas de esta app: "//otro.com" o "/\\otro.com" el navegador los toma como otro sitio
+      .then(() => window.location.replace(/^\/(?![/\\])/.test(redirect) ? redirect : "/app"))
       .catch(() => setError("No se pudo abrir la sesión. Vuelve a intentarlo desde el panel."));
   }, [setSessionToken]);
 

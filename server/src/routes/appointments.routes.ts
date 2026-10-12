@@ -5,14 +5,15 @@ import { audit } from "../lib/audit.js";
 import { HttpError } from "../lib/http-error.js";
 import { dateRangeSchema, dayRange } from "../lib/query.js";
 import { optionalText, uuid } from "../lib/schemas.js";
-import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
+import { doctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 
 // Agenda de citas. starts_at se recibe con zona horaria (2026-10-10T09:30:00-04:00) y se guarda en UTC.
 export const appointmentsRouter = Router();
 appointmentsRouter.use(requireAuth);
 
 // Mismos roles que la política RLS "appointments_read"
-const canRead = requireRole("ADMIN", "SUBADMIN", "RECEPCION", "DOCTOR", "AUDITOR");
+// Lectura: Agenda (view.appointments). Un usuario DOCTOR solo ve sus citas.
+const canRead = requirePermission("view.appointments");
 const STATUSES = ["SCHEDULED", "CONFIRMED", "DONE", "CANCELLED", "NO_SHOW"] as const;
 
 const startsAt = z.iso
@@ -95,6 +96,8 @@ appointmentsRouter.get("/", canRead, async (req, res) => {
   if (f.status) { where.push("a.status = ?"); params.push(f.status); }
   if (f.doctor_id) { where.push("a.doctor_id = ?"); params.push(f.doctor_id); }
   if (f.patient_id) { where.push("a.patient_id = ?"); params.push(f.patient_id); }
+  const own = doctorScope(req.user);
+  if (own !== undefined) { where.push("a.doctor_id = ?"); params.push(own); }
   const rows = await db().query(
     `${SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY a.starts_at ASC LIMIT 2000`,
     params,
@@ -104,7 +107,8 @@ appointmentsRouter.get("/", canRead, async (req, res) => {
 
 appointmentsRouter.get("/:id", canRead, async (req, res) => {
   const a = await findAppointment(db(), String(req.params.id));
-  if (!a) throw new HttpError(404, "Cita no encontrada");
+  const own = doctorScope(req.user);
+  if (!a || (own !== undefined && a.doctor_id !== own)) throw new HttpError(404, "Cita no encontrada");
   res.json(a);
 });
 

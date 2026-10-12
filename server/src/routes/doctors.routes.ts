@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { db, withTransaction, type Db } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { cache, CacheKeys, CacheTtl, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
 import { optionalEmail, optionalText } from "../lib/schemas.js";
-import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
+import { doctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 
 export const doctorsRouter = Router();
 doctorsRouter.use(requireAuth);
@@ -29,8 +29,16 @@ async function findDoctor(q: Db, id: string) {
   return rows[0] ?? null;
 }
 
-// Lectura: mismos roles que la política RLS "Read doctors" (otros módulos necesitan la lista)
-const canRead = requireRole("ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "AUDITOR");
+// Lectura: la pantalla Doctores (view.doctors) y las que necesitan la lista para elegir uno.
+// Un usuario DOCTOR solo ve su propia ficha.
+const canRead = requirePermission(
+  "view.doctors", "view.patients", "view.attention", "view.delivery", "view.commissions",
+  "view.appointments", "view.reports", "attention.create", "patients.create", "doctors.create", "doctors.edit",
+);
+const onlyOwn = (req: Request, rows: { id: string }[]) => {
+  const own = doctorScope(req.user);
+  return own === undefined ? rows : rows.filter((d) => d.id === own);
+};
 
 doctorsRouter.get("/", canRead, async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -44,7 +52,7 @@ doctorsRouter.get("/", canRead, async (req, res) => {
       return db().query("SELECT * FROM doctors ORDER BY full_name");
     });
     res.setHeader("X-Cache", hit ? "HIT" : "MISS");
-    return res.json(rows);
+    return res.json(onlyOwn(req, rows as { id: string }[]));
   }
 
   const where: string[] = [];
@@ -61,12 +69,12 @@ doctorsRouter.get("/", canRead, async (req, res) => {
     `SELECT * FROM doctors ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY full_name`,
     params,
   );
-  res.json(rows);
+  res.json(onlyOwn(req, rows as { id: string }[]));
 });
 
 doctorsRouter.get("/:id", canRead, async (req, res) => {
   const doctor = await findDoctor(db(), String(req.params.id));
-  if (!doctor) throw new HttpError(404, "Doctor no encontrado");
+  if (!doctor || onlyOwn(req, [doctor]).length === 0) throw new HttpError(404, "Doctor no encontrado");
   res.json(doctor);
 });
 

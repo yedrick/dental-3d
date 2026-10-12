@@ -4,13 +4,13 @@ import { config } from "../config.js";
 import { db } from "../db.js";
 import { cache, CacheKeys, CacheTtl, reportsVersion } from "../lib/cache.js";
 import { dayRange } from "../lib/query.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { denyDoctorScope, doctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 
 // Dashboard y reportes: todo se suma en MySQL (el frontend actual traía todas las filas).
 export const dashboardRouter = Router();
 export const reportsRouter = Router();
 dashboardRouter.use(requireAuth, requirePermission("view.dashboard"));
-reportsRouter.use(requireAuth, requirePermission("view.reports"));
+reportsRouter.use(requireAuth, requirePermission("view.reports"), denyDoctorScope);
 
 const num = (v: unknown) => Number(v ?? 0);
 const TOTAL = "(ps.price + ps.invoice_surcharge - ps.discount)";
@@ -28,25 +28,51 @@ function todayLocal() {
 
 // ---------- Dashboard (hoy, hora local). Sin caché: cambia todo el día y es barato. ----------
 
-dashboardRouter.get("/", async (_req, res) => {
+dashboardRouter.get("/", async (req, res) => {
   const today = todayLocal();
   const [start, end] = dayRange(today, today);
   const q = db();
-  const [[counts], [att], [com], [dep], [cash]] = await Promise.all([
+
+  // Usuario DOCTOR: solo sus números (sus pacientes, sus atenciones y sus comisiones de hoy)
+  const own = doctorScope(req.user);
+  if (own !== undefined) {
+    const [[pat], [att], [com]] = await Promise.all([
+      q.query(`SELECT COUNT(*) AS n FROM patients p
+                WHERE p.doctor_id = ? OR EXISTS (SELECT 1 FROM patient_studies x WHERE x.patient_id = p.id AND x.doctor_id = ?)`, [own, own]),
+      q.query("SELECT COUNT(*) AS n FROM patient_studies WHERE doctor_id = ? AND created_at >= ? AND created_at < ?", [own, start, end]),
+      q.query("SELECT SUM(commission_amount) AS total FROM commissions WHERE doctor_id = ? AND created_at >= ? AND created_at < ?", [own, start, end]),
+    ]);
+    res.json({
+      date: today, scope: "doctor", linked: own !== "",
+      patients: num(pat.n), attentions_today: num(att.n), commissions_today: num(com.total),
+      doctors: null, income_today: null, collected_today: null, collected_today_previous: null,
+      deposits_today: null, cashbox_balance: null,
+    });
+    return;
+  }
+
+  const [[counts], [att], [pay], [com], [dep], [cash]] = await Promise.all([
     q.query("SELECT (SELECT COUNT(*) FROM patients) AS patients, (SELECT COUNT(*) FROM doctors) AS doctors"),
-    q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total, SUM(ps.amount_paid) AS paid FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?`, [start, end]),
+    q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?`, [start, end]),
+    // Cobrado HOY: por la fecha de cada pago, aunque la atención sea de otro día
+    q.query(`SELECT SUM(pay.amount) AS total, SUM(CASE WHEN ps.created_at < ? THEN pay.amount ELSE 0 END) AS previous
+               FROM payments pay JOIN patient_studies ps ON ps.id = pay.patient_study_id
+              WHERE pay.paid_at >= ? AND pay.paid_at < ?`, [start, start, end]),
     q.query("SELECT SUM(commission_amount) AS total FROM commissions WHERE created_at >= ? AND created_at < ?", [start, end]),
     q.query("SELECT SUM(amount) AS total FROM bank_deposits WHERE deposit_date = ?", [today]),
     q.query("SELECT balance FROM cashbox_state WHERE id = 1"),
   ]);
   res.json({
     date: today,
+    scope: "clinic",
     patients: num(counts.patients),
     doctors: num(counts.doctors),
     attentions_today: num(att.n),
     // total facturado (precio + recargo − descuento); el frontend actual sumaba solo el precio
     income_today: num(att.total),
-    collected_today: num(att.paid),
+    collected_today: num(pay.total),
+    // de lo cobrado hoy, cuánto es de atenciones de días anteriores (saldos que se pagaron hoy)
+    collected_today_previous: num(pay.previous),
     commissions_today: num(com.total),
     deposits_today: num(dep.total),
     cashbox_balance: num(cash?.balance),
@@ -59,6 +85,24 @@ const periodSchema = z
   .object({ from: z.iso.date("Fecha inválida (YYYY-MM-DD)"), to: z.iso.date("Fecha inválida (YYYY-MM-DD)") })
   .refine((v) => v.from <= v.to, { message: "La fecha inicial debe ser anterior a la final", path: ["from"] });
 
+/**
+ * Corre las consultas de a `n`: el pool de cada sucursal tiene pocas conexiones (TENANT_POOL_MAX)
+ * y el reporte tiene más de 20. Todas a la vez dejarían esperando al resto de la sucursal.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function limited(tasks: (() => Promise<any>)[], n = 3): Promise<any[]> {
+  const results = new Array(tasks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, worker));
+  return results;
+}
+
 async function buildSummary(from: string, to: string) {
   const [start, end] = dayRange(from, to);
   const range = [start, end];
@@ -66,42 +110,47 @@ async function buildSummary(from: string, to: string) {
   const [
     [ps], byDay, byStudy, byMethod, byDoctor, [com], [cash], [tpp], [dep], [newPatients],
     [noDoctor], [noUser], [cashNoUser], [deliveredBefore], [paymentBeforeService], [futureDeposits], [futurePayments],
-    [zeroPrices], [noPrice], [overpaid],
-  ] = await Promise.all([
-    q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total, SUM(ps.amount_paid) AS paid,
+    [zeroPrices], [noPrice], [overpaid], [pays],
+  ] = await limited([
+    () => q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total, SUM(ps.amount_paid) AS paid,
                     SUM(ps.delivered_at IS NOT NULL) AS delivered
                FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?`, range),
-    q.query(`SELECT ${LOCAL_DAY("ps.created_at")} AS day, COUNT(*) AS count, SUM(${TOTAL}) AS income
+    () => q.query(`SELECT ${LOCAL_DAY("ps.created_at")} AS day, COUNT(*) AS count, SUM(${TOTAL}) AS income
                FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?
               GROUP BY day ORDER BY day DESC`, range),
-    q.query(`SELECT s.name AS study, COUNT(*) AS count, SUM(${TOTAL}) AS income
+    () => q.query(`SELECT s.name AS study, COUNT(*) AS count, SUM(${TOTAL}) AS income
                FROM patient_studies ps JOIN studies s ON s.id = ps.study_id
               WHERE ps.created_at >= ? AND ps.created_at < ?
               GROUP BY s.id, s.name ORDER BY count DESC`, range),
-    q.query(`SELECT COALESCE(ps.payment_method, 'sin pago') AS method, SUM(ps.amount_paid) AS amount
-               FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?
-              GROUP BY method ORDER BY amount DESC`, range),
-    q.query(`SELECT d.full_name AS doctor, COUNT(*) AS count, SUM(c.commission_amount) AS total
-               FROM commissions c JOIN doctors d ON d.id = c.doctor_id
+    // Cobros del período por método, según la fecha de cada PAGO (tabla payments)
+    () => q.query(`SELECT pay.method AS method, SUM(pay.amount) AS amount
+               FROM payments pay WHERE pay.paid_at >= ? AND pay.paid_at < ?
+              GROUP BY pay.method ORDER BY amount DESC`, range),
+    () => q.query(`SELECT COALESCE(d.full_name, CONCAT(c.external_doctor_name, ' (no registrado)')) AS doctor,
+                    COUNT(*) AS count, SUM(c.commission_amount) AS total
+               FROM commissions c LEFT JOIN doctors d ON d.id = c.doctor_id
               WHERE c.created_at >= ? AND c.created_at < ?
-              GROUP BY d.id, d.full_name ORDER BY total DESC`, range),
-    q.query("SELECT SUM(commission_amount) AS total FROM commissions WHERE created_at >= ? AND created_at < ?", range),
-    q.query("SELECT SUM(income) AS income, SUM(expense) AS expense FROM cashbox WHERE created_at >= ? AND created_at < ?", range),
-    q.query("SELECT SUM(amount) AS total FROM third_party_payments WHERE payment_date BETWEEN ? AND ?", [from, to]),
-    q.query("SELECT SUM(amount) AS total FROM bank_deposits WHERE deposit_date BETWEEN ? AND ?", [from, to]),
-    q.query("SELECT COUNT(*) AS n FROM patients WHERE created_at >= ? AND created_at < ?", range),
+              GROUP BY c.doctor_id, doctor ORDER BY total DESC`, range),
+    () => q.query("SELECT SUM(commission_amount) AS total FROM commissions WHERE created_at >= ? AND created_at < ?", range),
+    () => q.query("SELECT SUM(income) AS income, SUM(expense) AS expense FROM cashbox WHERE created_at >= ? AND created_at < ?", range),
+    () => q.query("SELECT SUM(amount) AS total FROM third_party_payments WHERE payment_date BETWEEN ? AND ?", [from, to]),
+    () => q.query("SELECT SUM(amount) AS total FROM bank_deposits WHERE deposit_date BETWEEN ? AND ?", [from, to]),
+    () => q.query("SELECT COUNT(*) AS n FROM patients WHERE created_at >= ? AND created_at < ?", range),
     // Controles de calidad (sobre toda la base, como el reporte actual)
-    q.query("SELECT COUNT(*) AS n FROM patients WHERE doctor_id IS NULL"),
-    q.query("SELECT COUNT(*) AS n FROM patient_studies WHERE created_by IS NULL"),
-    q.query("SELECT COUNT(*) AS n FROM cashbox WHERE created_by IS NULL"),
-    q.query("SELECT COUNT(*) AS n FROM patient_studies WHERE delivered_at IS NOT NULL AND delivered_at < created_at"),
-    q.query("SELECT COUNT(*) AS n FROM third_party_payments WHERE payment_date < service_date"),
-    q.query("SELECT COUNT(*) AS n FROM bank_deposits WHERE deposit_date > ?", [todayLocal()]),
-    q.query("SELECT COUNT(*) AS n FROM third_party_payments WHERE payment_date > ? OR service_date > ?", [todayLocal(), todayLocal()]),
-    q.query("SELECT COUNT(*) AS n FROM study_prices WHERE is_active = 1 AND (price_with_report <= 0 OR price_without_report <= 0)"),
-    q.query(`SELECT COUNT(*) AS n FROM studies s WHERE s.active = 1
+    () => q.query("SELECT COUNT(*) AS n FROM patients WHERE doctor_id IS NULL"),
+    () => q.query("SELECT COUNT(*) AS n FROM patient_studies WHERE created_by IS NULL"),
+    () => q.query("SELECT COUNT(*) AS n FROM cashbox WHERE created_by IS NULL"),
+    () => q.query("SELECT COUNT(*) AS n FROM patient_studies WHERE delivered_at IS NOT NULL AND delivered_at < created_at"),
+    () => q.query("SELECT COUNT(*) AS n FROM third_party_payments WHERE payment_date < service_date"),
+    () => q.query("SELECT COUNT(*) AS n FROM bank_deposits WHERE deposit_date > ?", [todayLocal()]),
+    () => q.query("SELECT COUNT(*) AS n FROM third_party_payments WHERE payment_date > ? OR service_date > ?", [todayLocal(), todayLocal()]),
+    () => q.query("SELECT COUNT(*) AS n FROM study_prices WHERE is_active = 1 AND (price_with_report <= 0 OR price_without_report <= 0)"),
+    () => q.query(`SELECT COUNT(*) AS n FROM studies s WHERE s.active = 1
                AND NOT EXISTS (SELECT 1 FROM study_prices sp WHERE sp.study_id = s.id AND sp.is_active = 1)`),
-    q.query(`SELECT COUNT(*) AS n FROM patient_studies ps WHERE ps.amount_paid > ${TOTAL}`),
+    () => q.query(`SELECT COUNT(*) AS n FROM patient_studies ps WHERE ps.amount_paid > ${TOTAL}`),
+    () => q.query(`SELECT SUM(pay.amount) AS total, SUM(CASE WHEN ps.created_at < ? THEN pay.amount ELSE 0 END) AS previous
+               FROM payments pay JOIN patient_studies ps ON ps.id = pay.patient_study_id
+              WHERE pay.paid_at >= ? AND pay.paid_at < ?`, [start, start, end]),
   ]);
 
   const total = num(ps.total);
@@ -123,7 +172,10 @@ async function buildSummary(from: string, to: string) {
     },
     financial: {
       billed: total,
-      collected: paid,
+      // Cobrado en el período por la fecha de cada pago (incluye saldos de atenciones anteriores)
+      collected: num(pays.total),
+      collected_previous: num(pays.previous),
+      // Saldo que todavía deben las atenciones del período
       debt: Math.max(0, Number((total - paid).toFixed(2))),
       commissions,
       commissions_by_doctor: money(byDoctor, ["count", "total"]),

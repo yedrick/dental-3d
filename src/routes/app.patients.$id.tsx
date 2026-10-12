@@ -3,6 +3,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { methodLabel, type PaymentMethod } from "@/lib/payments";
+import { PaymentMethodSelect } from "@/components/payment-method-select";
+import { ChargeAllDialog } from "@/components/charge-all-dialog";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, formatDate, formatDateTime, calcAge } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
@@ -22,7 +25,7 @@ import {
   Building2, CalendarDays, FileText, Save, Percent, Stethoscope, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
-import { LinesSkeleton } from "@/components/table-skeleton";
+import { LinesSkeleton, TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/patients/$id")({ component: PatientProfile });
 
@@ -48,6 +51,12 @@ function PatientProfile() {
   const { data: rows = [] } = useQuery({
     queryKey: ["attentions", "patient", id],
     queryFn: () => apiGet<any[]>(`/api/patients/${id}/attentions`),
+    staleTime: STALE.ops,
+  });
+  // Pagos del paciente: uno por cada cobro, con su fecha y su método
+  const { data: payments = [], isLoading: paymentsLoading } = useQuery({
+    queryKey: ["attentions", "payments", id],
+    queryFn: () => apiGet<any[]>("/api/attentions/payments", { patient_id: id }),
     staleTime: STALE.ops,
   });
   const { data: appointments = [] } = useQuery({
@@ -82,14 +91,14 @@ function PatientProfile() {
       qc.invalidateQueries({ queryKey: ["cashbox"] }),
     ]);
 
-  const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
+  const [charge, setCharge] = useState<{ row: any; amount: string; method: PaymentMethod } | null>(null);
   const doCharge = async () => {
     if (!charge) return;
     const amt = Math.round(Number(charge.amount || 0) * 100) / 100;
     if (amt <= 0) return toast.error("Monto inválido");
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
     try {
-      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt });
+      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt, payment_method: charge.method });
     } catch (e) {
       return toast.error(translateError(e));
     }
@@ -106,13 +115,15 @@ function PatientProfile() {
     toast.success("Estudio entregado"); await refresh();
   };
 
-  const chargeAll = async () => {
+  // "Cobrar deuda total": primero se confirma (monto y forma de pago)
+  const [confirmAll, setConfirmAll] = useState(false);
+  const chargeAll = async (method: PaymentMethod) => {
     try {
-      await apiPost("/api/attentions/charge-all", { patient_id: id });
+      await apiPost("/api/attentions/charge-all", { patient_id: id, payment_method: method });
     } catch (e) {
       return toast.error(translateError(e));
     }
-    toast.success("Saldo total cobrado"); await refresh();
+    toast.success("Saldo total cobrado"); setConfirmAll(false); await refresh();
   };
 
   if (patientError) return <div className="p-6 text-sm text-destructive">{translateError(patientError)}</div>;
@@ -152,7 +163,7 @@ function PatientProfile() {
             </div>
           </div>
           {summary.debt > 0.009 && canCharge && (
-            <Button onClick={chargeAll} className="bg-amber-600 hover:bg-amber-700">
+            <Button onClick={() => setConfirmAll(true)} className="bg-amber-600 hover:bg-amber-700">
               <Wallet className="h-4 w-4 mr-2" />Cobrar deuda total {formatMoney(summary.debt)}
             </Button>
           )}
@@ -198,7 +209,7 @@ function PatientProfile() {
                     <TableCell className="text-xs">{r.delivered_at ? formatDate(r.delivered_at) : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
-                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })} title="Cobrar"><Wallet className="h-3.5 w-3.5" /></Button>}
+                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })} title="Cobrar"><Wallet className="h-3.5 w-3.5" /></Button>}
                         {canDeliver && !r.delivered_at && <Button size="sm" onClick={() => deliver(r)} disabled={r.debt > 0.009} title={r.debt > 0.009 ? `Saldo pendiente: ${formatMoney(r.debt)}` : "Entregar"}><PackageCheck className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </TableCell>
@@ -214,21 +225,28 @@ function PatientProfile() {
           <Card>
             <Table>
               <TableHeader><TableRow>
-                <TableHead>Fecha</TableHead><TableHead>Estudio</TableHead><TableHead>Método</TableHead>
-                <TableHead>Total</TableHead><TableHead>Pagado</TableHead><TableHead>Deuda</TableHead>
+                <TableHead>Fecha del pago</TableHead><TableHead>Estudio</TableHead><TableHead>Forma de pago</TableHead>
+                <TableHead className="text-right">Monto</TableHead><TableHead>Registró</TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {enriched.filter((r) => r.paid > 0 || r.debt > 0).map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="text-xs">{formatDate(r.created_at)}</TableCell>
-                    <TableCell>{r.study_name ?? "—"}</TableCell>
-                    <TableCell className="text-xs uppercase">{r.payment_method || "—"}</TableCell>
-                    <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
-                    <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
-                    <TableCell className="font-mono">{r.debt > 0.009 ? formatMoney(r.debt) : "—"}</TableCell>
-                  </TableRow>
-                ))}
-                {enriched.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">Sin pagos.</TableCell></TableRow>}
+                {paymentsLoading && <TableSkeletonRows cols={5} rows={3} />}
+                {(payments as any[]).map((p) => {
+                  // Saldo de una atención de otro día pagado en esta fecha
+                  const otherDay = formatDate(p.attention_created_at) !== formatDate(p.paid_at);
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-xs">{formatDateTime(p.paid_at)}</TableCell>
+                      <TableCell>
+                        {p.study_name ?? "—"}
+                        {otherDay && <div className="text-xs text-muted-foreground">Atención del {formatDate(p.attention_created_at)}</div>}
+                      </TableCell>
+                      <TableCell className="text-xs">{methodLabel(p.method)}</TableCell>
+                      <TableCell className="text-right font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(Number(p.amount))}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{p.created_by_name ?? "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {!paymentsLoading && payments.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Sin pagos.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </Card>
@@ -250,7 +268,7 @@ function PatientProfile() {
                     <TableCell className="font-mono">{r.debt > 0.009 ? <span className="text-amber-600 font-semibold">{formatMoney(r.debt)}</span> : "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
-                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })}><Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(r.debt)}</Button>}
+                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })}><Wallet className="h-3.5 w-3.5 mr-1" />Cobrar {formatMoney(r.debt)}</Button>}
                         {canDeliver && !r.delivered_at && <Button size="sm" onClick={() => deliver(r)} disabled={r.debt > 0.009}><PackageCheck className="h-3.5 w-3.5 mr-1" />Entregar</Button>}
                       </div>
                     </TableCell>
@@ -302,15 +320,22 @@ function PatientProfile() {
                 <div><span className="text-muted-foreground">Estudio:</span> {charge.row.study_name ?? "—"}</div>
                 <div><span className="text-muted-foreground">Deuda:</span> <strong className="font-mono">{formatMoney(charge.row.debt)}</strong></div>
               </div>
-              <div>
-                <Label>Monto a cobrar</Label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">Monto a cobrar</span>
                 <Input type="number" step="0.01" autoFocus value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
-              </div>
+              </label>
+              <PaymentMethodSelect value={charge.method} onChange={(m) => setCharge({ ...charge, method: m })} />
             </div>
           )}
           <DialogFooter><Button onClick={doCharge}>Registrar cobro</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChargeAllDialog
+        target={confirmAll ? { patientName: patient.full_name, debt: summary.debt, total: summary.total, paid: summary.paid } : null}
+        onCancel={() => setConfirmAll(false)}
+        onConfirm={chargeAll}
+      />
     </div>
   );
 }

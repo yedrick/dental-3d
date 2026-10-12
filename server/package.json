@@ -7,6 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "tenancy": "tenancy",
     "db:install": "tenancy install",
     "db:migrate": "tenancy migrate",
@@ -34,6 +36,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.28.17",
     "mysql2": "^3.24.5",
@@ -48,7 +51,8 @@
     "@types/node": "^20.19.43",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=20"
