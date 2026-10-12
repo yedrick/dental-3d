@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig, LocalStorage } from "@tenancy-node/core";
+import { defineConfig } from "@tenancy-node/core";
 import { database } from "@tenancy-node/db";
 import { mysql } from "@tenancy-node/db-mysql";
+import { storageFromEnv } from "@tenancy-node/storage-s3";
 import { redis, redisInvalidation } from "@tenancy-node/cache-redis";
 import { config } from "../config.js";
 import { seedTenant } from "./seed.js";
@@ -16,7 +17,8 @@ export const tenancyConfig = defineConfig({
   resolver: "subdomain",
   // Solo archivos PÚBLICOS (logo, favicon): http.assets los sirve sin autenticación.
   // Los archivos privados (comprobantes) NO deben guardarse con tenancy.storage().
-  storage: new LocalStorage({ root: config.tenancy.storageDir }),
+  // Disco local por defecto (STORAGE_DIR); STORAGE_DRIVER=s3 o r2 lo pasa a S3 / Cloudflare R2.
+  storage: storageFromEnv({ STORAGE_LOCAL_ROOT: config.tenancy.storageDir, ...process.env }),
   http: {
     me: true, // GET /tenancy/me → nombre, datos públicos y tema (con logo)
     theme: true, // GET /tenancy/theme.css → variables CSS de la sucursal
