@@ -20,7 +20,9 @@ Cada punto está escrito para copiarlo como *issue*: paquete, qué pasa, cómo s
 | **8** | `@tenancy-node/db` | **Bug** | **Crítica**: crear tantas sucursales a la vez como conexiones tiene el pool central **bloquea toda la API** | `CENTRAL_POOL_MAX=30` y la indicación de no crear más que eso a la vez |
 | 9 | `@tenancy-node/db` | Mejora | Media: no hay un tope de conexiones por servidor; el límite de MySQL se alcanza sin aviso | Variables `TENANT_POOL_*` y fórmula en la guía |
 
-**Estado en v0.10.0:** 1 a 7 ✅ corregidos y verificados. 8 y 9 siguen abiertos.
+| 10 | `core` / `admin-ui` | Mejora | Baja: buscar un id que no existe queda como "error" de ese tenant | — (es solo visual) |
+
+**Estado en v0.10.0:** 1 a 7 ✅ corregidos y verificados. 8, 9 y 10 siguen abiertos.
 
 ## 1. `db-mysql`: `destroy()` no cierra el pool nativo si nunca se usó Kysely
 
@@ -156,6 +158,14 @@ Lo mismo pasaría con `npx tenancy create --from=archivo.csv --concurrency=N` si
 - O al menos un aviso al arrancar o en `health()` si `maxOpenPools × pool.max + central.pool.max` supera el `max_connections` del servidor, que se puede consultar con `SELECT @@max_connections`.
 
 **Aquí:** `TENANT_POOL_MAX`, `TENANT_MAX_OPEN_POOLS` y `TENANT_POOL_IDLE_MS` configurables, y la fórmula en la guía de despliegue.
+
+## 10. `core` / `admin-ui`: un "no encontrado" queda como error del tenant
+
+**Qué pasa:** `GET /admin/api/tenants/chasquipampa`, pedido unos milisegundos antes de crearlo, devuelve 404 (correcto). Pero `tenants.findOrFail` registra `TENANCY_TENANT_NOT_FOUND` en `observability` con `tenantId: "chasquipampa"`. Cuando el tenant ya existe, su pestaña **Errores (1)** muestra ese 404 como si fuera un error de la sucursal.
+
+**Sugerencia:** no registrar `TENANCY_TENANT_NOT_FOUND` como error del tenant, porque es una respuesta esperada (por ejemplo, al comprobar si un id está libre). Si se quiere registrar, que sea sin `tenantId` o como `warn`.
+
+Los errores viven en la memoria del proceso: reiniciar la API los borra.
 
 ## Verificación de v0.10.0 (12/10/2026)
 

@@ -26,7 +26,11 @@ try {
   await page.getByLabel(/^id$/i).fill(T);
   await page.getByLabel(/^nombre$/i).fill(process.env.NOMBRE ?? `Sucursal ${T}`);
   await page.screenshot({ path: `${SHOTS}/02-panel-nuevo.png` });
+  // Esperar la respuesta de creación antes de consultar el estado: si no, la primera consulta puede
+  // llegar antes que el POST y deja un "Tenant not found" en la pestaña Errores de la sucursal
+  const creada = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/admin/api/tenants"));
   await page.getByRole("button", { name: /^crear$/i }).click();
+  if ((await creada).status() !== 202) throw new Error("el panel no aceptó crear la sucursal");
   // Esperar el estado real (el texto "Activo" ya aparece por otras sucursales de la lista)
   for (let i = 0; ; i++) {
     const r = await page.request.get(`http://${WEB}/admin/api/tenants/${T}`);
