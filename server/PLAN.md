@@ -679,7 +679,7 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 5. Avisar del bug de tenancy-node (sección [Reporte](#reporte-para-tenancy-node)).
 6. Decidir:
    - regla de comisiones;
-   - servicio de correo;
+   - ✅ servicio de correo (12/10/2026): SMTP genérico (Brevo, Zoho, Google, Amazon SES); se elige el proveedor en `.env`. Recuperar la contraseña con código, encendida o apagada para todas las sucursales con `PASSWORD_RESET_ENABLED`;
    - caja en negativo y anulaciones;
    - ✅ comprobantes para AUDITOR (12/10/2026): los ve quien tenga "ver caja", "ver depósitos" o "ver pagos a terceros" en Roles. El AUDITOR los tiene por defecto; se le pueden quitar;
    - saldo de caja y saldos a favor al importar;

@@ -166,6 +166,10 @@ Los errores siempre tienen la misma forma (igual que tenancy-node):
 | GET | `/api/auth/impersonate?token=` | Canjea el token de "Entrar como…" del panel y redirige a `/auth/impersonate#token=…` |
 | POST 🔒 | `/api/auth/setup-account` | `{ full_name, username, email, new_password }`: activa la cuenta ADMIN por defecto (solo si está "por activar") |
 
+| GET | `/api/auth/password-reset` | `{ enabled, minutes }`: si la recuperación por correo está activada |
+| POST | `/api/auth/forgot-password` `{ email }` | Envía un código de 6 dígitos (15 min). Responde igual exista o no el email. Máx. 5 por 15 min por IP y 1 por minuto por usuario |
+| POST | `/api/auth/reset-password` `{ email, code, new_password }` | Cambia la contraseña, cierra las demás sesiones y devuelve `{ token }`. 5 intentos por código |
+
 El token **solo sirve en la sucursal que lo emitió**. Además lleva la versión de sesión del usuario: al cambiar su contraseña, desactivarlo, desaprobarlo o cambiar sus roles, **todas sus sesiones se cierran** (`SESSION_REVOKED`).
 
 ### Doctores 🔒
@@ -452,6 +456,21 @@ La lista de estudios de la portada sale sola del catálogo activo de la sucursal
 ## Redis (caché compartida)
 
 Con `REDIS_URL=redis://127.0.0.1:6379`, tenancy-node usa `@tenancy-node/cache-redis` para toda la caché por sucursal (sesiones, permisos, catálogos, página web y reportes). Además usa `redisInvalidation`, así los cambios de sucursales llegan al instante a todas las réplicas. Sin `REDIS_URL` se usa la memoria del proceso.
+
+## Recuperar la contraseña por correo
+
+Se enciende o apaga **para todas las sucursales** en `.env`:
+- Con `PASSWORD_RESET_ENABLED=true` y los datos SMTP (`MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURE`, `MAIL_SMTP_USER`, `MAIL_SMTP_PASS`, `MAIL_FROM`), en "¿Olvidaste tu contraseña?" el usuario recibe un **código de 6 dígitos**. El correo lleva el nombre y el logo de su sucursal.
+- Con `PASSWORD_RESET_ENABLED=false`, o sin `MAIL_SMTP_HOST`, la pantalla dice que pida una contraseña nueva a un administrador.
+
+Seguridad:
+- Se guarda solo el HMAC del código, ligado a la sucursal y al usuario.
+- El código vence a los 15 minutos, es de un solo uso y tiene 5 intentos; pedir uno nuevo anula los anteriores.
+- La respuesta es igual aunque el email no exista y el correo sale en segundo plano, así ni el mensaje ni el tiempo de respuesta revelan si está registrado.
+- Al cambiarla se cierran las demás sesiones.
+- Todo queda en la auditoría (`PASSWORD_RESET_REQUEST`, `PASSWORD_RESET`).
+
+**En local:** Mailpit atrapa los correos sin enviarlos. Se levanta con `docker run -d --name dental3d-mailpit -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 axllent/mailpit:v1.27`, se configura `MAIL_SMTP_HOST=127.0.0.1` y `MAIL_SMTP_PORT=1025`, y los correos se ven en http://localhost:8025.
 
 ## Conexiones a MySQL
 

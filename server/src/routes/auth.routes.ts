@@ -1,3 +1,4 @@
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
@@ -5,13 +6,15 @@ import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { mailConfigured, passwordResetEmail, sendInBackground, sendMail } from "../lib/mailer.js";
 import { username as usernameSchema } from "../lib/schemas.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { loadPermissions, loadRoles } from "../lib/permissions.js";
 import { consumeImpersonationToken, InvalidImpersonationTokenError } from "@tenancy-node/admin-api";
 import { doctorScope, requireAuth, signToken } from "../middleware/auth.js";
 import { tenancy } from "../tenancy/index.js";
-import { loginLimiter, registerLimiter, sensitiveLimiter } from "../middleware/rate-limit.js";
+import { config } from "../config.js";
+import { forgotLimiter, loginLimiter, registerLimiter, sensitiveLimiter } from "../middleware/rate-limit.js";
 
 export const authRouter = Router();
 
@@ -223,4 +226,121 @@ authRouter.post("/setup-account", sensitiveLimiter, requireAuth, async (req, res
   await invalidate(CacheKeys.auth(req.user!.id));
   // Sesión normal (ya no suplantada): la cuenta queda en manos de quien la activó
   res.json({ ok: true, token: signToken(req.user!.id, version) });
+});
+
+// ---------- Recuperar la contraseña con un código por correo ----------
+// Se enciende y apaga para TODAS las sucursales en .env (PASSWORD_RESET_ENABLED y MAIL_SMTP_*).
+
+const RESET_MINUTES = 15;
+const RESET_MAX_ATTEMPTS = 5;
+const resetEnabled = () => config.mail.passwordResetEnabled && mailConfigured();
+/** Solo se guarda el HMAC del código (ligado a la sucursal y al usuario), nunca el código. */
+const codeHash = (userId: string, code: string) =>
+  createHmac("sha256", `${config.jwt.secret}:password-reset`).update(`${tenancy.currentId()}\n${userId}\n${code}`).digest("hex");
+
+/** ¿Está disponible la recuperación por correo? (la pantalla decide qué mostrar) */
+authRouter.get("/password-reset", (_req, res) => {
+  res.json({ enabled: resetEnabled(), minutes: RESET_MINUTES });
+});
+
+const forgotSchema = z.object({ email: z.email("Email inválido").trim().toLowerCase() });
+
+/**
+ * Pide un código. Responde lo mismo exista o no el email (nadie puede averiguar qué correos hay)
+ * y el correo sale en segundo plano (el tiempo de respuesta tampoco lo delata).
+ */
+authRouter.post("/forgot-password", forgotLimiter, async (req, res) => {
+  if (!resetEnabled()) {
+    throw new HttpError(503, "La recuperación por correo no está activada. Pide a un administrador de tu sucursal una contraseña nueva.", "PASSWORD_RESET_DISABLED");
+  }
+  const { email } = forgotSchema.parse(req.body);
+  const [user] = await db().query<{ id: string; full_name: string; email: string }[]>(
+    "SELECT id, full_name, email FROM users WHERE email = ? AND active = 1 AND approved = 1 LIMIT 1",
+    [email],
+  );
+  if (user) {
+    // Máx. 1 código por minuto y 5 por hora por usuario
+    const [{ lastMinute, lastHour }] = await db().query<{ lastMinute: number; lastHour: number }[]>(
+      `SELECT SUM(created_at > UTC_TIMESTAMP() - INTERVAL 1 MINUTE) AS lastMinute, COUNT(*) AS lastHour
+         FROM password_resets WHERE user_id = ? AND created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR`,
+      [user.id],
+    );
+    if (Number(lastMinute ?? 0) === 0 && Number(lastHour) < 5) {
+      const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      await withTransaction(async (tx) => {
+        // Un código nuevo anula los anteriores
+        await tx.query("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL", [user.id]);
+        await tx.query(
+          `INSERT INTO password_resets (user_id, code_hash, expires_at, ip)
+           VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL ${RESET_MINUTES} MINUTE, ?)`,
+          [user.id, codeHash(user.id, code), req.ip ?? null],
+        );
+        await audit(tx, user.id, "PASSWORD_RESET_REQUEST", "users", user.id, { ip: req.ip ?? null });
+      });
+      const tenant = tenancy.currentOrFail();
+      const base = config.admin.tenantUrl.replace("{tenant}", tenant.id.value).replace(/\/$/, "");
+      const logo = await tenancy.theme().logoUrl().catch(() => undefined);
+      const mail = passwordResetEmail({
+        branchName: tenant.name,
+        userName: user.full_name,
+        code,
+        minutes: RESET_MINUTES,
+        resetUrl: `${base}/reset-password?email=${encodeURIComponent(user.email)}`,
+        logoUrl: logo ? (logo.startsWith("http") ? logo : `${base}${logo}`) : undefined,
+      });
+      sendInBackground(() => sendMail({ to: user.email, fromName: tenant.name, ...mail }), {
+        tenantId: tenant.id.value, userId: user.id, operation: "password_reset.send",
+      });
+    }
+  }
+  res.json({ ok: true, minutes: RESET_MINUTES });
+});
+
+const resetSchema = z.object({
+  email: z.email("Email inválido").trim().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, "El código tiene 6 dígitos"),
+  new_password: passwordSchema,
+});
+const INVALID_CODE = "Código inválido o vencido. Pide uno nuevo si hace falta.";
+
+/** Cambia la contraseña con el código. Cierra las demás sesiones y deja al usuario dentro. */
+authRouter.post("/reset-password", sensitiveLimiter, async (req, res) => {
+  if (!resetEnabled()) throw new HttpError(503, "La recuperación por correo no está activada.", "PASSWORD_RESET_DISABLED");
+  const data = resetSchema.parse(req.body);
+  const [user] = await db().query<{ id: string }[]>(
+    "SELECT id FROM users WHERE email = ? AND active = 1 AND approved = 1 LIMIT 1",
+    [data.email],
+  );
+  if (!user) throw new HttpError(400, INVALID_CODE, "INVALID_CODE");
+  const hash = await hashPassword(data.new_password);
+
+  const version = await withTransaction(async (tx) => {
+    const [reset] = await tx.query<{ id: number; code_hash: string; attempts: number }[]>(
+      `SELECT id, code_hash, attempts FROM password_resets
+        WHERE user_id = ? AND used_at IS NULL AND expires_at > UTC_TIMESTAMP()
+        ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+      [user.id],
+    );
+    if (!reset || reset.attempts >= RESET_MAX_ATTEMPTS) return null;
+    const expected = Buffer.from(reset.code_hash, "hex");
+    const given = Buffer.from(codeHash(user.id, data.code), "hex");
+    if (!timingSafeEqual(expected, given)) {
+      // Cada intento fallido cuenta; al 5.º el código queda anulado
+      await tx.query(
+        `UPDATE password_resets SET attempts = attempts + 1,
+                used_at = IF(attempts + 1 >= ${RESET_MAX_ATTEMPTS}, UTC_TIMESTAMP(), used_at)
+          WHERE id = ?`,
+        [reset.id],
+      );
+      return null;
+    }
+    await tx.query("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE id = ?", [reset.id]);
+    await tx.query("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?", [hash, user.id]);
+    const [{ token_version }] = await tx.query<{ token_version: number }[]>("SELECT token_version FROM users WHERE id = ?", [user.id]);
+    await audit(tx, user.id, "PASSWORD_RESET", "users", user.id, { via: "codigo_por_correo" });
+    return token_version;
+  });
+  if (version === null) throw new HttpError(400, INVALID_CODE, "INVALID_CODE");
+  await invalidate(CacheKeys.auth(user.id));
+  res.json({ token: signToken(user.id, version) });
 });

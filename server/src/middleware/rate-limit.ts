@@ -61,4 +61,6 @@ function limiter(name: string, windowMs: number, limit: number, message: string)
 
 export const loginLimiter = limiter("login", 15 * 60_000, 10, "Demasiados intentos de inicio de sesión. Espera 15 minutos.");
 export const registerLimiter = limiter("register", 60 * 60_000, 5, "Demasiados registros desde esta conexión. Intenta más tarde.");
+// Pedir códigos para recuperar la contraseña: pocos por IP (además, máx. 1 por minuto por usuario)
+export const forgotLimiter = limiter("forgot", 15 * 60_000, 5, "Demasiados pedidos de código. Espera 15 minutos.");
 export const sensitiveLimiter = limiter("sensitive", 15 * 60_000, 10, "Demasiados intentos. Espera 15 minutos.");

@@ -52,6 +52,20 @@ export const config = {
     // URL pública de cada sucursal: {tenant} se reemplaza por el id (calacoto → https://calacoto.dominio.com)
     tenantUrl: process.env.TENANT_PUBLIC_URL ?? "https://{tenant}.localhost",
   },
+  // Correo (SMTP) y recuperación de contraseña con código, para TODAS las sucursales.
+  // Sin MAIL_SMTP_HOST, o con PASSWORD_RESET_ENABLED=false, la recuperación por correo está apagada
+  // y la app dice "pide a un administrador".
+  mail: {
+    passwordResetEnabled: (process.env.PASSWORD_RESET_ENABLED ?? "true") !== "false",
+    host: process.env.MAIL_SMTP_HOST || undefined,
+    port: Number(process.env.MAIL_SMTP_PORT ?? 587),
+    // true = TLS directo (puerto 465); false = STARTTLS (puerto 587)
+    secure: process.env.MAIL_SMTP_SECURE === "true",
+    user: process.env.MAIL_SMTP_USER || undefined,
+    pass: process.env.MAIL_SMTP_PASS || undefined,
+    // Remitente: "Dental 3D <no-responder@dominio.com>". El nombre de la sucursal se agrega solo.
+    from: process.env.MAIL_FROM ?? "no-responder@localhost",
+  },
   // Archivos privados (comprobantes): nunca se sirven sin un enlace firmado
   privateStorageDir: process.env.PRIVATE_STORAGE_DIR ?? "./storage-private",
   jwt: {
