@@ -2,8 +2,13 @@
 import { chromium } from "playwright-core";
 const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@dental3d.local";
 const OWNER_PASS = process.env.OWNER_PASS;
+// Dirección del frontend (dominio central) y otra sucursal existente para revisar el aislamiento
+const WEB = process.env.WEB ?? "localhost:8081";
+const OTRA = process.env.OTRA ?? "sur";
+// Título único por sucursal: así el aislamiento se comprueba aunque las dos sucursales se hayan probado antes
 if (!OWNER_PASS) throw new Error("Falta OWNER_PASS (contraseña del dueño del panel)");
-const SHOTS = process.env.SHOTS ?? "./capturas"; const T = process.env.TENANT ?? "webqa"; const BASE = `http://${T}.localhost:8081`;
+const SHOTS = process.env.SHOTS ?? "./capturas"; const T = process.env.TENANT ?? "webqa"; const BASE = `http://${T}.${WEB}`;
+const TITULO = `Radiología ${T} ${Date.now().toString(36)}`;
 const results = []; const errors = [];
 const ok = (name, cond, info = "") => { results.push([name, !!cond]); console.log((cond ? "OK   " : "FAIL ") + name + (cond ? "" : `  -> ${info}`)); };
 const browser = await chromium.launch({ executablePath: process.env.CHROME ?? "/usr/bin/google-chrome", headless: true });
@@ -14,27 +19,32 @@ let app;
 try {
   // ---------- Panel ----------
   const panel = await ctx.newPage();
-  await panel.goto("http://localhost:8081/admin/");
+  await panel.goto(`http://${WEB}/admin/`);
   await panel.getByLabel("Email").fill(OWNER_EMAIL);
   await panel.getByLabel("Contraseña").fill(OWNER_PASS);
+  const login = panel.waitForResponse((r) => r.url().includes("/admin/api/auth/login"));
   await panel.getByRole("button", { name: /entrar/i }).click();
+  if ((await login).status() !== 200) throw new Error("login del panel rechazado");
+  await panel.getByLabel("Contraseña").waitFor({ state: "detached" });
   await panel.getByText(/dashboard/i).first().waitFor();
   ok("panel: login", true);
-  await panel.goto(`http://localhost:8081/admin/tenants/${T}`);
+  await panel.goto(`http://${WEB}/admin/tenants/${T}`);
   await panel.getByRole("tab", { name: "Tema" }).click();
   await panel.waitForTimeout(800);
   const primary = panel.getByLabel(/primario/i).first();
   const primaryVal = await primary.inputValue().catch(() => "");
   ok("panel: el tema parte del color de la app (#0F172A), no del azul del módulo", primaryVal.toUpperCase() === "#0F172A", primaryVal);
   await primary.fill("#0e7490");
+  const guardado = panel.waitForResponse((r) => r.request().method() === "PUT" && /\/theme$/.test(r.url()));
   await panel.getByRole("button", { name: /guardar tema/i }).click();
-  await panel.waitForTimeout(1200);
+  await guardado;
+  await panel.waitForLoadState("networkidle"); // el panel recarga el tenant después de guardar
   await shot(panel, "07-panel-tema");
   await panel.getByRole("tab", { name: "Usuarios" }).click();
   await panel.getByRole("button", { name: /entrar como/i }).first().waitFor();
   const [popup] = await Promise.all([ctx.waitForEvent("page"), panel.getByRole("button", { name: /entrar como/i }).first().click()]);
   app = popup;
-  await app.waitForURL(new RegExp(`${T}\\.localhost:8081/(app|auth)`), { timeout: 20000 });
+  await app.waitForURL(new RegExp(`${T}\\.${WEB}/(app|auth)`), { timeout: 20000 });
   await app.getByText(/activa la cuenta/i).waitFor({ timeout: 15000 });
   await shot(app, "08-sucursal-activar-cuenta");
   ok("\"Entrar como\" abre la sucursal con sesión y pide activar la cuenta", true);
@@ -104,7 +114,7 @@ try {
   // ---------- Página web ----------
   await app.goto(`${BASE}/app/site`);
   await app.getByLabel("Teléfono").fill("2-2445566");
-  await app.getByLabel(/^título$/i).first().fill("Radiología Web QA");
+  await app.getByLabel(/^título$/i).first().fill(TITULO);
   await app.getByRole("button", { name: /guardar página web/i }).click();
   await app.getByText(/página web actualizada/i).first().waitFor({ timeout: 10000 });
   ok("editar la página web", true);
@@ -112,7 +122,7 @@ try {
   // ---------- Portada pública (sin sesión, otra ventana) ----------
   const pub = await (await browser.newContext()).newPage();
   await pub.goto(`${BASE}/`);
-  await pub.getByText("Radiología Web QA").first().waitFor({ timeout: 15000 });
+  await pub.getByText(TITULO).first().waitFor({ timeout: 15000 });
   const pubText = await pub.locator("body").innerText();
   ok("la portada pública muestra el título y el teléfono nuevos", pubText.includes("2-2445566"), pubText.slice(0, 200));
   ok("la portada lista el estudio del catálogo de la sucursal", pubText.includes("Panorámica Web"));
@@ -120,10 +130,10 @@ try {
 
   // ---------- Aislamiento visto desde el navegador ----------
   const other = await (await browser.newContext()).newPage();
-  await other.goto("http://m2s01.localhost:8081/");
+  await other.goto(`http://${OTRA}.${WEB}/`);
   await other.waitForTimeout(2500);
   const otherText = await other.locator("body").innerText();
-  ok("otra sucursal (m2s01) NO muestra el contenido de webqa", !otherText.includes("Radiología Web QA") && !otherText.includes("2-2445566"));
+  ok(`otra sucursal (${OTRA}) NO muestra el contenido de ${T}`, !otherText.includes(TITULO));
 } catch (e) {
   ok("flujo sin errores", false, e.message.split("\n")[0]);
   if (app) await shot(app, "zz-error-flow");
