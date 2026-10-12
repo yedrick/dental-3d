@@ -6,6 +6,7 @@ import { z } from "zod";
 import { tenancyMiddleware } from "@tenancy-node/adapter-express";
 import { adminMiddleware, createAdminApi } from "@tenancy-node/admin-api";
 import { config } from "./config.js";
+import { tenantUsers } from "./tenancy/admin-users.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { requireTenant } from "./middleware/auth.js";
 import { bumpReportsVersion } from "./lib/cache.js";
@@ -48,6 +49,10 @@ if (config.admin.sessionSecret) {
     // "Entrar como…" abre la sucursal por su subdominio y la app canjea el token
     impersonationUrl: ({ tenantId, token }) =>
       `${config.admin.tenantUrl.replace("{tenant}", tenantId)}/api/auth/impersonate?token=${encodeURIComponent(token)}`,
+    // Detrás de nginx: la IP real (límite de intentos de login y auditoría) sale de X-Forwarded-For
+    trustProxy: config.trustProxy,
+    // Usuarios de cada sucursal en el panel: verlos, crearlos y "Entrar como"
+    tenantUsers,
   });
   app.use(adminMiddleware(admin));
 }

@@ -1,4 +1,3 @@
-import { CompiledQuery } from "kysely";
 import type { Pool } from "mysql2";
 import type { Pool as PromisePool, PoolConnection, TypeCast } from "mysql2/promise";
 import { tenancy } from "./tenancy/index.js";
@@ -27,21 +26,9 @@ function wrap(target: () => Promise<PromisePool | PoolConnection>): Db {
   };
 }
 
-// Parche para tenancy-node 0.8.0 (@tenancy-node/db-mysql): al cerrar el pool de una sucursal
-// (por inactividad o en tenancy.close()) solo se llama a kysely.destroy(), y Kysely no cierra
-// un pool que nunca usó. Si solo usamos el pool nativo, sus conexiones MySQL quedan abiertas.
-// Una consulta mínima por Kysely, una vez por pool, hace que el cierre lo termine de verdad.
-// Quitar cuando db-mysql cierre el pool nativo en destroy().
-const closableNativePools = new WeakSet<object>();
-
 /** Pool MySQL de la sucursal actual (lo entrega tenancy-node según el subdominio). */
 async function tenantPool(): Promise<PromisePool> {
-  const native = tenancy.pool<Pool>();
-  if (!closableNativePools.has(native)) {
-    await tenancy.db().executeQuery(CompiledQuery.raw("SELECT 1"));
-    closableNativePools.add(native);
-  }
-  return native.promise();
+  return tenancy.pool<Pool>().promise();
 }
 
 /** Consultas sobre la base de la sucursal actual. */
