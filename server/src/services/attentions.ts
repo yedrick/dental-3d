@@ -179,17 +179,17 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
 
     // ¿Primera atención de un paciente de este doctor? (se evalúa antes de insertar, fila por fila,
     // así en una atención con varios estudios solo el primero cuenta como "primer paciente")
-    // Lectura con bloqueo (FOR SHARE): ve lo último confirmado. Una lectura normal usaría la
+    // Lectura con bloqueo (LOCK IN SHARE MODE, que entienden MySQL y MariaDB): ve lo último confirmado. Una lectura normal usaría la
     // "foto" de REPEATABLE READ tomada al inicio de la transacción y no vería la atención que
     // otra transacción acaba de confirmar mientras esta esperaba el bloqueo del doctor.
     // Se buscan las atenciones DE ESTE DOCTOR (ps.doctor_id), no las de los pacientes asignados a él:
     // un paciente sin doctor (o con otro) atendido por este doctor también cuenta. Si no hay, se
     // revisan además los pacientes asignados a él, por los datos viejos de Supabase sin ps.doctor_id.
     const has_any = doctor
-      ? (await tx.query<{ one: number }[]>("SELECT 1 AS one FROM patient_studies WHERE doctor_id = ? LIMIT 1 FOR SHARE", [doctor.id])).length > 0 ||
+      ? (await tx.query<{ one: number }[]>("SELECT 1 AS one FROM patient_studies WHERE doctor_id = ? LIMIT 1 LOCK IN SHARE MODE", [doctor.id])).length > 0 ||
         (await tx.query<{ one: number }[]>(
           `SELECT 1 AS one FROM patient_studies ps JOIN patients p ON p.id = ps.patient_id
-            WHERE p.doctor_id = ? LIMIT 1 FOR SHARE`,
+            WHERE p.doctor_id = ? LIMIT 1 LOCK IN SHARE MODE`,
           [doctor.id],
         )).length > 0
       : false;

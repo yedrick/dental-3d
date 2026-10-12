@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS study_prices (
   effective_date       DATE          NOT NULL,
   is_active            TINYINT(1)    NOT NULL DEFAULT 1,
   created_at           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  active_study_id      CHAR(36) AS (IF(is_active = 1, study_id, NULL)) STORED,
+  -- RTRIM: MariaDB no deja indexar una columna calculada que use un CHAR tal cual (su valor depende
+  -- del modo PAD_CHAR_TO_FULL_LENGTH). En un UUID no cambia nada; MySQL 8 y MariaDB 10.6+ lo aceptan.
+  active_study_id      CHAR(36) AS (IF(is_active = 1, RTRIM(study_id), NULL)) STORED,
   PRIMARY KEY (id),
   UNIQUE KEY study_prices_one_active (active_study_id),
   KEY study_prices_study_idx (study_id, is_active),
