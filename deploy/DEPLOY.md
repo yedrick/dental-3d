@@ -63,7 +63,7 @@ En `/etc/mysql/mysql.conf.d/dental3d.cnf`:
 
 ```ini
 [mysqld]
-default-time-zone = '+00:00'      # obligatorio: las fechas se guardan en UTC
+default-time-zone = '+00:00'      # recomendado (la app igual fija UTC en sus conexiones)
 bind-address      = 127.0.0.1
 character-set-server = utf8mb4
 collation-server     = utf8mb4_unicode_ci
@@ -274,7 +274,7 @@ curl -s https://noexiste.dental3d.com/api/public/studies     # TENANCY_TENANT_NO
 
 - [ ] `server/.env` con `chmod 600` y fuera de git (ya está en `.gitignore`).
 - [ ] `TENANCY_KEY` y `JWT_SECRET` únicos y guardados en un gestor de secretos.
-- [ ] MySQL en `127.0.0.1` y con `default-time-zone=+00:00`.
+- [ ] MySQL en `127.0.0.1` (y en UTC, aunque la app fija UTC y modo estricto en cada conexión).
 - [ ] La API y el frontend escuchan solo en `127.0.0.1`.
 - [ ] Firewall con solo 22, 80 y 443.
 - [ ] HTTPS con comodín y HSTS activo.

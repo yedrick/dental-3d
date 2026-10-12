@@ -4,3 +4,5 @@ dist
 storage
 *.log
 storage-private
+.env.*
+!.env.example
