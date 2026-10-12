@@ -1,10 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@tenancy-node/core";
 import { database } from "@tenancy-node/db";
-import { mysql } from "@tenancy-node/db-mysql";
 import { storageFromEnv } from "@tenancy-node/storage-s3";
 import { redis, redisInvalidation } from "@tenancy-node/cache-redis";
 import { config } from "../config.js";
+import { mysqlWithSession } from "./mysql-session.js";
 import { seedTenant } from "./seed.js";
 
 /**
@@ -37,7 +37,7 @@ export const tenancyConfig = defineConfig({
   theme: { defaults: { primary: "#0F172A", secondary: "#64748B", radius: "md" } }, // #0F172A = color actual de la app
   plugins: [
     database({
-      driver: mysql(),
+      driver: mysqlWithSession(), // UTC y modo estricto en cada conexión (ver mysql-session.ts)
       central: { url: config.tenancy.databaseUrl, pool: { max: config.tenancy.centralPoolMax } },
       encryptionKey: config.tenancy.encryptionKey,
       // Cada sucursal tiene su propio usuario MySQL con acceso SOLO a su base

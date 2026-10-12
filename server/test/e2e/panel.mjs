@@ -24,7 +24,7 @@ try {
   await page.goto(`http://${WEB}/admin/tenants`);
   await page.getByRole("button", { name: /nuevo tenant/i }).click();
   await page.getByLabel(/^id$/i).fill(T);
-  await page.getByLabel(/^nombre$/i).fill("Sucursal Web QA");
+  await page.getByLabel(/^nombre$/i).fill(process.env.NOMBRE ?? `Sucursal ${T}`);
   await page.screenshot({ path: `${SHOTS}/02-panel-nuevo.png` });
   await page.getByRole("button", { name: /^crear$/i }).click();
   // Esperar el estado real (el texto "Activo" ya aparece por otras sucursales de la lista)

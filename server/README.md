@@ -25,9 +25,10 @@ cd server
 docker compose up -d          # MySQL 8.4 en el puerto 3307, ya en UTC (usuario root / root_dev_password)
 ```
 
-Con **tu propio MySQL** (8.0.13 o más nuevo):
-- Tiene que trabajar en **UTC**. En `mysqld.cnf`, `default-time-zone = '+00:00'`, y reinicia. Se comprueba con `SELECT @@global.time_zone;`.
-- Crea la base central y un usuario que pueda crear las bases y los usuarios de cada sucursal:
+Con **tu propio MySQL** (8.0.13 o más nuevo; probado también con MySQL 26.7 de Homebrew/FlyEnv):
+- No hace falta cambiar su zona horaria ni su `sql_mode`: la app fija **UTC y modo estricto en sus propias conexiones** (`src/tenancy/mysql-session.ts`), sin tocar las otras bases que tengas en ese MySQL.
+- Las sucursales se crean como bases `dental_<id>` en ese mismo MySQL.
+- Si `root` no tiene contraseña (FlyEnv), la URL queda `mysql://root@127.0.0.1:3306/<base central>`. Para algo más que pruebas, mejor un usuario dedicado:
 
 ```sql
 CREATE DATABASE dental3d_central CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
