@@ -12,13 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileSpreadsheet, FileText } from "lucide-react";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 export const Route = createFileRoute("/app/commissions")({ component: CommissionsPage });
 
-type CommissionSummary = { total: number; by_doctor: { doctor_id: string; doctor_name: string; count: number; total: number }[] };
+type CommissionSummary = { total: number; by_doctor: { doctor_id: string | null; doctor_name: string; external: boolean; count: number; total: number }[] };
+
+/** Grupo de cada comisión: el doctor registrado, o el NOMBRE del doctor no registrado. */
+const doctorKey = (r: { doctor_id: string | null; doctor_name?: string }) => r.doctor_id ?? `ext:${r.doctor_name ?? ""}`;
 
 /** Trae todas las páginas del rango (el reporte y la exportación muestran todo) y el resumen del servidor. */
 async function fetchAllCommissions(query: Record<string, string | undefined>) {
@@ -68,7 +68,9 @@ function CommissionsPage() {
   // Nombre del doctor por id (las filas ya traen doctor_name)
   const dmap = useMemo(() => {
     const m = new Map<string, any>();
-    for (const r of rows) m.set(r.doctor_id, { id: r.doctor_id, full_name: r.doctor_name });
+    for (const r of rows) {
+      m.set(doctorKey(r), { id: r.doctor_id, full_name: r.doctor_id ? r.doctor_name : `${r.doctor_name} (no registrado)` });
+    }
     return m;
   }, [rows]);
 
@@ -78,13 +80,13 @@ function CommissionsPage() {
     for (const r of rows) {
       const d = new Date(r.created_at);
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const dk = r.doctor_id;
+      const dk = doctorKey(r);
       g[mk] ??= {};
       g[mk][dk] ??= [];
       g[mk][dk].push({
         fecha: formatDate(r.created_at),
-        codigo: r.doctor_id?.slice(0, 8) || "-",
-        doctor: r.doctor_name || "-",
+        codigo: r.doctor_id?.slice(0, 8) || "no reg.",
+        doctor: r.doctor_id ? r.doctor_name || "-" : `${r.doctor_name} (no registrado)`,
         paciente: r.patient_name || "-",
         estudio: r.study_name || "-",
         informe: r.has_report ? "con informe" : "sin informe",
@@ -99,8 +101,11 @@ function CommissionsPage() {
 
   const totalGeneral = data?.summary?.total ?? rows.reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
 
-  const exportExcel = () => {
+  // Las librerías de Excel y PDF se cargan solo al exportar (la pantalla abre más rápido)
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
+    const usedNames = new Set<string>();
     const monthKeys = Object.keys(grouped).sort();
     for (const mk of monthKeys) {
       const [yy, mm] = mk.split("-").map(Number);
@@ -122,8 +127,12 @@ function CommissionsPage() {
         sheetData.push(["", "", "", "", "", "", "", "", "TOTAL", sub]);
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 28 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 6 }, { wch: 12 }];
-        const safeName = `${monthName.slice(0, 3)}${yy}_${(doc?.full_name || did).replace(/[^\w]/g, "").slice(0, 20)}`;
-        XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 31));
+        // Nombre de hoja único (máx. 31 caracteres): dos doctores parecidos no chocan
+        const base = `${monthName.slice(0, 3)}${yy}_${(doc?.full_name || did).normalize("NFD").replace(/[^\w]/g, "").slice(0, 20)}`.slice(0, 28);
+        let name = base;
+        for (let i = 2; usedNames.has(name); i++) name = `${base}_${i}`;
+        usedNames.add(name);
+        XLSX.utils.book_append_sheet(wb, ws, name);
       }
     }
     if (monthKeys.length === 0) {
@@ -133,7 +142,8 @@ function CommissionsPage() {
     XLSX.writeFile(wb, `comisiones_${range.from}_${range.to}.xlsx`);
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
     const doc = new jsPDF({ orientation: "landscape" });
     const monthKeys = Object.keys(grouped).sort();
     let first = true;

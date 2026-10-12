@@ -344,6 +344,15 @@ studiesRouter.post("/:id/prices", requirePermission("studies.edit"), async (req,
   res.status(201).json(price);
 });
 
+/** Todas las tarifas (historial completo) en una sola petición, para la pestaña Tarifas. */
+studyPricesRouter.get("/", async (_req, res) => {
+  const rows = await db().query(
+    `SELECT id, study_id, price_with_report, price_without_report, effective_date, is_active, created_at
+       FROM study_prices ORDER BY effective_date DESC, created_at DESC`,
+  );
+  res.json(rows);
+});
+
 studyPricesRouter.patch("/:id", requirePermission("studies.edit"), async (req, res) => {
   const id = String(req.params.id);
   const data = priceSchema.partial().parse(req.body);

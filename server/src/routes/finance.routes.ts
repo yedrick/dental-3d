@@ -6,14 +6,14 @@ import { HttpError } from "../lib/http-error.js";
 import { receiptExists } from "../lib/private-storage.js";
 import { paged, paginate, paginationSchema } from "../lib/query.js";
 import { money, optionalText } from "../lib/schemas.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { denyDoctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 import { tenancy } from "../tenancy/index.js";
 
 // Depósitos bancarios y pagos a terceros. Sin caché: es dinero.
 export const depositsRouter = Router();
 export const thirdPartyRouter = Router();
-depositsRouter.use(requireAuth);
-thirdPartyRouter.use(requireAuth);
+depositsRouter.use(requireAuth, denyDoctorScope);
+thirdPartyRouter.use(requireAuth, denyDoctorScope);
 
 const positive = money.refine((v) => v > 0, "El monto debe ser mayor a 0");
 const date = z.iso.date("Fecha inválida (YYYY-MM-DD)");

@@ -85,10 +85,14 @@ app.use("/api", (req, res, next) => {
 
 app.use("/api", requireTenant);
 
-// Cualquier cambio de datos exitoso invalida los reportes cacheados de la sucursal
+// Los cambios de datos que salen en los reportes invalidan los reportes cacheados de la sucursal.
+// El login, las notificaciones, la página web o una vista previa del Excel no los borran.
+const REPORT_DATA = /^\/(attentions|patients|doctors|studies|study-prices|cashbox|deposits|third-party-payments|params)(\/|$)/;
 app.use("/api", (req, res, next) => {
   const tenantId = tenancy.currentId();
-  if (tenantId && req.method !== "GET" && req.method !== "HEAD") {
+  const changesReports =
+    REPORT_DATA.test(req.path) && !(req.path === "/studies/import" && req.body?.aplicar !== true);
+  if (tenantId && req.method !== "GET" && req.method !== "HEAD" && changesReports) {
     // "finish" puede llegar con el contexto de la sucursal ya cerrado: se vuelve a abrir
     res.on("finish", () => {
       if (res.statusCode < 400) {

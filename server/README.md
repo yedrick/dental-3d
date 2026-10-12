@@ -226,11 +226,30 @@ Los filtros `from` y `to` (`YYYY-MM-DD`) son **días en la hora de la clínica**
 
 | Método | Ruta | Permiso |
 |---|---|---|
-| GET | `/api/attentions?from=&to=&q=&patient_id=&doctor_id=&status=debt\|paid\|pending_delivery\|delivered` (con `summary`: total, pagado, saldo) | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, AUDITOR, DOCTOR |
-| POST | `/api/attentions` | `attention.create` |
-| POST | `/api/attentions/:id/charge` `{ amount, payment_method? }` | `attention.charge` |
-| POST | `/api/attentions/charge-all` `{ patient_id }` | `attention.charge` |
+| GET | `/api/attentions?from=&to=&q=&patient_id=&doctor_id=&status=debt\|paid\|pending_delivery\|delivered` (con `summary`: total, pagado, saldo) | `view.attention`, `view.delivery` o `view.patients` |
+| GET | `/api/attentions/payments?from=&to=&patient_id=&attention_id=` (pagos: fecha, monto, método, quién) | ídem |
+| POST | `/api/attentions` (`external_doctor`: doctor no registrado, ver abajo) | `attention.create` |
+| POST | `/api/attentions/:id/charge` `{ amount, payment_method }` (efectivo si no se indica) | `attention.charge` |
+| POST | `/api/attentions/charge-all` `{ patient_id, payment_method }` | `attention.charge` |
 | POST | `/api/attentions/deliver` `{ ids: [...] }` | `attention.deliver` |
+
+**Pagos (migración 009).** Cada cobro queda en la tabla `payments`, con su fecha, monto, método (efectivo, QR o tarjeta), origen y quién lo registró. Hay tres orígenes: al registrar la atención, cobro de saldo y cobrar todo.
+- `patient_studies.amount_paid` sigue siendo el total pagado de cada atención.
+- **"Cobrado"** (dashboard y reportes) se cuenta por la **fecha de cada pago**: una deuda del mes pasado pagada hoy cuenta hoy. Además se indica cuánto de lo cobrado es de atenciones anteriores (`collected_today_previous` y `collected_previous`).
+- La migración rehízo la historia desde la auditoría: el pago al registrar (con su método original), cada cobro y los "cobrar todo".
+
+**Doctor no registrado.** En la atención se envía `"external_doctor": { "name": "Dr. Pérez", "commission_type": "pct" | "fixed", "commission_value": 12 }`.
+- `pct` es el % del precio de cada estudio, hasta 100; `fixed` es un monto en Bs por cada estudio.
+- La comisión se guarda con su nombre, sin descuento por convenio.
+- Sale en Comisiones y en el reporte como "Nombre (no registrado)".
+- No se puede enviar a la vez con `doctor_id`.
+
+**Rol DOCTOR.** Un usuario que solo tiene el rol DOCTOR se enlaza con su ficha de doctor (`users.doctor_id`, desde Usuarios).
+- Ve **solo lo suyo**: sus pacientes (asignados a él o con alguna atención suya), sus atenciones, sus comisiones, su ficha, sus citas y un dashboard con sus números.
+- Caja, depósitos, pagos a terceros, comprobantes y reportes le dan 403, aunque se le marquen en Roles.
+- Sin ficha enlazada no ve ningún paciente.
+
+**Permisos de "ver".** Las lecturas siguen la matriz de **Roles y permisos**. Quitarle a un rol "Ver pacientes" o "Ver atenciones" deja de mostrárselos en la API. Las pantallas que necesitan buscar pacientes (Atención, Entregas, Agenda) también los muestran con sus propios permisos.
 
 Registrar una atención:
 

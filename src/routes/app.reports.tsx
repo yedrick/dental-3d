@@ -6,6 +6,7 @@ import { apiGet } from "@/lib/api";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { methodLabel } from "@/lib/payments";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,10 @@ type ReportSummary = {
   };
   financial: {
     billed: number;
+    /** Cobrado en el período por la fecha de cada pago */
     collected: number;
+    /** De lo cobrado, lo que es de atenciones de antes del período */
+    collected_previous: number;
     debt: number;
     commissions: number;
     commissions_by_doctor: { doctor: string; count: number; total: number }[];
@@ -93,6 +97,7 @@ function ReportsPage() {
     return {
       totalStudies: fin.billed,
       paid: fin.collected,
+      paidPrevious: fin.collected_previous ?? 0,
       debt: fin.debt,
       delivered: op.delivered,
       pending: op.pending_delivery,
@@ -161,14 +166,21 @@ function ReportsPage() {
         <HeroCard
           title="Cobrado"
           value={formatMoney(data?.paid)}
-          hint={<span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><ArrowUpRight className="h-3 w-3" />ingresado</span>}
+          hint={
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <ArrowUpRight className="h-3 w-3" />
+              {(data?.paidPrevious ?? 0) > 0
+                ? `incluye ${formatMoney(data?.paidPrevious)} de atenciones anteriores`
+                : "ingresado en el período"}
+            </span>
+          }
           icon={<TrendingUp className="h-4 w-4" />}
           accent="from-emerald-500/20 to-emerald-500/5"
         />
         <HeroCard
           title="Por cobrar"
           value={formatMoney(data?.debt)}
-          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />deuda pendiente</span>}
+          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />saldo de las atenciones del período</span>}
           icon={<TrendingDown className="h-4 w-4" />}
           accent="from-amber-500/20 to-amber-500/5"
         />
@@ -237,7 +249,7 @@ function ReportsPage() {
                 {(data?.byMethod ?? []).map(([m, v]) => {
                   const total = (data?.byMethod ?? []).reduce((s, [, x]) => s + x, 0);
                   const pct = total > 0 ? (v / total) * 100 : 0;
-                  const label = m === "cash" ? "Efectivo" : m === "qr" ? "QR" : m === "card" ? "Tarjeta" : m;
+                  const label = methodLabel(m);
                   return (
                     <div key={m}>
                       <div className="flex justify-between text-xs mb-1">

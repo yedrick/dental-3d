@@ -672,9 +672,9 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
    - regla de comisiones;
    - servicio de correo;
    - caja en negativo y anulaciones;
-   - comprobantes para AUDITOR;
+   - ✅ comprobantes para AUDITOR (12/10/2026): los ve quien tenga "ver caja", "ver depósitos" o "ver pagos a terceros" en Roles. El AUDITOR los tiene por defecto; se le pueden quitar;
    - saldo de caja y saldos a favor al importar;
-   - comisiones por doctor.
+   - ✅ comisiones por doctor (12/10/2026): el usuario DOCTOR ve solo lo suyo. Un doctor no registrado lleva su nombre y su comisión (% o monto fijo) en la atención.
 7. Correr la importación contra la base real de Supabase con `--dry-run` y revisar el informe.
 8. Pasar las pruebas de las Fases 2 a 4 a tests automáticos en el repo.
 9. ✅ Logo descargado dentro del proyecto (`src/assets/logo-3d.png`).

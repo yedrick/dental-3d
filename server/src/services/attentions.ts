@@ -15,9 +15,18 @@ export interface AttentionItemInput {
   is_voucher: boolean;
 }
 
+/** Doctor que manda al paciente pero no está registrado: su nombre y su comisión para ESTA atención. */
+export interface ExternalDoctorInput {
+  name: string;
+  /** pct = % del precio de cada estudio · fixed = monto fijo en Bs por cada estudio */
+  commission_type: "pct" | "fixed";
+  commission_value: number;
+}
+
 export interface CreateAttentionInput {
   patient_id: string;
   doctor_id: string | null;
+  external_doctor: ExternalDoctorInput | null;
   clinic_name: string | null;
   with_invoice: boolean;
   invoice_number: string | null;
@@ -78,6 +87,19 @@ export function commissionFor(
   return { amountCents: toCents(item.fixedCommission), percentage: 0 };
 }
 
+/** Comisión de un doctor no registrado: la que se escribió en la atención (vale: como cualquier doctor). */
+export function externalCommissionFor(
+  ext: ExternalDoctorInput,
+  item: { is_voucher: boolean; priceCents: number },
+  params: Params,
+): { amountCents: number; percentage: number } {
+  if (item.is_voucher) return { amountCents: toCents(params.voucherAmount), percentage: 0 };
+  if (ext.commission_type === "pct") {
+    return { amountCents: percentOf(item.priceCents, ext.commission_value), percentage: ext.commission_value };
+  }
+  return { amountCents: toCents(ext.commission_value), percentage: 0 };
+}
+
 export async function createAttention(tx: Db, input: CreateAttentionInput, userId: string) {
   const [patient] = await tx.query<{ id: string; doctor_id: string | null; full_name: string }[]>(
     "SELECT id, doctor_id, full_name FROM patients WHERE id = ?",
@@ -85,8 +107,11 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
   );
   if (!patient) throw new HttpError(404, "Paciente no encontrado");
 
+  // Doctor no registrado: manda sobre el doctor del paciente (es quien refirió ESTA atención)
+  const external = input.external_doctor;
+  if (external && input.doctor_id) throw new HttpError(400, "Elige un doctor registrado o uno no registrado, no los dos");
   // Sin doctor (ni en la atención ni en el paciente): se registra sin comisión ni descuento por convenio
-  const doctorId = input.doctor_id ?? patient.doctor_id;
+  const doctorId = external ? null : (input.doctor_id ?? patient.doctor_id);
   let doctor: CommissionDoctor | null = null;
   if (doctorId) {
     // FOR UPDATE: serializa las atenciones del mismo doctor, así dos registros simultáneos
@@ -141,8 +166,8 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
   if (paidCents > totalCents) {
     throw new HttpError(400, `El monto pagado (${fromCents(paidCents)}) supera el total (${fromCents(totalCents)})`);
   }
-  const hasCharge = lines.some((l) => !l.item.is_voucher);
-  if (hasCharge && !input.payment_method) throw new HttpError(400, "Indica el método de pago");
+  // El método solo hace falta si se paga algo ahora ("en entrega" = 0 Bs, sin método)
+  if (paidCents > 0 && !input.payment_method) throw new HttpError(400, "Indica el método de pago");
 
   let remaining = paidCents;
   const created: { id: string; study_id: string; total: number; paid: number; commission: number; percentage: number }[] = [];
@@ -172,14 +197,14 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
     await tx.query(
       `INSERT INTO patient_studies
-         (id, patient_id, study_id, doctor_id, clinic_name, price, has_report, is_voucher, with_invoice,
+         (id, patient_id, study_id, doctor_id, external_doctor_name, clinic_name, price, has_report, is_voucher, with_invoice,
           invoice_number, invoice_surcharge, discount, amount_paid, payment_method, delivery_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, patient.id, l.item.study_id, doctor?.id ?? null, input.clinic_name,
+        id, patient.id, l.item.study_id, doctor?.id ?? null, external?.name ?? null, input.clinic_name,
         fromCents(l.priceCents), l.item.has_report, l.item.is_voucher, l.withInvoice,
         input.invoice_number, fromCents(l.surchargeCents), fromCents(l.discountCents), fromCents(linePaid),
-        l.item.is_voucher ? null : input.payment_method, input.delivery_date, userId,
+        linePaid > 0 ? input.payment_method : null, input.delivery_date, userId,
       ],
     );
 
@@ -190,16 +215,25 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
           !has_any,
           params,
         )
-      : { amountCents: 0, percentage: 0 };
-    if (doctor) {
+      : external
+        ? externalCommissionFor(external, { is_voucher: l.item.is_voucher, priceCents: l.priceCents }, params)
+        : { amountCents: 0, percentage: 0 };
+    if (doctor || external) {
       await tx.query(
-        "INSERT INTO commissions (doctor_id, patient_study_id, commission_amount, percentage) VALUES (?, ?, ?, ?)",
-        [doctor.id, id, fromCents(commission.amountCents), commission.percentage],
+        "INSERT INTO commissions (doctor_id, external_doctor_name, patient_study_id, commission_amount, percentage) VALUES (?, ?, ?, ?, ?)",
+        [doctor?.id ?? null, external?.name ?? null, id, fromCents(commission.amountCents), commission.percentage],
+      );
+    }
+    // Pago al registrar: queda en la tabla de pagos con su fecha y su método
+    if (linePaid > 0) {
+      await tx.query(
+        "INSERT INTO payments (patient_study_id, amount, method, source, created_by) VALUES (?, ?, ?, 'registro', ?)",
+        [id, fromCents(linePaid), input.payment_method ?? "cash", userId],
       );
     }
 
     await audit(tx, userId, "INSERT", "patient_studies", id, {
-      patient_id: patient.id, study_id: l.item.study_id, doctor_id: doctor?.id ?? null,
+      patient_id: patient.id, study_id: l.item.study_id, doctor_id: doctor?.id ?? null, external_doctor: external?.name ?? null,
       price: fromCents(l.priceCents), invoice_surcharge: fromCents(l.surchargeCents),
       discount: fromCents(l.discountCents), amount_paid: fromCents(linePaid),
       commission: fromCents(commission.amountCents), commission_pct: commission.percentage,
@@ -214,6 +248,7 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
     patient_id: patient.id,
     patient_name: patient.full_name,
     doctor_id: doctor?.id ?? null,
+    external_doctor: external ?? null,
     clinic_name: input.clinic_name,
     items_count: created.length,
     inserted_ids: created.map((c) => c.id),

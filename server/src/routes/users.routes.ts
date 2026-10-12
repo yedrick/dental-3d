@@ -4,6 +4,7 @@ import { db, withTransaction, type Db } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { username as usernameSchema, uuid } from "../lib/schemas.js";
 import { hashPassword } from "../lib/password.js";
 import { ROLES, type Role } from "../lib/permissions.js";
 import { requireAuth, requirePermission, signToken } from "../middleware/auth.js";
@@ -24,10 +25,10 @@ usersRouter.use(requireAuth);
 const roleSchema = z.enum(ROLES);
 const rolesSchema = z.array(roleSchema).min(1, "Asigna al menos un rol").max(ROLES.length).transform((r) => [...new Set(r)]);
 
-const USER_FIELDS = "u.id, u.username, u.full_name, u.email, u.active, u.approved, u.created_at";
+const USER_FIELDS = "u.id, u.username, u.full_name, u.email, u.active, u.approved, u.doctor_id, u.created_at";
 
 async function findUser(q: Db, id: string, lock = false) {
-  const [u] = await q.query<{ id: string; username: string; full_name: string; email: string; active: boolean; approved: boolean }[]>(
+  const [u] = await q.query<{ id: string; username: string; full_name: string; email: string; active: boolean; approved: boolean; doctor_id: string | null }[]>(
     `SELECT ${USER_FIELDS} FROM users u WHERE u.id = ?${lock ? " FOR UPDATE" : ""}`,
     [id],
   );
@@ -54,6 +55,18 @@ async function assertAnotherAdminRemains(tx: Db, excludingUserId: string) {
     [excludingUserId],
   );
   if (rows.length === 0) throw new HttpError(409, "Debe quedar al menos un ADMIN activo en la sucursal", "LAST_ADMIN");
+}
+
+/** Ficha de doctor para un usuario DOCTOR: tiene que existir y no estar enlazada a otro usuario. */
+async function assertDoctorLink(tx: Db, doctorId: string | null | undefined, userId: string | null) {
+  if (!doctorId) return;
+  const [d] = await tx.query("SELECT id FROM doctors WHERE id = ?", [doctorId]);
+  if (!d) throw new HttpError(400, "La ficha de doctor indicada no existe");
+  const [other] = await tx.query<{ full_name: string }[]>(
+    "SELECT full_name FROM users WHERE doctor_id = ? AND id <> ? LIMIT 1",
+    [doctorId, userId ?? ""],
+  );
+  if (other) throw new HttpError(409, `Esa ficha de doctor ya está enlazada al usuario "${other.full_name}"`);
 }
 
 async function revokeSessions(tx: Db, userId: string) {
@@ -93,10 +106,12 @@ usersRouter.get("/:id", requirePermission("view.users"), async (req, res) => {
 
 const createSchema = z.object({
   email: z.email("Email inválido").trim().toLowerCase(),
-  username: z.string().trim().min(1).max(100),
+  username: usernameSchema,
   full_name: z.string().trim().min(1).max(200),
   password: passwordSchema,
   roles: rolesSchema,
+  // Usuario DOCTOR: su ficha de doctor (ve solo sus pacientes, atenciones y comisiones)
+  doctor_id: uuid.nullish().transform((v) => v ?? null),
 });
 
 /** Crea un usuario ya aprobado (como adminCreateUser). */
@@ -106,12 +121,13 @@ usersRouter.post("/", requirePermission("users.create"), async (req, res) => {
   const hash = await hashPassword(data.password);
   const user = await withTransaction(async (tx) => {
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
+    await assertDoctorLink(tx, data.doctor_id, null);
     await tx.query(
-      "INSERT INTO users (id, username, full_name, email, password_hash, approved, active) VALUES (?, ?, ?, ?, ?, 1, 1)",
-      [id, data.username, data.full_name, data.email, hash],
+      "INSERT INTO users (id, username, full_name, email, password_hash, approved, active, doctor_id) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+      [id, data.username, data.full_name, data.email, hash, data.doctor_id],
     );
     await tx.query("INSERT INTO user_roles (user_id, role) VALUES ?", [data.roles.map((r) => [id, r])]);
-    await audit(tx, req.user!.id, "USER_CREATE", "users", id, { email: data.email, username: data.username, full_name: data.full_name, roles: data.roles });
+    await audit(tx, req.user!.id, "USER_CREATE", "users", id, { email: data.email, username: data.username, full_name: data.full_name, roles: data.roles, doctor_id: data.doctor_id });
     return findUser(tx, id);
   });
   res.status(201).json(user);
@@ -121,10 +137,11 @@ usersRouter.post("/", requirePermission("users.create"), async (req, res) => {
 
 const updateSchema = z.object({
   email: z.email("Email inválido").trim().toLowerCase().optional(),
-  username: z.string().trim().min(1).max(100).optional(),
+  username: usernameSchema.optional(),
   full_name: z.string().trim().min(1).max(200).optional(),
   password: passwordSchema.optional(),
   active: z.boolean().optional(),
+  doctor_id: uuid.nullable().optional(), // null = quitar el enlace
 });
 
 usersRouter.patch("/:id", requirePermission("users.edit"), sensitiveLimiter, async (req, res) => {
@@ -140,8 +157,9 @@ usersRouter.patch("/:id", requirePermission("users.edit"), sensitiveLimiter, asy
     assertCanManage(req.user!.roles, target);
     if (data.active === false && isAdmin(target.roles)) await assertAnotherAdminRemains(tx, id);
 
+    if (data.doctor_id !== undefined) await assertDoctorLink(tx, data.doctor_id, id);
     const changes: Record<string, unknown> = {};
-    for (const c of ["email", "username", "full_name", "active"] as const) if (data[c] !== undefined) changes[c] = data[c];
+    for (const c of ["email", "username", "full_name", "active", "doctor_id"] as const) if (data[c] !== undefined) changes[c] = data[c];
     if (hash) changes.password_hash = hash;
     const cols = Object.keys(changes);
     await tx.query(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...cols.map((c) => changes[c]), id]);

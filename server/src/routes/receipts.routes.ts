@@ -3,7 +3,7 @@ import { z } from "zod";
 import { detectFileKind, IMAGE_TYPES } from "../lib/files.js";
 import { HttpError } from "../lib/http-error.js";
 import { getReceipt, isReceiptKey, putReceipt, signedReceiptUrl, verifySignedReceipt } from "../lib/private-storage.js";
-import { requireAuth, requirePermission, requireRole } from "../middleware/auth.js";
+import { denyDoctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 import { tenancy } from "../tenancy/index.js";
 
 /**
@@ -34,8 +34,8 @@ receiptsRouter.get("/file", async (req, res) => {
 
 receiptsRouter.use(requireAuth);
 
-// Ver comprobantes: mismos roles que la política del bucket "receipts" de Supabase
-receiptsRouter.get("/url", requireRole("ADMIN", "SUBADMIN", "CAJA", "CONTABILIDAD"), async (req, res) => {
+// Ver comprobantes: quien ve caja, depósitos o pagos a terceros (según la matriz de Roles)
+receiptsRouter.get("/url", requirePermission("view.cashbox", "view.deposits", "view.third_party"), denyDoctorScope, async (req, res) => {
   const { key } = z.object({ key: z.string() }).parse(req.query);
   if (!isReceiptKey(key)) throw new HttpError(400, "Comprobante inválido");
   res.json(signedReceiptUrl(tenantId(), key));

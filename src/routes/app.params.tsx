@@ -1,7 +1,7 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
@@ -27,24 +27,27 @@ type Param = {
 /** Parámetros de sí/no (p. ej. cashbox_allow_negative): value_bool no es null. */
 const isBool = (p: Param) => p.value_bool !== null && p.value_bool !== undefined;
 
+/** Lista vacía estable (un [] nuevo en cada dibujo hacía que los efectos se repitieran sin fin) */
+const NO_PARAMS: Param[] = [];
+
 export const Route = createFileRoute("/app/params")({ component: ParamsPage });
 
 function ParamsPage() {
   const { can } = useAuth();
   const canEdit = can("params.edit");
   const qc = useQueryClient();
-  const { data: params = [] } = useQuery({
+  const { data } = useQuery({
     queryKey: ["app_params"],
     queryFn: () => apiGet<Param[]>("/api/params"),
     staleTime: STALE.catalog,
   });
+  const params = data ?? NO_PARAMS;
 
-  const [values, setValues] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const initial: Record<string, string> = {};
-    params.forEach((p) => { initial[p.key] = p.value_num?.toString() ?? p.value_text ?? ""; });
-    setValues(initial);
-  }, [params]);
+  // Solo se guardan los valores que se están editando; el resto se muestra tal como está en la base.
+  // (Antes se copiaba todo en cada carga: con un error de la API entraba en un ciclo sin fin, y al
+  // guardar un parámetro se perdía lo que se estaba escribiendo en los otros.)
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const shown = (p: Param) => edits[p.key] ?? p.value_num?.toString() ?? p.value_text ?? "";
 
   const patch = async (key: string, body: { value_num: number } | { value_bool: boolean }) => {
     try {
@@ -53,11 +56,13 @@ function ParamsPage() {
       return toast.error(translateError(e));
     }
     toast.success("Parámetro actualizado");
-    qc.invalidateQueries({ queryKey: ["app_params"] });
+    await qc.invalidateQueries({ queryKey: ["app_params"] });
+    setEdits(({ [key]: _saved, ...rest }) => rest); // ya guardado: vuelve a mostrar el valor de la base
   };
 
   const save = async (key: string) => {
-    const v = values[key];
+    const p = params.find((x) => x.key === key);
+    const v = p ? shown(p) : undefined;
     const num = v === "" || v === undefined ? NaN : Number(v);
     if (!Number.isFinite(num)) return toast.error("Ingresa un valor numérico");
     await patch(key, { value_num: num });
@@ -88,9 +93,9 @@ function ParamsPage() {
                   <Label className="text-xs">Valor</Label>
                   <Input
                     type="number" step="0.01" inputMode="decimal"
-                    value={values[p.key] ?? ""}
+                    value={shown(p)}
                     disabled={!canEdit}
-                    onChange={(e) => setValues({ ...values, [p.key]: e.target.value })}
+                    onChange={(e) => setEdits({ ...edits, [p.key]: e.target.value })}
                   />
                 </div>
                 {canEdit && <Button size="sm" onClick={() => save(p.key)}><Save className="h-4 w-4" /></Button>}

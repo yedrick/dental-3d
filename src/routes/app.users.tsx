@@ -5,6 +5,7 @@ import { useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, tokenStore } from "@/lib/api";
 import { formatDate } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -52,6 +53,8 @@ type Row = {
   approved: boolean;
   active: boolean;
   roles: AppRole[];
+  /** Ficha de doctor enlazada (usuarios DOCTOR) */
+  doctor_id?: string | null;
 };
 
 function UsersPage() {
@@ -211,25 +214,26 @@ function UsersPage() {
                           size="sm"
                           variant={u.approved ? "ghost" : "default"}
                           title={u.approved ? "Deshabilitar acceso" : "Aprobar acceso"}
+                          aria-label={`${u.approved ? "Deshabilitar acceso de" : "Aprobar acceso de"} ${u.full_name}`}
                           onClick={() => toggleApproved(u)}
                         >
                           {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
                         </Button>
                       )}
                       {canImpersonate && u.id !== user?.id && (
-                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
+                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" aria-label={`Ingresar como ${u.full_name}`} onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
                         </Button>
                       )}
                       {canEdit && (
-                        <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
+                        <Button size="sm" variant="ghost" title="Editar" aria-label={`Editar a ${u.full_name}`} onClick={() => setEditing(u)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                       )}
                       {canDelete && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id}>
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id} title="Eliminar" aria-label={`Eliminar a ${u.full_name}`}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
@@ -302,6 +306,14 @@ function UserFormDialog({
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState<AppRole[]>(initial?.roles.length ? initial.roles : ["RECEPCION"]);
   const [active, setActive] = useState(initial?.active ?? true);
+  // Usuario DOCTOR: su ficha de doctor (ve solo sus pacientes, atenciones y comisiones)
+  const [doctorId, setDoctorId] = useState<string>(initial?.doctor_id ?? "");
+  const { data: doctors = [] } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<{ id: string; full_name: string; status: boolean }[]>("/api/doctors"),
+    staleTime: STALE.master,
+    enabled: roles.includes("DOCTOR"),
+  });
   const toggleRole = (r: AppRole, on: boolean) =>
     setRoles((prev) => (on ? [...prev, r] : prev.filter((x) => x !== r)));
   const [saving, setSaving] = useState(false);
@@ -316,7 +328,7 @@ function UserFormDialog({
       }
       if (mode === "create") {
         if (!password) throw new Error("La contraseña es requerida");
-        await apiPost("/api/users", { email, username, full_name, password, roles });
+        await apiPost("/api/users", { email, username, full_name, password, roles, doctor_id: doctorId || null });
         toast.success("Usuario creado");
       } else {
         const u = initial!;
@@ -328,6 +340,7 @@ function UserFormDialog({
           if (full_name !== u.full_name) changes.full_name = full_name;
           if (password) changes.password = password;
           if (active !== u.active) changes.active = active;
+          if ((doctorId || null) !== (u.doctor_id ?? null)) changes.doctor_id = doctorId || null;
         }
         const rolesChanged =
           canEditRoles && (roles.length !== u.roles.length || roles.some((r) => !u.roles.includes(r)));
@@ -394,6 +407,21 @@ function UserFormDialog({
             ))}
           </div>
         </div>
+        {roles.includes("DOCTOR") && (
+          <div>
+            <Label htmlFor="user-doctor">Ficha de doctor</Label>
+            <Select value={doctorId || "none"} onValueChange={(v) => setDoctorId(v === "none" ? "" : v)} disabled={!canEditData}>
+              <SelectTrigger id="user-doctor"><SelectValue placeholder="Sin enlazar" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin enlazar</SelectItem>
+                {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Con el rol DOCTOR, este usuario ve solo los pacientes, atenciones y comisiones de esta ficha. Sin ficha no ve ninguno.
+            </p>
+          </div>
+        )}
         {mode === "edit" && (
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={active} disabled={!canEditData} onCheckedChange={(v) => setActive(!!v)} />

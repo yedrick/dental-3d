@@ -14,6 +14,8 @@ export interface AuthUser {
   permissions: Set<string>;
   /** ADMIN que está "iniciando sesión como" este usuario. */
   impersonatedBy?: string;
+  /** Ficha de doctor enlazada (users.doctor_id), para el rol DOCTOR. */
+  doctorId: string | null;
 }
 
 declare global {
@@ -38,6 +40,7 @@ interface CachedSession {
   active: boolean;
   approved: boolean;
   token_version: number;
+  doctor_id: string | null;
   roles: Role[];
   permissions: string[];
 }
@@ -66,8 +69,8 @@ export function signToken(
 
 async function loadSession(userId: string): Promise<CachedSession | null> {
   return cache().remember(CacheKeys.auth(userId), CacheTtl.auth, async () => {
-    const rows = await db().query<{ active: boolean; approved: boolean; token_version: number }[]>(
-      "SELECT active, approved, token_version FROM users WHERE id = ?",
+    const rows = await db().query<{ active: boolean; approved: boolean; token_version: number; doctor_id: string | null }[]>(
+      "SELECT active, approved, token_version, doctor_id FROM users WHERE id = ?",
       [userId],
     );
     if (!rows[0]) return null; // null se cachea: un id inexistente no golpea la base en cada petición
@@ -104,7 +107,10 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   if (!session.approved) return next(new HttpError(403, "Tu cuenta aún no ha sido aprobada por un administrador."));
   if (payload.ver !== session.token_version) return next(new HttpError(401, "Tu sesión fue cerrada. Vuelve a iniciar sesión.", "SESSION_REVOKED"));
 
-  req.user = { id: payload.sub, roles: session.roles, permissions: new Set(session.permissions), impersonatedBy: payload.imp };
+  req.user = {
+    id: payload.sub, roles: session.roles, permissions: new Set(session.permissions), impersonatedBy: payload.imp,
+    doctorId: session.doctor_id ?? null,
+  };
   requestContext.enterWith({ userId: payload.sub, impersonatedBy: payload.imp });
   next();
 }
@@ -127,4 +133,20 @@ export function requireRole(...roles: Role[]) {
     if (roles.some((r) => user.roles.includes(r))) return next();
     next(new HttpError(403, "No tienes permiso para realizar esta acción"));
   };
+}
+
+/**
+ * Usuario que SOLO tiene el rol DOCTOR: ve únicamente lo de su ficha de doctor (users.doctor_id):
+ * sus pacientes, sus atenciones y sus comisiones. Devuelve su doctor_id, "" si su usuario no está
+ * enlazado a ninguna ficha (no ve nada) o undefined si no tiene restricción (cualquier otro rol).
+ */
+export function doctorScope(user: AuthUser | undefined): string | undefined {
+  if (!user || user.roles.length === 0 || !user.roles.every((r) => r === "DOCTOR")) return undefined;
+  return user.doctorId ?? "";
+}
+
+/** Pantallas de la clínica (caja, depósitos, reportes…) que un DOCTOR no ve aunque se le den permisos. */
+export function denyDoctorScope(req: Request, _res: Response, next: NextFunction) {
+  if (doctorScope(req.user) !== undefined) return next(new HttpError(403, "Esta información es de la clínica: un doctor solo ve sus pacientes, atenciones y comisiones"));
+  next();
 }

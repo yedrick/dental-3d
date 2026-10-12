@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { dateRangeSchema, dayRange, paged, paginate, paginationSchema } from "../lib/query.js";
 import { uuid } from "../lib/schemas.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { doctorScope, requireAuth, requirePermission } from "../middleware/auth.js";
 
 // Las comisiones se generan solas al registrar una atención (services/attentions.ts).
 // Aquí solo se consultan. Sin caché: es dinero.
@@ -22,16 +22,19 @@ commissionsRouter.get("/", async (req, res) => {
     params.push(start, end);
   }
   if (f.doctor_id) { where.push("c.doctor_id = ?"); params.push(f.doctor_id); }
+  // Un usuario DOCTOR solo ve sus comisiones
+  const own = doctorScope(req.user);
+  if (own !== undefined) { where.push("c.doctor_id = ?"); params.push(own); }
   const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
   const { limit, offset } = paginate(f.page, f.limit);
 
   const [rows, byDoctor] = await Promise.all([
     db().query(
-      `SELECT c.*, d.full_name AS doctor_name,
+      `SELECT c.*, COALESCE(d.full_name, c.external_doctor_name) AS doctor_name, c.doctor_id IS NULL AS is_external,
               ps.patient_id, ps.study_id, ps.price, ps.has_report, ps.with_invoice, ps.is_voucher,
               p.full_name AS patient_name, s.name AS study_name
          FROM commissions c
-         JOIN doctors d ON d.id = c.doctor_id
+         LEFT JOIN doctors d ON d.id = c.doctor_id
          JOIN patient_studies ps ON ps.id = c.patient_study_id
          JOIN patients p ON p.id = ps.patient_id
          JOIN studies s ON s.id = ps.study_id
@@ -39,11 +42,13 @@ commissionsRouter.get("/", async (req, res) => {
         ORDER BY c.created_at ASC LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     ),
-    db().query<{ doctor_id: string; doctor_name: string; count: number; total: number }[]>(
-      `SELECT c.doctor_id, d.full_name AS doctor_name, COUNT(*) AS count, SUM(c.commission_amount) AS total
-         FROM commissions c JOIN doctors d ON d.id = c.doctor_id
+    // Doctores no registrados: se agrupan por el nombre escrito en la atención
+    db().query<{ doctor_id: string | null; doctor_name: string; is_external: number; count: number; total: number }[]>(
+      `SELECT c.doctor_id, COALESCE(d.full_name, c.external_doctor_name) AS doctor_name, c.doctor_id IS NULL AS is_external,
+              COUNT(*) AS count, SUM(c.commission_amount) AS total
+         FROM commissions c LEFT JOIN doctors d ON d.id = c.doctor_id
          ${whereSql}
-        GROUP BY c.doctor_id, d.full_name
+        GROUP BY c.doctor_id, COALESCE(d.full_name, c.external_doctor_name), c.doctor_id IS NULL
         ORDER BY total DESC`,
       params,
     ),
@@ -53,7 +58,7 @@ commissionsRouter.get("/", async (req, res) => {
     ...paged(rows, count, f.page, f.limit),
     summary: {
       total: Number(byDoctor.reduce((s, r) => s + Number(r.total), 0).toFixed(2)),
-      by_doctor: byDoctor.map((r) => ({ ...r, count: Number(r.count), total: Number(r.total) })),
+      by_doctor: byDoctor.map(({ is_external, ...r }) => ({ ...r, external: Boolean(is_external), count: Number(r.count), total: Number(r.total) })),
     },
   });
 });

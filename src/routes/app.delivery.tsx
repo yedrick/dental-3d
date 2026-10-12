@@ -3,13 +3,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
+import { type PaymentMethod } from "@/lib/payments";
+import { PaymentMethodSelect } from "@/components/payment-method-select";
+import { ChargeAllDialog } from "@/components/charge-all-dialog";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, formatDate } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -69,7 +71,7 @@ function DeliveryPage() {
   const patMap = new Map(pendingPayment.map((r) => [r.patient_id, r.patient]));
 
   // ---- Charge dialog ----
-  const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
+  const [charge, setCharge] = useState<{ row: any; amount: string; method: PaymentMethod } | null>(null);
   const doCharge = async () => {
     if (!charge) return;
     const amt = Math.round(Number(charge.amount || 0) * 100) / 100;
@@ -77,7 +79,7 @@ function DeliveryPage() {
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
     try {
       // La API valida el saldo y registra la auditoría
-      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt });
+      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt, payment_method: charge.method });
     } catch (e) {
       return toast.error(translateError(e));
     }
@@ -97,13 +99,18 @@ function DeliveryPage() {
     await qc.invalidateQueries();
   };
 
-  const chargeAll = async (patientId: string) => {
+  // "Cobrar todo": primero se confirma (monto y forma de pago) en ChargeAllDialog
+  const [chargeAllTarget, setChargeAllTarget] = useState<{ patientId: string; name: string; debt: number } | null>(null);
+  const chargeAll = async (method: PaymentMethod) => {
+    if (!chargeAllTarget) return;
+    const patientId = chargeAllTarget.patientId;
     try {
-      await apiPost("/api/attentions/charge-all", { patient_id: patientId });
+      await apiPost("/api/attentions/charge-all", { patient_id: patientId, payment_method: method });
     } catch (e) {
       return toast.error(translateError(e));
     }
     toast.success(`Cobrado saldo total del paciente`);
+    setChargeAllTarget(null);
     await qc.invalidateQueries();
   };
 
@@ -124,7 +131,7 @@ function DeliveryPage() {
       <TableCell className="text-right">
         <div className="flex gap-1 justify-end">
           {canCharge && r.debt > 0.009 && (
-            <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })}>
+            <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })}>
               <Wallet className="h-4 w-4 mr-1" />Cobrar
             </Button>
           )}
@@ -174,7 +181,7 @@ function DeliveryPage() {
                 {Array.from(new Set(pendingPayment.map((r) => r.patient_id))).map((pid) => {
                   const p = patMap.get(pid);
                   const total = pendingPayment.filter((r) => r.patient_id === pid).reduce((s, r) => s + r.debt, 0);
-                  return <Button key={pid} size="sm" variant="outline" onClick={() => chargeAll(pid)}>Cobrar todo — {p?.full_name} ({formatMoney(total)})</Button>;
+                  return <Button key={pid} size="sm" variant="outline" onClick={() => setChargeAllTarget({ patientId: pid, name: p?.full_name ?? "", debt: total })}>Cobrar todo — {p?.full_name} ({formatMoney(total)})</Button>;
                 })}
               </div>
             </div>
@@ -208,15 +215,22 @@ function DeliveryPage() {
                 <div><span className="text-muted-foreground">Estudio:</span> {charge.row.study_name}</div>
                 <div><span className="text-muted-foreground">Deuda actual:</span> <strong className="font-mono">{formatMoney(charge.row.debt)}</strong></div>
               </div>
-              <div>
-                <Label>Monto a cobrar</Label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">Monto a cobrar</span>
                 <Input type="number" step="0.01" autoFocus value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
-              </div>
+              </label>
+              <PaymentMethodSelect value={charge.method} onChange={(m) => setCharge({ ...charge, method: m })} />
             </div>
           )}
           <DialogFooter><Button onClick={doCharge}>Registrar cobro</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChargeAllDialog
+        target={chargeAllTarget && { patientName: chargeAllTarget.name, debt: chargeAllTarget.debt }}
+        onCancel={() => setChargeAllTarget(null)}
+        onConfirm={chargeAll}
+      />
     </div>
   );
 }

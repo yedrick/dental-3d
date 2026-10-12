@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import * as XLSX from "xlsx";
 import { FileSpreadsheet, Download, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
@@ -119,7 +118,11 @@ function toBool(v: unknown): unknown {
 
 const toText = (v: unknown) => (v == null || String(v).trim() === "" ? null : String(v).trim());
 
+// La librería de Excel se carga solo cuando se usa (no pesa al abrir la pantalla)
+const loadXlsx = () => import("xlsx");
+
 async function readExcel(file: File): Promise<Fila[]> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
   const ws = wb.Sheets["Estudios"] ?? wb.Sheets[wb.SheetNames[0]];
   if (!ws) throw new Error("El archivo no tiene hojas");
@@ -177,7 +180,8 @@ export function StudiesImport({ studies }: { studies: StudyRow[] }) {
     setFileName("");
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXlsx();
     const wb = XLSX.utils.book_new();
     const data = [
       HEADERS,

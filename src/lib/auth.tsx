@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, LOGOUT_EVENT, tokenStore } from "@/lib/api";
 
 export const ROLES = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"] as const;
@@ -52,16 +53,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hadSession = useRef(false);
   useEffect(() => { hadSession.current = me !== null; }, [me]);
 
-  const load = useCallback(async () => {
+  // Datos guardados en el navegador (React Query): se borran al cambiar de usuario o cerrar sesión,
+  // así en una computadora compartida nadie ve por unos minutos lo que veía el anterior
+  const qc = useQueryClient();
+
+  /** Carga la sesión; devuelve false si el token no sirve. */
+  const load = useCallback(async (): Promise<boolean> => {
     if (!tokenStore.get()) {
       setMe(null);
-      return;
+      return false;
     }
     try {
       setMe(await apiGet<MeResponse>("/api/auth/me"));
+      return true;
     } catch {
       tokenStore.clear();
       setMe(null);
+      return false;
     }
   }, []);
 
@@ -71,18 +79,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onLogout = async (e: Event) => {
       const wasLoggedIn = hadSession.current;
       setMe(null);
+      qc.clear();
       if (!wasLoggedIn) return;
       const { toast } = await import("sonner");
       toast.error((e as CustomEvent<string>).detail || "Tu sesión terminó. Vuelve a iniciar sesión.");
     };
     window.addEventListener(LOGOUT_EVENT, onLogout);
     return () => window.removeEventListener(LOGOUT_EVENT, onLogout);
-  }, [load]);
+  }, [load, qc]);
 
+  /** Cambia de sesión ("Entrar como…", volver a la propia). Lanza un error si el token no sirve. */
   const setSessionToken = useCallback(async (token: string) => {
+    qc.clear();
     tokenStore.set(token);
-    await load();
-  }, [load]);
+    if (!(await load())) throw new Error("No se pudo iniciar esa sesión. Vuelve a intentarlo.");
+  }, [load, qc]);
 
   const signIn = useCallback(async (login: string, password: string) => {
     const { token } = await apiPost<{ token: string }>("/api/auth/login", { login, password });
@@ -93,7 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.clear();
     tokenStore.clearAdmin();
     setMe(null);
-  }, []);
+    qc.clear();
+  }, [qc]);
 
   const roles = me?.roles ?? [];
   const permissions = new Set(me?.permissions ?? []);
@@ -108,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasAny: (rs) => rs.some((r) => roles.includes(r)),
     // La API ya devuelve todos los permisos para ADMIN
     can: (k) => permissions.has(k),
-    reloadPermissions: load,
+    reloadPermissions: async () => { await load(); },
     signIn,
     setSessionToken,
     signOut,
