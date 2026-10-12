@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiGet, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -55,6 +55,7 @@ type AuditRow = {
 const PAGE_SIZE = 50;
 
 function AuditPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   const today = todayLocal();
   const weekAgo = formatDate(new Date(Date.now() - 7 * 86400000).toISOString());
@@ -150,17 +151,17 @@ function AuditPage() {
       <Card className="mb-3">
         <CardContent className="grid gap-2 pt-4 md:grid-cols-6">
           <div>
-            <Label className="text-xs">Desde</Label>
-            <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} className="h-9" />
+            <Label htmlFor={`${uid}-from`} className="text-xs">Desde</Label>
+            <Input id={`${uid}-from`} type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} className="h-9" />
           </div>
           <div>
-            <Label className="text-xs">Hasta</Label>
-            <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} className="h-9" />
+            <Label htmlFor={`${uid}-to`} className="text-xs">Hasta</Label>
+            <Input id={`${uid}-to`} type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} className="h-9" />
           </div>
           <div>
-            <Label className="text-xs">Acción</Label>
+            <Label htmlFor={`${uid}-action`} className="text-xs">Acción</Label>
             <Select value={action} onValueChange={(v) => { setAction(v); setPage(0); }}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-action`} className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todas</SelectItem>
                 {actions.map((a) => <SelectItem key={a} value={a}>{ACTION_META[a]?.label ?? a}</SelectItem>)}
@@ -168,9 +169,9 @@ function AuditPage() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Tabla</Label>
+            <Label htmlFor={`${uid}-table`} className="text-xs">Tabla</Label>
             <Select value={table} onValueChange={(v) => { setTable(v); setPage(0); }}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-table`} className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todas</SelectItem>
                 {tables.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -178,9 +179,9 @@ function AuditPage() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Usuario</Label>
+            <Label htmlFor={`${uid}-user`} className="text-xs">Usuario</Label>
             <Select value={userId} onValueChange={(v) => { setUserId(v); setPage(0); }}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-user`} className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todos</SelectItem>
                 {users.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
@@ -188,10 +189,10 @@ function AuditPage() {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Buscar</Label>
+            <Label htmlFor={`${uid}-q`} className="text-xs">Buscar</Label>
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="En esta página: paciente, id, monto…" className="h-9 pl-7" />
+              <Input id={`${uid}-q`} value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="En esta página: paciente, id, monto…" className="h-9 pl-7" />
             </div>
           </div>
           <div className="md:col-span-6 flex items-center justify-between">

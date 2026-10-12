@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiGet, apiPost, type Paged } from "@/lib/api";
 import { formatDateTime } from "@/lib/data";
@@ -218,6 +218,7 @@ function SentRecipients({ notificationId }: { notificationId: string }) {
 }
 
 function ComposeDialog({ onSent }: { onSent: () => void }) {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -258,9 +259,9 @@ function ComposeDialog({ onSent }: { onSent: () => void }) {
         <DialogHeader><DialogTitle>Enviar notificación</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Destinatario</Label>
+            <Label htmlFor={`${uid}-target`}>Destinatario</Label>
             <Select value={target} onValueChange={setTarget}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-target`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los usuarios</SelectItem>
                 {users.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name || u.username}</SelectItem>)}
@@ -268,12 +269,12 @@ function ComposeDialog({ onSent }: { onSent: () => void }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Título</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Asunto" />
+            <Label htmlFor={`${uid}-title`}>Título</Label>
+            <Input id={`${uid}-title`} value={title} onChange={e => setTitle(e.target.value)} placeholder="Asunto" />
           </div>
           <div className="space-y-2">
-            <Label>Mensaje</Label>
-            <Textarea value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="Escribe el mensaje..." />
+            <Label htmlFor={`${uid}-body`}>Mensaje</Label>
+            <Textarea id={`${uid}-body`} value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="Escribe el mensaje..." />
           </div>
         </div>
         <DialogFooter>

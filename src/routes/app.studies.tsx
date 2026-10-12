@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +28,7 @@ const emptyStudy = { id: null as string | null, name: "", description: "", fixed
 const emptyPrice = { id: null as string | null, study_id: "", price_with_report: 0, price_without_report: 0, effective_date: "", is_active: true };
 
 function StudiesPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se ocultan los botones
   const canCreate = can("studies.create");
@@ -147,14 +148,14 @@ function StudiesPage() {
                 <DialogContent>
                   <DialogHeader><DialogTitle>{s.id ? "Editar estudio" : "Nuevo estudio"}</DialogTitle></DialogHeader>
                   <div className="grid gap-3">
-                    <div><Label>Nombre</Label><Input value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></div>
-                    <div><Label>Descripción</Label><Input value={s.description} onChange={(e) => setS({ ...s, description: e.target.value })} /></div>
+                    <div><Label htmlFor={`${uid}-name`}>Nombre</Label><Input id={`${uid}-name`} value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></div>
+                    <div><Label htmlFor={`${uid}-desc`}>Descripción</Label><Input id={`${uid}-desc`} value={s.description} onChange={(e) => setS({ ...s, description: e.target.value })} /></div>
                     <div>
-                      <Label>Comisión fija (Bs)</Label>
-                      <Input type="number" step="0.01" min="0" value={s.fixed_commission} onChange={(e) => setS({ ...s, fixed_commission: Number(e.target.value) })} />
+                      <Label htmlFor={`${uid}-commission`}>Comisión fija (Bs)</Label>
+                      <Input id={`${uid}-commission`} type="number" step="0.01" min="0" value={s.fixed_commission} onChange={(e) => setS({ ...s, fixed_commission: Number(e.target.value) })} />
                       <p className="text-[10px] text-muted-foreground mt-1">Se paga al doctor cuando NO tiene "Comisión por porcentaje" activo.</p>
                     </div>
-                    <div className="flex items-center gap-2"><Switch checked={s.active} onCheckedChange={(v) => setS({ ...s, active: v })} /><Label>Activo</Label></div>
+                    <div className="flex items-center gap-2"><Switch id={`${uid}-active`} checked={s.active} onCheckedChange={(v) => setS({ ...s, active: v })} /><Label htmlFor={`${uid}-active`}>Activo</Label></div>
                   </div>
                   <DialogFooter><Button onClick={saveStudy} disabled={!s.name}>Guardar</Button></DialogFooter>
                 </DialogContent>
@@ -177,14 +178,14 @@ function StudiesPage() {
                     <TableCell className="text-right">{formatMoney(x.fixed_commission ?? 0)}</TableCell>
                     <TableCell>
                       {canEdit
-                        ? <Switch checked={x.active} onCheckedChange={() => toggleStudy(x)} />
+                        ? <Switch checked={x.active} aria-label={`Activo: ${x.name}`} onCheckedChange={() => toggleStudy(x)} />
                         : <Badge variant={x.active ? "default" : "secondary"}>{x.active ? "Sí" : "No"}</Badge>}
                     </TableCell>
                     {canEdit && (
                       <TableCell className="text-right space-x-1">
-                        <Button size="icon" variant="ghost" onClick={() => openEditStudy(x)}><Pencil className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" aria-label={`Editar ${x.name}`} onClick={() => openEditStudy(x)}><Pencil className="h-4 w-4" /></Button>
                         <AlertDialog>
-                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost" aria-label={`Eliminar ${x.name}`}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader><AlertDialogTitle>¿Eliminar {x.name}?</AlertDialogTitle><AlertDialogDescription>Esta acción no se puede deshacer y elimina también sus tarifas. Si el estudio tiene atenciones registradas no se podrá eliminar: desactívalo en su lugar.</AlertDialogDescription></AlertDialogHeader>
                             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteStudy(x)}>Eliminar</AlertDialogAction></AlertDialogFooter>
@@ -209,18 +210,18 @@ function StudiesPage() {
                   <DialogHeader><DialogTitle>{p.id ? "Editar tarifa" : "Nueva tarifa"}</DialogTitle></DialogHeader>
                   <div className="grid gap-3">
                     <div>
-                      <Label>Estudio</Label>
+                      <Label htmlFor={`${uid}-pstudy`}>Estudio</Label>
                       <Select value={p.study_id} onValueChange={(v) => setP({ ...p, study_id: v })} disabled={!!p.id}>
-                        <SelectTrigger><SelectValue placeholder="Selecciona un estudio" /></SelectTrigger>
+                        <SelectTrigger id={`${uid}-pstudy`}><SelectValue placeholder="Selecciona un estudio" /></SelectTrigger>
                         <SelectContent>{studies.map((x: any) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div><Label>Precio con informe</Label><Input type="number" step="0.01" value={p.price_with_report} onChange={(e) => setP({ ...p, price_with_report: Number(e.target.value) })} /></div>
-                      <div><Label>Precio sin informe</Label><Input type="number" step="0.01" value={p.price_without_report} onChange={(e) => setP({ ...p, price_without_report: Number(e.target.value) })} /></div>
+                      <div><Label htmlFor={`${uid}-pwith`}>Precio con informe</Label><Input id={`${uid}-pwith`} type="number" step="0.01" value={p.price_with_report} onChange={(e) => setP({ ...p, price_with_report: Number(e.target.value) })} /></div>
+                      <div><Label htmlFor={`${uid}-pwithout`}>Precio sin informe</Label><Input id={`${uid}-pwithout`} type="number" step="0.01" value={p.price_without_report} onChange={(e) => setP({ ...p, price_without_report: Number(e.target.value) })} /></div>
                     </div>
-                    <div><Label>Fecha efectiva</Label><Input type="date" value={p.effective_date} onChange={(e) => setP({ ...p, effective_date: e.target.value })} /></div>
-                    <div className="flex items-center gap-2"><Switch checked={p.is_active} onCheckedChange={(v) => setP({ ...p, is_active: v })} /><Label>Vigente (desactiva las anteriores del mismo estudio)</Label></div>
+                    <div><Label htmlFor={`${uid}-pdate`}>Fecha efectiva</Label><Input id={`${uid}-pdate`} type="date" value={p.effective_date} onChange={(e) => setP({ ...p, effective_date: e.target.value })} /></div>
+                    <div className="flex items-center gap-2"><Switch id={`${uid}-pactive`} checked={p.is_active} onCheckedChange={(v) => setP({ ...p, is_active: v })} /><Label htmlFor={`${uid}-pactive`}>Vigente (desactiva las anteriores del mismo estudio)</Label></div>
                   </div>
                   <DialogFooter><Button onClick={savePrice}>Guardar</Button></DialogFooter>
                 </DialogContent>
@@ -243,14 +244,14 @@ function StudiesPage() {
                     <TableCell>{formatDate(r.effective_date)}</TableCell>
                     <TableCell>
                       {canEdit
-                        ? <Switch checked={r.is_active} onCheckedChange={() => togglePrice(r)} />
+                        ? <Switch checked={r.is_active} aria-label={`Vigente: tarifa de ${studyMap.get(r.study_id) || "estudio"} (${formatDate(r.effective_date)})`} onCheckedChange={() => togglePrice(r)} />
                         : <Badge variant={r.is_active ? "default" : "secondary"}>{r.is_active ? "Vigente" : "Histórica"}</Badge>}
                     </TableCell>
                     {canEdit && (
                       <TableCell className="text-right space-x-1">
-                        <Button size="icon" variant="ghost" onClick={() => openEditPrice(r)}><Pencil className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" aria-label={`Editar tarifa de ${studyMap.get(r.study_id) || "estudio"}`} onClick={() => openEditPrice(r)}><Pencil className="h-4 w-4" /></Button>
                         <AlertDialog>
-                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost" aria-label={`Eliminar tarifa de ${studyMap.get(r.study_id) || "estudio"}`}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader><AlertDialogTitle>¿Eliminar tarifa?</AlertDialogTitle><AlertDialogDescription>Se eliminará de forma permanente.</AlertDialogDescription></AlertDialogHeader>
                             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deletePrice(r)}>Eliminar</AlertDialogAction></AlertDialogFooter>

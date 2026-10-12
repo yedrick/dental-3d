@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -60,6 +60,7 @@ function AttentionPage() {
 const EXTERNAL = "__external";
 
 function RegistroTab() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   const canCreate = can("attention.create");
   const qc = useQueryClient();
@@ -274,7 +275,7 @@ function RegistroTab() {
               <div className="flex gap-2">
                 <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input autoFocus placeholder="Nombre o celular…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8 h-9" />
+                  <Input autoFocus aria-label="Buscar paciente por nombre o celular" placeholder="Nombre o celular…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-8 h-9" />
                 </div>
                 <Button variant="outline" size="sm" onClick={() => { setQuick({ ...quick, full_name: /\d/.test(query) ? "" : query, phone: /^\d+$/.test(query) ? query : "" }); setQuickOpen(true); }}>
                   <UserPlus className="h-4 w-4 mr-1" />Nuevo
@@ -314,10 +315,10 @@ function RegistroTab() {
                 <div key={i} className="rounded-lg border bg-card/50 p-2.5 space-y-2 transition hover:border-primary/40">
                   <div className="flex items-center gap-2">
                     <Select value={it.study_id} onValueChange={(v) => updateItem(i, { study_id: v })}>
-                      <SelectTrigger className="h-9 text-sm flex-1"><SelectValue placeholder="Selecciona estudio" /></SelectTrigger>
+                      <SelectTrigger className="h-9 text-sm flex-1" aria-label={`Estudio ${i + 1}`}><SelectValue placeholder="Selecciona estudio" /></SelectTrigger>
                       <SelectContent>{(studies as any[]).filter((s) => s.active).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Button size="icon" variant="ghost" onClick={() => removeItem(i)} className="h-9 w-9 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Quitar ${selected?.name ?? `estudio ${i + 1}`}`} onClick={() => removeItem(i)} className="h-9 w-9 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                   {selected && (
                     <div className="flex items-center justify-between gap-2 pl-1">
@@ -337,9 +338,9 @@ function RegistroTab() {
         {/* Referral + invoice */}
         <Card className="p-3 grid gap-2 sm:grid-cols-2">
           <div>
-            <Label className="text-xs">Doctor referente</Label>
+            <Label htmlFor={`${uid}-doctor`} className="text-xs">Doctor referente</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-doctor`} className="h-9"><SelectValue placeholder="Sin doctor" /></SelectTrigger>
               <SelectContent>
                 {(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
                 <SelectItem value={EXTERNAL}>Doctor no registrado…</SelectItem>
@@ -375,22 +376,22 @@ function RegistroTab() {
             </div>
           )}
           <div>
-            <Label className="text-xs">Clínica</Label>
-            <Input value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Opcional" className="h-9" />
+            <Label htmlFor={`${uid}-clinic`} className="text-xs">Clínica</Label>
+            <Input id={`${uid}-clinic`} value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Opcional" className="h-9" />
           </div>
           <div className="flex items-center gap-2 sm:col-span-2">
-            <Switch checked={withInvoice} onCheckedChange={setWithInvoice} />
-            <Label className="text-xs">Con factura ({invoicePct}% recargo)</Label>
+            <Switch id={`${uid}-invoice`} checked={withInvoice} onCheckedChange={setWithInvoice} />
+            <Label htmlFor={`${uid}-invoice`} className="text-xs">Con factura ({invoicePct}% recargo)</Label>
             {withInvoice && (
-              <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="N° Factura" className="h-8 max-w-[180px] ml-auto" />
+              <Input aria-label="N° de factura" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="N° Factura" className="h-8 max-w-[180px] ml-auto" />
             )}
           </div>
         </Card>
 
         {/* Payment */}
         <Card className="p-3">
-          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">3. Cobro</Label>
-          <RadioGroup value={payMode} onValueChange={(v) => setPayMode(v as PayMode)} className="grid grid-cols-3 gap-1.5 mt-1.5">
+          <Label id={`${uid}-pay`} className="text-[10px] uppercase tracking-wider text-muted-foreground">3. Cobro</Label>
+          <RadioGroup aria-labelledby={`${uid}-pay`} value={payMode} onValueChange={(v) => setPayMode(v as PayMode)} className="grid grid-cols-3 gap-1.5 mt-1.5">
             <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="full" /><span>Total</span></label>
             <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="advance" /><span>Adelanto</span></label>
             <label className="flex items-center gap-1.5 rounded-md border p-2 text-xs cursor-pointer hover:bg-accent"><RadioGroupItem value="pending" /><span>En entrega</span></label>
@@ -398,8 +399,8 @@ function RegistroTab() {
           <div className="grid grid-cols-2 gap-2 mt-2">
             {payMode === "advance" && (
               <div>
-                <Label className="text-xs">Monto adelantado</Label>
-                <Input type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-9" />
+                <Label htmlFor={`${uid}-advance`} className="text-xs">Monto adelantado</Label>
+                <Input id={`${uid}-advance`} type="number" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-9" />
               </div>
             )}
             {payMode !== "pending" && <PaymentMethodSelect value={paymentMethod} onChange={setPaymentMethod} />}
@@ -412,12 +413,12 @@ function RegistroTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>Crear paciente rápido</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label>Nombre completo *</Label><Input value={quick.full_name} onChange={(e) => setQuick({ ...quick, full_name: e.target.value })} autoFocus /></div>
-            <div><Label>Celular</Label><Input value={quick.phone} onChange={(e) => setQuick({ ...quick, phone: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-qname`}>Nombre completo *</Label><Input id={`${uid}-qname`} value={quick.full_name} onChange={(e) => setQuick({ ...quick, full_name: e.target.value })} autoFocus /></div>
+            <div><Label htmlFor={`${uid}-qphone`}>Celular</Label><Input id={`${uid}-qphone`} value={quick.phone} onChange={(e) => setQuick({ ...quick, phone: e.target.value })} /></div>
             <div>
-              <Label>Doctor referente (opcional)</Label>
+              <Label htmlFor={`${uid}-qdoctor`}>Doctor referente (opcional)</Label>
               <Select value={quick.doctor_id || "none"} onValueChange={(v) => setQuick({ ...quick, doctor_id: v === "none" ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+                <SelectTrigger id={`${uid}-qdoctor`}><SelectValue placeholder="Sin doctor" /></SelectTrigger>
                 <SelectContent><SelectItem value="none">Sin doctor</SelectItem>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
@@ -608,7 +609,7 @@ function EntregasTab() {
     <Card className="p-3 space-y-3">
       <div className="relative">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input autoFocus placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        <Input autoFocus aria-label="Buscar paciente por nombre o celular" placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
       </div>
 
       {filtered.length === 0 ? (

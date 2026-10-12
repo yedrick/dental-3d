@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPatch, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +30,7 @@ const empty: PForm = { doctor_id: "", full_name: "", birth_date: "", phone: "", 
 const PAGE_SIZE = 50;
 
 function PatientsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se ocultan los botones
   const canCreate = can("patients.create");
@@ -129,7 +130,7 @@ function PatientsPage() {
 
       <div className="mb-3 relative max-w-md">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input className="pl-8" placeholder="Buscar por nombre, teléfono o email…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="pl-8" aria-label="Buscar pacientes" placeholder="Buscar por nombre, teléfono o email…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <Card>
@@ -154,18 +155,18 @@ function PatientsPage() {
                 <TableCell className="text-sm">{p.phone || "—"}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Switch checked={p.status} disabled={!canEdit} onCheckedChange={(v) => toggleStatus(p, v)} />
+                    <Switch checked={p.status} aria-label={`Activo: ${p.full_name}`} disabled={!canEdit} onCheckedChange={(v) => toggleStatus(p, v)} />
                     <Badge variant={p.status ? "secondary" : "outline"} className="text-[10px]">{p.status ? "Activo" : "Inactivo"}</Badge>
                   </div>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{formatDate(p.created_at)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    <Button asChild size="sm" variant="ghost" title="Ver historial" aria-label="Ver historial del paciente">
+                    <Button asChild size="sm" variant="ghost" title="Ver historial" aria-label={`Ver historial de ${p.full_name}`}>
                       <Link to="/app/patients/$id" params={{ id: p.id }}><Eye className="h-4 w-4" /></Link>
                     </Button>
-                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(p)} title="Editar" aria-label="Editar paciente"><Pencil className="h-4 w-4" /></Button>}
-                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(p)} title="Eliminar" aria-label="Eliminar paciente" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
+                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(p)} title="Editar" aria-label={`Editar ${p.full_name}`}><Pencil className="h-4 w-4" /></Button>}
+                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(p)} title="Eliminar" aria-label={`Eliminar ${p.full_name}`} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
                   </div>
                 </TableCell>
               </TableRow>
@@ -187,24 +188,24 @@ function PatientsPage() {
           <DialogHeader><DialogTitle>{form.id ? "Editar paciente" : "Nuevo paciente"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>Doctor remitente (opcional)</Label>
+              <Label htmlFor={`${uid}-doctor`}>Doctor remitente (opcional)</Label>
               <Select value={form.doctor_id || NO_DOCTOR} onValueChange={(v) => setForm({ ...form, doctor_id: v === NO_DOCTOR ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+                <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="Sin doctor" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_DOCTOR}>Sin doctor (llegó por su cuenta)</SelectItem>
                   {activeDoctors.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Nombre completo *</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-name`}>Nombre completo *</Label><Input id={`${uid}-name`} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Fecha nacimiento</Label><Input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} /></div>
-              <div><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-birth`}>Fecha nacimiento</Label><Input id={`${uid}-birth`} type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-phone`}>Teléfono</Label><Input id={`${uid}-phone`} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
             </div>
-            <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-            <div><Label>Notas</Label><Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-email`}>Email</Label><Input id={`${uid}-email`} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-notes`}>Notas</Label><Textarea id={`${uid}-notes`} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
             {form.id && (
-              <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
+              <div className="flex items-center gap-2"><Switch checked={form.status} aria-label="Activo" onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
             )}
           </div>
           <DialogFooter><Button onClick={save}>{form.id ? "Actualizar" : "Guardar"}</Button></DialogFooter>

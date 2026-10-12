@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -46,6 +46,7 @@ function periodRange(year: string, month: string): { from?: string; to?: string 
 }
 
 function DepositsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se oculta el botón
   const canEdit = can("deposits.create");
@@ -116,12 +117,12 @@ function DepositsPage() {
             <DialogContent>
               <DialogHeader><DialogTitle>Nuevo depósito</DialogTitle></DialogHeader>
               <div className="grid gap-3">
-                <div><Label>Monto</Label><Input type="number" step="0.01" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
-                <div><Label>Fecha depósito</Label><Input type="date" value={f.deposit_date} onChange={(e) => setF({ ...f, deposit_date: e.target.value })} /></div>
-                <div><Label>Referencia</Label><Input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} /></div>
+                <div><Label htmlFor={`${uid}-amount`}>Monto</Label><Input id={`${uid}-amount`} type="number" step="0.01" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
+                <div><Label htmlFor={`${uid}-date`}>Fecha depósito</Label><Input id={`${uid}-date`} type="date" value={f.deposit_date} onChange={(e) => setF({ ...f, deposit_date: e.target.value })} /></div>
+                <div><Label htmlFor={`${uid}-ref`}>Referencia</Label><Input id={`${uid}-ref`} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} /></div>
                 <div>
-                  <Label>Comprobante (imagen o PDF, máx. 5 MB)</Label>
-                  <Input type="file" accept="image/*,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+                  <Label htmlFor={`${uid}-file`}>Comprobante (imagen o PDF, máx. 5 MB)</Label>
+                  <Input id={`${uid}-file`} type="file" accept="image/*,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
                   {file && <p className="text-xs text-muted-foreground mt-1">{file.name}</p>}
                 </div>
               </div>
@@ -133,9 +134,9 @@ function DepositsPage() {
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div>
-          <Label className="text-xs">Año</Label>
+          <Label htmlFor={`${uid}-year`} className="text-xs">Año</Label>
           <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${uid}-year`} className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
@@ -143,9 +144,9 @@ function DepositsPage() {
           </Select>
         </div>
         <div>
-          <Label className="text-xs">Mes</Label>
+          <Label htmlFor={`${uid}-month`} className="text-xs">Mes</Label>
           <Select value={year === "all" ? "all" : month} onValueChange={(v) => { setMonth(v); setPage(1); }} disabled={year === "all"}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${uid}-month`} className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}

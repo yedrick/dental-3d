@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiPatch, apiPost } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/app/profile")({
 });
 
 function ProfilePage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { user, roles, setSessionToken, reloadPermissions } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,16 +86,16 @@ function ProfilePage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Nombre completo</Label>
-            <Input value={fullName} onChange={e => setFullName(e.target.value)} />
+            <Label htmlFor={`${uid}-name`}>Nombre completo</Label>
+            <Input id={`${uid}-name`} value={fullName} onChange={e => setFullName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Usuario</Label>
-            <Input value={username} onChange={e => setUsername(e.target.value)} />
+            <Label htmlFor={`${uid}-user`}>Usuario</Label>
+            <Input id={`${uid}-user`} value={username} onChange={e => setUsername(e.target.value)} />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>Correo</Label>
-            <Input value={email} disabled />
+            <Label htmlFor={`${uid}-email`}>Correo</Label>
+            <Input id={`${uid}-email`} value={email} disabled />
             <p className="text-xs text-muted-foreground">Para cambiar el correo contacta a un administrador.</p>
           </div>
           <div className="sm:col-span-2 flex justify-end">
@@ -112,16 +113,16 @@ function ProfilePage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Contraseña actual</Label>
-            <PasswordInput value={currentPw} autoComplete="current-password" onChange={e => setCurrentPw(e.target.value)} />
+            <Label htmlFor={`${uid}-curpw`}>Contraseña actual</Label>
+            <PasswordInput id={`${uid}-curpw`} value={currentPw} autoComplete="current-password" onChange={e => setCurrentPw(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Nueva contraseña</Label>
-            <PasswordInput value={pw} autoComplete="new-password" onChange={e => setPw(e.target.value)} />
+            <Label htmlFor={`${uid}-pw`}>Nueva contraseña</Label>
+            <PasswordInput id={`${uid}-pw`} value={pw} autoComplete="new-password" onChange={e => setPw(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Confirmar contraseña</Label>
-            <PasswordInput value={pw2} autoComplete="new-password" onChange={e => setPw2(e.target.value)} />
+            <Label htmlFor={`${uid}-pw2`}>Confirmar contraseña</Label>
+            <PasswordInput id={`${uid}-pw2`} value={pw2} autoComplete="new-password" onChange={e => setPw2(e.target.value)} />
           </div>
           <div className="sm:col-span-2 flex justify-end">
             <Button onClick={changePassword} disabled={savingPw || !pw}>

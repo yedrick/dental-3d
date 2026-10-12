@@ -1,7 +1,7 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
@@ -33,6 +33,7 @@ const NO_PARAMS: Param[] = [];
 export const Route = createFileRoute("/app/params")({ component: ParamsPage });
 
 function ParamsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   const canEdit = can("params.edit");
   const qc = useQueryClient();
@@ -81,6 +82,7 @@ function ParamsPage() {
             {isBool(p) ? (
               <div className="flex items-center gap-2">
                 <Switch
+                  aria-label={p.description || p.key}
                   checked={Boolean(Number(p.value_bool))}
                   disabled={!canEdit}
                   onCheckedChange={(v) => patch(p.key, { value_bool: v })}
@@ -90,15 +92,16 @@ function ParamsPage() {
             ) : (
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <Label className="text-xs">Valor</Label>
+                  <Label htmlFor={`${uid}-${p.key}`} className="text-xs">Valor</Label>
                   <Input
+                    id={`${uid}-${p.key}`}
                     type="number" step="0.01" inputMode="decimal"
                     value={shown(p)}
                     disabled={!canEdit}
                     onChange={(e) => setEdits({ ...edits, [p.key]: e.target.value })}
                   />
                 </div>
-                {canEdit && <Button size="sm" onClick={() => save(p.key)}><Save className="h-4 w-4" /></Button>}
+                {canEdit && <Button size="sm" aria-label={`Guardar ${p.description || p.key}`} onClick={() => save(p.key)}><Save className="h-4 w-4" /></Button>}
               </div>
             )}
           </Card>

@@ -153,6 +153,7 @@ function RolesPage() {
                         {roles.map((r) => (
                           <TableCell key={r} className="text-center px-1 py-2">
                             <Checkbox
+                              aria-label={`${r}: ${MODULE_LABELS[mod] ?? mod} — ${meta.label}`}
                               checked={r === "ADMIN" ? true : has(r, p.key)}
                               disabled={!canEdit || r === "ADMIN"}
                               onCheckedChange={(v) => toggle(r, p.key, !!v)}

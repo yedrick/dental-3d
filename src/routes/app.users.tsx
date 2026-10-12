@@ -1,7 +1,7 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, tokenStore } from "@/lib/api";
 import { formatDate } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
@@ -130,6 +130,7 @@ function UsersPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="Buscar usuarios"
             placeholder="Buscar por nombre, email, usuario o rol…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -298,6 +299,7 @@ function UserFormDialog({
 }) {
   const { can } = useAuth();
   // En edición: los datos requieren users.edit y los roles users.manage_roles
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const canEditData = mode === "create" || can("users.edit");
   const canEditRoles = mode === "create" || can("users.manage_roles");
   const [full_name, setFullName] = useState(initial?.full_name ?? "");
@@ -370,21 +372,22 @@ function UserFormDialog({
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Nombre completo</Label>
-            <Input value={full_name} disabled={!canEditData} onChange={(e) => setFullName(e.target.value)} />
+            <Label htmlFor={`${uid}-name`}>Nombre completo</Label>
+            <Input id={`${uid}-name`} value={full_name} disabled={!canEditData} onChange={(e) => setFullName(e.target.value)} />
           </div>
           <div>
-            <Label>Usuario</Label>
-            <Input value={username} disabled={!canEditData} onChange={(e) => setUsername(e.target.value)} />
+            <Label htmlFor={`${uid}-user`}>Usuario</Label>
+            <Input id={`${uid}-user`} value={username} disabled={!canEditData} onChange={(e) => setUsername(e.target.value)} />
           </div>
         </div>
         <div>
-          <Label>Email</Label>
-          <Input type="email" value={email} disabled={!canEditData} onChange={(e) => setEmail(e.target.value)} />
+          <Label htmlFor={`${uid}-email`}>Email</Label>
+          <Input id={`${uid}-email`} type="email" value={email} disabled={!canEditData} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
-          <Label>{mode === "create" ? "Contraseña" : "Nueva contraseña (opcional)"}</Label>
+          <Label htmlFor={`${uid}-pw`}>{mode === "create" ? "Contraseña" : "Nueva contraseña (opcional)"}</Label>
           <PasswordInput
+            id={`${uid}-pw`}
             autoComplete="new-password"
             value={password}
             disabled={!canEditData}
@@ -393,8 +396,8 @@ function UserFormDialog({
           />
         </div>
         <div>
-          <Label>Roles</Label>
-          <div className="mt-1 grid grid-cols-2 gap-2 rounded-md border p-2">
+          <Label id={`${uid}-roles`}>Roles</Label>
+          <div role="group" aria-labelledby={`${uid}-roles`} className="mt-1 grid grid-cols-2 gap-2 rounded-md border p-2">
             {ROLES.map((r) => (
               <label key={r} className="flex items-center gap-2 text-sm">
                 <Checkbox
@@ -409,9 +412,9 @@ function UserFormDialog({
         </div>
         {roles.includes("DOCTOR") && (
           <div>
-            <Label htmlFor="user-doctor">Ficha de doctor</Label>
+            <Label htmlFor={`${uid}-doctor`}>Ficha de doctor</Label>
             <Select value={doctorId || "none"} onValueChange={(v) => setDoctorId(v === "none" ? "" : v)} disabled={!canEditData}>
-              <SelectTrigger id="user-doctor"><SelectValue placeholder="Sin enlazar" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="Sin enlazar" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sin enlazar</SelectItem>
                 {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}

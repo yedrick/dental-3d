@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -35,6 +35,7 @@ const LIMIT = 50;
 const emptyForm = { description: "", income: 0, expense: 0 };
 
 function CashboxPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se oculta el botón
   const canEdit = can("cashbox.create");
@@ -84,10 +85,10 @@ function CashboxPage() {
             <DialogContent>
               <DialogHeader><DialogTitle>Nuevo movimiento</DialogTitle></DialogHeader>
               <div className="grid gap-3">
-                <div><Label>Descripción</Label><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+                <div><Label htmlFor={`${uid}-desc`}>Descripción</Label><Input id={`${uid}-desc`} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Ingreso</Label><Input type="number" step="0.01" min="0" value={f.income} onChange={(e) => setF({ ...f, income: Number(e.target.value) })} /></div>
-                  <div><Label>Gasto</Label><Input type="number" step="0.01" min="0" value={f.expense} onChange={(e) => setF({ ...f, expense: Number(e.target.value) })} /></div>
+                  <div><Label htmlFor={`${uid}-income`}>Ingreso</Label><Input id={`${uid}-income`} type="number" step="0.01" min="0" value={f.income} onChange={(e) => setF({ ...f, income: Number(e.target.value) })} /></div>
+                  <div><Label htmlFor={`${uid}-expense`}>Gasto</Label><Input id={`${uid}-expense`} type="number" step="0.01" min="0" value={f.expense} onChange={(e) => setF({ ...f, expense: Number(e.target.value) })} /></div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Registra un ingreso o un gasto (solo uno). Los movimientos no se pueden editar ni eliminar: para corregir, registra un movimiento nuevo.

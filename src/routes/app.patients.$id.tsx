@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useId, useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { methodLabel, type PaymentMethod } from "@/lib/payments";
@@ -209,8 +209,8 @@ function PatientProfile() {
                     <TableCell className="text-xs">{r.delivered_at ? formatDate(r.delivered_at) : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
-                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })} title="Cobrar"><Wallet className="h-3.5 w-3.5" /></Button>}
-                        {canDeliver && !r.delivered_at && <Button size="sm" onClick={() => deliver(r)} disabled={r.debt > 0.009} title={r.debt > 0.009 ? `Saldo pendiente: ${formatMoney(r.debt)}` : "Entregar"}><PackageCheck className="h-3.5 w-3.5" /></Button>}
+                        {canCharge && r.debt > 0.009 && <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })} title="Cobrar" aria-label={`Cobrar ${r.study_name ?? "estudio"}`}><Wallet className="h-3.5 w-3.5" /></Button>}
+                        {canDeliver && !r.delivered_at && <Button size="sm" aria-label={`Entregar ${r.study_name ?? "estudio"}`} onClick={() => deliver(r)} disabled={r.debt > 0.009} title={r.debt > 0.009 ? `Saldo pendiente: ${formatMoney(r.debt)}` : "Entregar"}><PackageCheck className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -354,6 +354,7 @@ function KPI({ label, value, tone }: { label: string; value: string; tone?: "ok"
 }
 
 function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const [form, setForm] = useState({
     full_name: patient.full_name ?? "",
     phone: patient.phone ?? "",
@@ -400,23 +401,23 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
         <h3 className="font-semibold">Datos del paciente</h3>
       </div>
       <div className="grid gap-3">
-        <div><Label>Nombre completo</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-name`}>Nombre completo</Label><Input id={`${uid}-name`} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} disabled={!canEdit} /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Celular</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} disabled={!canEdit} /></div>
-          <div><Label>Fecha de nacimiento</Label><Input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} disabled={!canEdit} /></div>
+          <div><Label htmlFor={`${uid}-phone`}>Celular</Label><Input id={`${uid}-phone`} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} disabled={!canEdit} /></div>
+          <div><Label htmlFor={`${uid}-birth`}>Fecha de nacimiento</Label><Input id={`${uid}-birth`} type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} disabled={!canEdit} /></div>
         </div>
-        <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-email`}>Email</Label><Input id={`${uid}-email`} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEdit} /></div>
         <div>
-          <Label>Doctor referente</Label>
+          <Label htmlFor={`${uid}-doctor`}>Doctor referente</Label>
           <Select value={form.doctor_id || "none"} onValueChange={(v) => setForm({ ...form, doctor_id: v === "none" ? "" : v })} disabled={!canEdit}>
-            <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+            <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="Sin doctor" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Sin doctor</SelectItem>
               {(doctors as any[]).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div><Label>Notas clínicas</Label><Textarea rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!canEdit} /></div>
+        <div><Label htmlFor={`${uid}-notes`}>Notas clínicas</Label><Textarea id={`${uid}-notes`} rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} disabled={!canEdit} /></div>
         {canEdit && (
           <div className="flex justify-end"><Button onClick={save} disabled={saving}><Save className="h-4 w-4 mr-2" />{saving ? "Guardando…" : "Guardar cambios"}</Button></div>
         )}

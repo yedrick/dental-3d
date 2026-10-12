@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -48,6 +48,7 @@ function periodRange(year: string, month: string): { from?: string; to?: string 
 }
 
 function ThirdPartyPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se oculta el botón
   const canEdit = can("third_party.create");
@@ -148,21 +149,21 @@ function ThirdPartyPage() {
               <DialogHeader><DialogTitle>Nuevo pago a tercero</DialogTitle></DialogHeader>
               <div className="grid gap-3">
                 <div>
-                  <Label>Proveedor</Label>
-                  <Input list="providers-list" value={f.provider_name} onChange={(e) => onProviderChange(e.target.value)} placeholder="Escriba o seleccione..." />
+                  <Label htmlFor={`${uid}-provider`}>Proveedor</Label>
+                  <Input id={`${uid}-provider`} list="providers-list" value={f.provider_name} onChange={(e) => onProviderChange(e.target.value)} placeholder="Escriba o seleccione..." />
                   <datalist id="providers-list">
                     {providers.map((p) => <option key={p.name} value={p.name} />)}
                   </datalist>
                 </div>
-                <div><Label>Tipo de servicio</Label><Input value={f.service_type} onChange={(e) => setF({ ...f, service_type: e.target.value })} /></div>
-                <div><Label>Monto</Label><Input type="number" step="0.01" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
+                <div><Label htmlFor={`${uid}-service`}>Tipo de servicio</Label><Input id={`${uid}-service`} value={f.service_type} onChange={(e) => setF({ ...f, service_type: e.target.value })} /></div>
+                <div><Label htmlFor={`${uid}-amount`}>Monto</Label><Input id={`${uid}-amount`} type="number" step="0.01" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: Number(e.target.value) })} /></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Fecha servicio</Label><Input type="date" value={f.service_date} onChange={(e) => setF({ ...f, service_date: e.target.value })} /></div>
-                  <div><Label>Fecha pago</Label><Input type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} /></div>
+                  <div><Label htmlFor={`${uid}-sdate`}>Fecha servicio</Label><Input id={`${uid}-sdate`} type="date" value={f.service_date} onChange={(e) => setF({ ...f, service_date: e.target.value })} /></div>
+                  <div><Label htmlFor={`${uid}-pdate`}>Fecha pago</Label><Input id={`${uid}-pdate`} type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} /></div>
                 </div>
                 <div>
-                  <Label>Comprobante (opcional, imagen o PDF, máx. 5 MB)</Label>
-                  <Input type="file" accept="image/*,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+                  <Label htmlFor={`${uid}-file`}>Comprobante (opcional, imagen o PDF, máx. 5 MB)</Label>
+                  <Input id={`${uid}-file`} type="file" accept="image/*,application/pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
                   {file && <p className="text-xs text-muted-foreground mt-1">{file.name}</p>}
                 </div>
               </div>
@@ -174,9 +175,9 @@ function ThirdPartyPage() {
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div>
-          <Label className="text-xs">Año</Label>
+          <Label htmlFor={`${uid}-year`} className="text-xs">Año</Label>
           <Select value={year} onValueChange={(v) => { setYear(v); setPage(1); }}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${uid}-year`} className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
@@ -184,9 +185,9 @@ function ThirdPartyPage() {
           </Select>
         </div>
         <div>
-          <Label className="text-xs">Mes</Label>
+          <Label htmlFor={`${uid}-month`} className="text-xs">Mes</Label>
           <Select value={year === "all" ? "all" : month} onValueChange={(v) => { setMonth(v); setPage(1); }} disabled={year === "all"}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${uid}-month`} className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}

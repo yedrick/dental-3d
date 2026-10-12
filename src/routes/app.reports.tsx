@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { translateError } from "@/lib/translate-error";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { apiGet } from "@/lib/api";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
@@ -72,6 +72,7 @@ type ReportSummary = {
 const daysAgoLocal = (days: number) => formatDate(new Date(Date.now() - days * 86400000).toISOString());
 
 function ReportsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const [from, setFrom] = useState(() => daysAgoLocal(30));
   const [to, setTo] = useState(() => todayLocal());
 
@@ -133,12 +134,12 @@ function ReportsPage() {
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div>
-            <Label className="text-xs">Desde</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
+            <Label htmlFor={`${uid}-from`} className="text-xs">Desde</Label>
+            <Input id={`${uid}-from`} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9" />
           </div>
           <div>
-            <Label className="text-xs">Hasta</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
+            <Label htmlFor={`${uid}-to`} className="text-xs">Hasta</Label>
+            <Input id={`${uid}-to`} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9" />
           </div>
           {!validRange && (
             <p className="text-xs text-destructive self-center">La fecha inicial debe ser anterior o igual a la final.</p>
