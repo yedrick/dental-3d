@@ -1,8 +1,8 @@
-import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { AdminHttpError, type TenantUsersAdapter } from "@tenancy-node/admin-api";
 import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
+import { hashPassword } from "../lib/password.js";
 import { ROLES, type Role } from "../lib/permissions.js";
 import { passwordSchema } from "../routes/auth.routes.js";
 import { z } from "zod";
@@ -90,7 +90,7 @@ export const tenantUsers: TenantUsersAdapter = {
     const username = await freeUsername(email);
     // Sin contraseña, la cuenta queda "por activar" (como el ADMIN del seed): se entra con
     // "Entrar como…" y la app obliga a definir una.
-    const hash = await bcrypt.hash(password ?? randomBytes(32).toString("base64url"), 12);
+    const hash = await hashPassword(password ?? randomBytes(32).toString("base64url"));
     try {
       const id = await withTransaction(async (tx) => {
         const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");

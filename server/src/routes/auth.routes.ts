@@ -5,6 +5,7 @@ import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { hashPassword, verifyPassword } from "../lib/password.js";
 import { loadPermissions, loadRoles } from "../lib/permissions.js";
 import { consumeImpersonationToken, InvalidImpersonationTokenError } from "@tenancy-node/admin-api";
 import { requireAuth, signToken } from "../middleware/auth.js";
@@ -38,7 +39,7 @@ const registerSchema = z.object({
  */
 authRouter.post("/register", registerLimiter, async (req, res) => {
   const data = registerSchema.parse(req.body);
-  const hash = await bcrypt.hash(data.password, 12);
+  const hash = await hashPassword(data.password);
 
   const id = await withTransaction(async (tx) => {
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
@@ -78,7 +79,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     [login.toLowerCase(), login],
   );
   const u = rows[0];
-  const ok = await bcrypt.compare(password, u?.password_hash ?? DUMMY_HASH);
+  const ok = await verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
   if (!u || !ok) throw new HttpError(401, "Usuario o contraseña incorrectos", "INVALID_CREDENTIALS");
   if (!u.active) throw new HttpError(403, "Tu usuario está desactivado", "USER_INACTIVE");
   if (!u.approved) throw new HttpError(403, "Tu cuenta aún no ha sido aprobada por un administrador.", "USER_NOT_APPROVED");
@@ -112,10 +113,10 @@ authRouter.post("/change-password", sensitiveLimiter, requireAuth, async (req, r
   const rows = await db().query<{ password_hash: string }[]>("SELECT password_hash FROM users WHERE id = ?", [
     req.user!.id,
   ]);
-  if (!(await bcrypt.compare(data.current_password, rows[0].password_hash))) {
+  if (!(await verifyPassword(data.current_password, rows[0].password_hash))) {
     throw new HttpError(400, "La contraseña actual no es correcta", "INVALID_CREDENTIALS");
   }
-  const hash = await bcrypt.hash(data.new_password, 12);
+  const hash = await hashPassword(data.new_password);
   // Cierra todas las sesiones anteriores (token_version + 1) y entrega un token nuevo para esta
   const version = await withTransaction(async (tx) => {
     await tx.query("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?", [hash, req.user!.id]);
@@ -192,7 +193,7 @@ const setupSchema = z.object({
  */
 authRouter.post("/setup-account", sensitiveLimiter, requireAuth, async (req, res) => {
   const data = setupSchema.parse(req.body);
-  const hash = await bcrypt.hash(data.new_password, 12);
+  const hash = await hashPassword(data.new_password);
   const version = await withTransaction(async (tx) => {
     const [u] = await tx.query<{ must_change_password: boolean }[]>(
       "SELECT must_change_password FROM users WHERE id = ? FOR UPDATE",

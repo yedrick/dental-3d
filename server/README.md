@@ -89,6 +89,7 @@ test/fixtures/               base de ejemplo con estructura de Supabase (para pr
 test/api/                    pruebas de la API por fase (Python, contra un servidor corriendo)
 test/massive/                prueba masiva (N sucursales a la vez) y prueba de carga
 test/e2e/                    pruebas en navegador (Playwright + Chrome): panel y flujo completo
+test/k6/                     carga, estrés, capacidad y velocidad de páginas con k6 (ver test/k6/README.md)
                              (ver test/README.md)
 ```
 
@@ -390,7 +391,19 @@ Con `REDIS_URL=redis://127.0.0.1:6379`, tenancy-node usa `@tenancy-node/cache-re
 | `TENANT_MAX_OPEN_POOLS` | 100 | Sucursales con pool abierto a la vez |
 | `TENANT_POOL_IDLE_MS` | 60000 | A los cuántos ms sin uso se cierra el pool de una sucursal |
 
-Regla: `TENANT_POOL_MAX × sucursales activas + CENTRAL_POOL_MAX < max_connections` de MySQL.
+| `API_PROCESSES` | 1 | Procesos de la API (módulo cluster: comparten el puerto y se reparten la carga entre núcleos). Con más de 1 hace falta `REDIS_URL` |
+| `PASSWORD_WORKERS` | núcleos − 1 (repartidos entre procesos, máx. 4) | Hilos de bcrypt por proceso |
+
+Regla: `(TENANT_POOL_MAX × sucursales activas + CENTRAL_POOL_MAX) × API_PROCESSES < max_connections` de MySQL.
+
+**Capacidad medida con k6** (`test/k6/`; 20 sucursales, MySQL en Docker y k6 en la misma máquina de 12 núcleos):
+
+| | 1 proceso | 4 procesos |
+|---|---|---|
+| Máximo sostenido (p95 < 500 ms, 0 errores) | ~750 peticiones/s | ~1500 peticiones/s |
+| 100 del personal + 200 visitantes + 2 logins/s | p95 7 ms, 0 errores | — |
+
+En la prueba, cada usuario del personal hace ~1,6 peticiones por segundo (con pausas de 2 s, más rápido que una persona real): 750 peticiones/s ≈ 450 usuarios del personal trabajando a la vez.
 
 ## Copiar datos desde Supabase
 
@@ -420,7 +433,7 @@ Cómo funciona:
 - JWT HS256 con la sucursal (`tid`) y la versión de sesión (`ver`). Se verifican en cada petición.
 - Contraseña nueva, desactivación, desaprobación o cambio de roles **cierran al instante** todas las sesiones del usuario.
 - Protección contra escalada de privilegios en la administración de usuarios, y suplantación auditada.
-- Contraseñas con bcrypt (12 rondas) y respuesta de login sin revelar si el usuario existe.
+- Contraseñas con bcrypt (12 rondas) y respuesta de login sin revelar si el usuario existe. bcrypt corre en hilos aparte (`src/lib/password.ts`, `PASSWORD_WORKERS`): un login (~250 ms de CPU) no frena a las demás peticiones.
 - Límites de intentos por IP y sucursal, `helmet`, CORS restringido y límites de tamaño del cuerpo.
 - Logo: se valida el contenido real del archivo, no solo el `Content-Type`. Sin SVG.
 - Todo cambio queda en `audit_logs` de la sucursal.

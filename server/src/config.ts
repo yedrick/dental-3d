@@ -12,6 +12,9 @@ function list(value: string | undefined): string[] {
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
+  // Procesos de la API (módulo cluster de Node). Un proceso usa UN núcleo para atender peticiones:
+  // con más, se reparte la carga entre núcleos. Ver src/index.ts.
+  processes: Math.max(1, Number(process.env.API_PROCESSES ?? 1)),
   // En producción, 127.0.0.1 (solo nginx llega a la API). Vacío = todas las interfaces.
   host: process.env.HOST || undefined,
   corsOrigin: list(process.env.CORS_ORIGIN),
