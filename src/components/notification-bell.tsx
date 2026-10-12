@@ -19,7 +19,7 @@ interface InboxItem {
 export function NotificationBell() {
   const { user } = useAuth();
 
-  // Supabase empujaba las notificaciones en tiempo real; la API se consulta cada 30 s.
+  // Las notificaciones nuevas se consultan a la API cada 30 s.
   // El contador es una consulta mínima (responde 304 si no cambió) y la lista solo se
   // vuelve a pedir cuando el contador cambia.
   const { data: count } = useQuery({

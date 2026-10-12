@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FileText, ImageIcon } from "lucide-react";
 
 // Comprobantes en el almacenamiento PRIVADO de la sucursal (API /api/receipts).
-// Se ven con un enlace firmado que vence en 5 minutos (como createSignedUrl de Supabase).
+// Se ven con un enlace firmado que vence en 5 minutos.
 
 async function signedUrl(key: string) {
   try {

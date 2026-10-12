@@ -405,6 +405,15 @@ Comprobé además:
 
 ## Fase 6 — Eliminar todo lo de Lovable
 
+✅ **6.1 hecha el 12/10/2026** (rama `dev`):
+- Vite con config propia, sin el paquete de Lovable.
+- Un solo gestor de paquetes: **npm**.
+- Sin `src/integrations/supabase/`, `supabase/`, `.lovable/` ni el `.env` de la raíz.
+- Se quitaron 26 dependencias y 25 componentes sin uso.
+- README propio.
+- Los requisitos originales y las migraciones de Supabase quedaron en `docs/`.
+- Queda la 6.2, que hace el dueño de la cuenta.
+
 **¿Por qué al final y no ahora?** Hoy el frontend necesita Lovable para funcionar: el login y los datos están en Lovable Cloud (Supabase), Vite se configura con un paquete de Lovable y el logo está guardado en los servidores de Lovable. Si se borra antes de la Fase 5, la app deja de funcionar. Lo que sí se puede adelantar en `dev` está marcado como **(se puede adelantar)**.
 
 ### 6.1 En el código
@@ -680,7 +689,7 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 9. ✅ Logo descargado dentro del proyecto (`src/assets/logo-3d.png`).
 10. ✅ Fase 5.1: el frontend usa la API (rama `dev`).
 11. ✅ Fase 5.2 preparada para servidor propio (`deploy/`). Falta publicar: seguir `deploy/DEPLOY.md`.
-12. Fase 6: quitar Lovable. Incluye elegir **un** gestor de paquetes y subir su lockfile, para builds reproducibles.
+12. ✅ Fase 6.1: quitar Lovable del código (12/10/2026). Falta la 6.2, fuera del código: desconectar GitHub en Lovable y cerrar el proyecto cuando el sistema ya esté en producción.
 13. ✅ tenancy-node 0.10.0 revisado (12/10/2026): los puntos 1 a 7 del reporte están corregidos. Pruebas masivas, de carga y en navegador en `test/`. Apareció el **punto 8** (bloqueo al crear muchas sucursales a la vez), que está mitigado con `CENTRAL_POOL_MAX`. Falta avisarlo al equipo de tenancy-node.
 14. ✅ Pruebas de carga con k6 (`test/k6/`): bcrypt pasó a hilos aparte y se agregó `API_PROCESSES` (cluster). Capacidad: ~750 peticiones/s con 1 proceso y ~1500 con 4.
 15. ✅ Paciente sin doctor (migración 008; sus atenciones van sin comisión) y carga masiva de estudios y tarifas desde Excel por sucursal (`POST /api/studies/import`, con vista previa y todo o nada).

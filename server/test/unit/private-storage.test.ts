@@ -47,7 +47,11 @@ describe("enlaces firmados", () => {
     const q = query(signedReceiptUrl("central", KEY).url);
     expect(() => verifySignedReceipt("central", KEY.replace(".jpg", ".png"), q.exp, q.sig)).toThrow("Enlace inválido");
     expect(() => verifySignedReceipt("central", q.key, String(Number(q.exp) + 3600), q.sig)).toThrow("Enlace inválido");
-    expect(() => verifySignedReceipt("central", q.key, q.exp, q.sig.slice(0, -1) + "A")).toThrow();
+    // Se cambia un carácter del medio: el último de base64url solo lleva 4 bits útiles (algunos
+    // cambios decodifican a la misma firma) y además podía ya ser "A" (la prueba fallaba 1 de cada ~5)
+    const i = Math.floor(q.sig.length / 2);
+    const tampered = q.sig.slice(0, i) + (q.sig[i] === "A" ? "B" : "A") + q.sig.slice(i + 1);
+    expect(() => verifySignedReceipt("central", q.key, q.exp, tampered)).toThrow();
   });
 
   it("caduca a los 5 minutos", () => {
