@@ -414,25 +414,33 @@ Crear un sistema robusto que permita:
 
  Auditoría total del sistema
 
-This project was built with [Lovable](https://lovable.dev).
+## Cómo está hecho
 
-**Live app**: https://dental-3d.lovable.app
+| Parte | Carpeta | Tecnología |
+|---|---|---|
+| Frontend | raíz (`src/`) | React 19, TanStack Start/Router/Query, Tailwind, shadcn/ui. Build de Node (`.output/`) |
+| API | `server/` | Node, Express 5, TypeScript, MySQL, JWT. Multi-sucursal con [tenancy-node](https://github.com/yedrick/tenat-node): una base de datos por sucursal |
+| Despliegue | `deploy/` | nginx, systemd, respaldos, sin Docker |
 
-## Build with Lovable
+Gestor de paquetes: **npm** (`package-lock.json` en la raíz y en `server/`).
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/772a5581-ece4-40e6-b654-3977bf7cdd0e).
+## Desarrollo
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+1. **API:** sigue `server/README.md`, sección "Puesta en marcha (local)": MySQL, `.env`, dueño del panel y `npm run dev` (puerto 4000).
+2. **Frontend:**
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+npm ci          # instala exactamente lo del package-lock.json
+npm run dev     # http://localhost:8080 (reenvía /api, /tenancy y /admin a la API)
 ```
+
+3. Abre `http://localhost:8080/admin/` (panel de la plataforma) y cada sucursal en `http://<sucursal>.localhost:8080`.
+
+## Producción
+
+Sigue `deploy/DEPLOY.md` (servidor propio, sin Docker).
+
+## Pruebas
+
+- Unitarias: `cd server && npm test`.
+- API, navegador y carga: ver `server/test/README.md`.

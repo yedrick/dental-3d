@@ -1,30 +1,47 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
-//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
-//     error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import viteReact from "@vitejs/plugin-react";
+import { nitro } from "nitro/vite";
+import { defineConfig } from "vite";
 
-export default defineConfig({
-  // Producción en servidor propio: build de Node (node .output/server/index.mjs) en lugar de
-  // Cloudflare. Dentro de Lovable el paquete sigue forzando Cloudflare.
-  nitro: { preset: "node-server" },
-  vite: {
-    server: {
-      // En desarrollo: abrir http://<sucursal>.localhost:8080. Vite reenvía /api y /tenancy a la
-      // API Node conservando el Host, así la API sabe de qué sucursal es cada petición.
-      proxy: {
-        "/api": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
-        "/tenancy": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
-        // Panel de la plataforma (tenancy-node), solo en el dominio central: http://localhost:8080/admin/
-        "/admin": { target: process.env.API_URL ?? "http://localhost:4000", changeOrigin: false },
-      },
+// Frontend (TanStack Start). Desarrollo: http://<sucursal>.localhost:8080, con /api, /tenancy y
+// /admin reenviados a la API Node. Producción: build de Node (node .output/server/index.mjs) detrás de nginx.
+const API_URL = process.env.API_URL ?? "http://localhost:4000";
+
+export default defineConfig(({ command }) => ({
+  plugins: [
+    tailwindcss(),
+    tanstackStart({
+      // El código de servidor no puede terminar en el bundle del navegador
+      importProtection: { behavior: "error", client: { files: ["**/server/**"], specifiers: ["server-only"] } },
+      // Entrada del servidor: src/server.ts (página de error si falla el render en el servidor)
+      server: { entry: "server" },
+    }),
+    // Solo al compilar: servidor Node para producción
+    command === "build" && nitro({ preset: "node-server" }),
+    viteReact(),
+  ],
+  // Mismo procesador de CSS en desarrollo y en el build (así lo que se ve en dev es lo que se publica)
+  css: { transformer: "lightningcss" },
+  resolve: {
+    // Rutas de tsconfig.json (@/…) resueltas por Vite
+    tsconfigPaths: true,
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"],
+  },
+  server: {
+    host: "::",
+    port: 8080,
+    // La API sabe de qué sucursal es cada petición por el Host: se reenvía sin cambiarlo
+    proxy: {
+      "/api": { target: API_URL, changeOrigin: false },
+      "/tenancy": { target: API_URL, changeOrigin: false },
+      // Panel de la plataforma (tenancy-node), solo en el dominio central: http://localhost:8080/admin/
+      "/admin": { target: API_URL, changeOrigin: false },
     },
   },
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
-  },
-});
+}));

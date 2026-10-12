@@ -165,12 +165,12 @@ Opcional: `npm prune --omit=dev` quita las herramientas de desarrollo. La CLI `t
 
 ```sh
 cd /opt/dental3d
-sudo -u dental3d npm install
+sudo -u dental3d npm ci              # exactamente lo del package-lock.json
 sudo -u dental3d npm run build          # genera .output/ (servidor Node, no Cloudflare)
 ```
 
 - No necesita variables de entorno: llama a `/api` en el mismo host.
-- El `.env` de la raíz (claves de Supabase) ya no se usa.
+- Ya no hay nada de Lovable ni de Supabase en el frontend: la config de Vite es propia (`vite.config.ts`).
 
 ## 5. Servicios (systemd)
 
@@ -255,7 +255,7 @@ cd /opt/dental3d && sudo -u dental3d git pull
 cd server && sudo -u dental3d npm ci && sudo -u dental3d npm run build \
   && sudo -u dental3d npm run db:migrate && sudo systemctl restart dental3d-api
 # frontend
-cd .. && sudo -u dental3d npm install && sudo -u dental3d npm run build && sudo systemctl restart dental3d-web
+cd .. && sudo -u dental3d npm ci && sudo -u dental3d npm run build && sudo systemctl restart dental3d-web
 ```
 
 - `db:migrate` aplica las migraciones nuevas de `server/db/tenant/` a **todas** las sucursales.
