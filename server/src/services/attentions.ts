@@ -79,20 +79,24 @@ export function commissionFor(
 }
 
 export async function createAttention(tx: Db, input: CreateAttentionInput, userId: string) {
-  const [patient] = await tx.query<{ id: string; doctor_id: string; full_name: string }[]>(
+  const [patient] = await tx.query<{ id: string; doctor_id: string | null; full_name: string }[]>(
     "SELECT id, doctor_id, full_name FROM patients WHERE id = ?",
     [input.patient_id],
   );
   if (!patient) throw new HttpError(404, "Paciente no encontrado");
 
+  // Sin doctor (ni en la atención ni en el paciente): se registra sin comisión ni descuento por convenio
   const doctorId = input.doctor_id ?? patient.doctor_id;
-  // FOR UPDATE: serializa las atenciones del mismo doctor, así dos registros simultáneos
-  // no pueden ser ambos "primer paciente" (el trigger de Supabase no lo evitaba).
-  const [doctor] = await tx.query<CommissionDoctor[]>(
-    "SELECT id, use_percentage, default_commission_pct, agreement_discount_pct FROM doctors WHERE id = ? FOR UPDATE",
-    [doctorId],
-  );
-  if (!doctor) throw new HttpError(400, "El doctor indicado no existe");
+  let doctor: CommissionDoctor | null = null;
+  if (doctorId) {
+    // FOR UPDATE: serializa las atenciones del mismo doctor, así dos registros simultáneos
+    // no pueden ser ambos "primer paciente" (el trigger de Supabase no lo evitaba).
+    [doctor] = await tx.query<CommissionDoctor[]>(
+      "SELECT id, use_percentage, default_commission_pct, agreement_discount_pct FROM doctors WHERE id = ? FOR UPDATE",
+      [doctorId],
+    );
+    if (!doctor) throw new HttpError(400, "El doctor indicado no existe");
+  }
 
   const params = await loadParams(tx);
 
@@ -127,7 +131,7 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
       priceCents,
       // Recargo por factura y descuento por convenio, ambos sobre el precio base (como el trigger)
       surchargeCents: input.with_invoice ? percentOf(priceCents, params.invoiceSurchargePct) : 0,
-      discountCents: percentOf(priceCents, Number(doctor.agreement_discount_pct ?? 0)),
+      discountCents: doctor ? percentOf(priceCents, Number(doctor.agreement_discount_pct ?? 0)) : 0,
       withInvoice: input.with_invoice,
     };
   });
@@ -153,11 +157,13 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
     // Lectura con bloqueo (FOR SHARE): ve lo último confirmado. Una lectura normal usaría la
     // "foto" de REPEATABLE READ tomada al inicio de la transacción y no vería la atención que
     // otra transacción acaba de confirmar mientras esta esperaba el bloqueo del doctor.
-    const prior = await tx.query<{ one: number }[]>(
-      `SELECT 1 AS one FROM patient_studies ps JOIN patients p ON p.id = ps.patient_id
-        WHERE p.doctor_id = ? LIMIT 1 FOR SHARE`,
-      [doctor.id],
-    );
+    const prior = doctor
+      ? await tx.query<{ one: number }[]>(
+          `SELECT 1 AS one FROM patient_studies ps JOIN patients p ON p.id = ps.patient_id
+            WHERE p.doctor_id = ? LIMIT 1 FOR SHARE`,
+          [doctor.id],
+        )
+      : [];
     const has_any = prior.length > 0;
 
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
@@ -167,26 +173,30 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
           invoice_number, invoice_surcharge, discount, amount_paid, payment_method, delivery_date, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, patient.id, l.item.study_id, doctor.id, input.clinic_name,
+        id, patient.id, l.item.study_id, doctor?.id ?? null, input.clinic_name,
         fromCents(l.priceCents), l.item.has_report, l.item.is_voucher, l.withInvoice,
         input.invoice_number, fromCents(l.surchargeCents), fromCents(l.discountCents), fromCents(linePaid),
         l.item.is_voucher ? null : input.payment_method, input.delivery_date, userId,
       ],
     );
 
-    const commission = commissionFor(
-      doctor,
-      { is_voucher: l.item.is_voucher, priceCents: l.priceCents, fixedCommission: l.study.fixed_commission },
-      !has_any,
-      params,
-    );
-    await tx.query(
-      "INSERT INTO commissions (doctor_id, patient_study_id, commission_amount, percentage) VALUES (?, ?, ?, ?)",
-      [doctor.id, id, fromCents(commission.amountCents), commission.percentage],
-    );
+    const commission = doctor
+      ? commissionFor(
+          doctor,
+          { is_voucher: l.item.is_voucher, priceCents: l.priceCents, fixedCommission: l.study.fixed_commission },
+          !has_any,
+          params,
+        )
+      : { amountCents: 0, percentage: 0 };
+    if (doctor) {
+      await tx.query(
+        "INSERT INTO commissions (doctor_id, patient_study_id, commission_amount, percentage) VALUES (?, ?, ?, ?)",
+        [doctor.id, id, fromCents(commission.amountCents), commission.percentage],
+      );
+    }
 
     await audit(tx, userId, "INSERT", "patient_studies", id, {
-      patient_id: patient.id, study_id: l.item.study_id, doctor_id: doctor.id,
+      patient_id: patient.id, study_id: l.item.study_id, doctor_id: doctor?.id ?? null,
       price: fromCents(l.priceCents), invoice_surcharge: fromCents(l.surchargeCents),
       discount: fromCents(l.discountCents), amount_paid: fromCents(linePaid),
       commission: fromCents(commission.amountCents), commission_pct: commission.percentage,
@@ -200,7 +210,7 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
   const summary = {
     patient_id: patient.id,
     patient_name: patient.full_name,
-    doctor_id: doctor.id,
+    doctor_id: doctor?.id ?? null,
     clinic_name: input.clinic_name,
     items_count: created.length,
     inserted_ids: created.map((c) => c.id),

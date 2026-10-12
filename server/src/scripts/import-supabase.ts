@@ -149,14 +149,14 @@ async function main() {
       inserted.doctors = src.doctors.length;
       const doctorIds = new Set(src.doctors.map((d) => d.id));
 
-      const patients = src.patients.filter((p) => {
-        if (doctorIds.has(p.doctor_id)) return true;
-        note(`Paciente ${p.full_name} (${p.id}) sin doctor válido: no se importó.`);
-        return false;
-      });
+      // El doctor es opcional (migración 008): si no existe, el paciente se importa sin doctor
+      const patients = src.patients;
+      for (const p of patients) {
+        if (p.doctor_id && !doctorIds.has(p.doctor_id)) note(`Paciente ${p.full_name} (${p.id}): su doctor no existe, se importó sin doctor.`);
+      }
       await insertMany(tx, "patients",
         ["id", "doctor_id", "full_name", "birth_date", "phone", "email", "notes", "status", "created_by", "created_at"],
-        patients.map((p) => [p.id, p.doctor_id, p.full_name, p.birth_date, p.phone, p.email, p.notes, p.status ?? true, user(p.created_by), dt(p.created_at)]));
+        patients.map((p) => [p.id, p.doctor_id && doctorIds.has(p.doctor_id) ? p.doctor_id : null, p.full_name, p.birth_date, p.phone, p.email, p.notes, p.status ?? true, user(p.created_by), dt(p.created_at)]));
       inserted.patients = patients.length;
       const patientIds = new Set(patients.map((p) => p.id));
 

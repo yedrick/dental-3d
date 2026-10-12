@@ -109,12 +109,12 @@ function RegistroTab() {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState({ full_name: "", phone: "", doctor_id: "" });
   const createQuickPatient = async () => {
-    if (!quick.full_name || !quick.doctor_id) return toast.error("Nombre y doctor son obligatorios");
+    if (!quick.full_name.trim()) return toast.error("El nombre es obligatorio");
     let data: any;
     try {
       // created_by lo pone la API con el usuario de la sesión
       data = await apiPost<any>("/api/patients", {
-        full_name: quick.full_name, phone: quick.phone || null, doctor_id: quick.doctor_id,
+        full_name: quick.full_name, phone: quick.phone || null, doctor_id: quick.doctor_id || null,
       });
     } catch (e) {
       return toast.error(translateError(e));
@@ -320,9 +320,12 @@ function RegistroTab() {
           <div>
             <Label className="text-xs">Doctor referente</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Sin doctor" /></SelectTrigger>
               <SelectContent>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
             </Select>
+            {patient && !effectiveDoctorId && (
+              <p className="mt-1 text-xs text-muted-foreground">Sin doctor: se registra sin comisión ni descuento por convenio.</p>
+            )}
           </div>
           <div>
             <Label className="text-xs">Clínica</Label>
@@ -377,10 +380,10 @@ function RegistroTab() {
             <div><Label>Nombre completo *</Label><Input value={quick.full_name} onChange={(e) => setQuick({ ...quick, full_name: e.target.value })} autoFocus /></div>
             <div><Label>Celular</Label><Input value={quick.phone} onChange={(e) => setQuick({ ...quick, phone: e.target.value })} /></div>
             <div>
-              <Label>Doctor referente *</Label>
-              <Select value={quick.doctor_id} onValueChange={(v) => setQuick({ ...quick, doctor_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                <SelectContent>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
+              <Label>Doctor referente (opcional)</Label>
+              <Select value={quick.doctor_id || "none"} onValueChange={(v) => setQuick({ ...quick, doctor_id: v === "none" ? "" : v })}>
+                <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
+                <SelectContent><SelectItem value="none">Sin doctor</SelectItem>{(doctors as any[]).filter((d) => d.status !== false).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>

@@ -683,3 +683,4 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 12. Fase 6: quitar Lovable. Incluye elegir **un** gestor de paquetes y subir su lockfile, para builds reproducibles.
 13. ✅ tenancy-node 0.10.0 revisado (12/10/2026): los puntos 1 a 7 del reporte están corregidos. Pruebas masivas, de carga y en navegador en `test/`. Apareció el **punto 8** (bloqueo al crear muchas sucursales a la vez), que está mitigado con `CENTRAL_POOL_MAX`. Falta avisarlo al equipo de tenancy-node.
 14. ✅ Pruebas de carga con k6 (`test/k6/`): bcrypt pasó a hilos aparte y se agregó `API_PROCESSES` (cluster). Capacidad: ~750 peticiones/s con 1 proceso y ~1500 con 4.
+15. ✅ Paciente sin doctor (migración 008; sus atenciones van sin comisión) y carga masiva de estudios y tarifas desde Excel por sucursal (`POST /api/studies/import`, con vista previa y todo o nada).
