@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useBranding } from "@/lib/branding";
 import { formatMoney, formatDate } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
@@ -397,21 +398,26 @@ function RegistroTab() {
 // ============================================================
 // ENTREGAS TAB — search by patient, aggregated pending amounts
 // ============================================================
+/** Escapa texto para meterlo en HTML: un nombre como "<img onerror=…>" se imprime tal cual, sin ejecutarse. */
+const esc = (v: unknown) =>
+  String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
 function printDeliveryTicket(opts: {
+  branchName: string;
   patient: any;
   studies: { name: string; price: number; has_report: boolean; with_invoice: boolean }[];
   totalPaid: number;
   totalDebt: number;
 }) {
-  const { patient, studies, totalPaid, totalDebt } = opts;
+  const { branchName, patient, studies, totalPaid, totalDebt } = opts;
   const now = new Date();
   const fecha = now.toLocaleString("es-BO");
   const rows = studies.map((s) => `
     <tr>
-      <td>${s.name}${s.has_report ? " (c/inf.)" : ""}${s.with_invoice ? " *Fact." : ""}</td>
+      <td>${esc(s.name)}${s.has_report ? " (c/inf.)" : ""}${s.with_invoice ? " *Fact." : ""}</td>
       <td style="text-align:right">${s.price.toFixed(2)}</td>
     </tr>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Entrega ${patient.full_name}</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Entrega ${esc(patient.full_name)}</title>
     <style>
       @page { size: 80mm auto; margin: 4mm; }
       body { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #000; margin: 0; padding: 4px; }
@@ -423,12 +429,12 @@ function printDeliveryTicket(opts: {
       .tot { font-weight: 700; font-size: 12px; }
       .foot { text-align: center; margin-top: 8px; font-size: 10px; }
     </style></head><body>
-    <h1>DENTAL-3D</h1>
+    <h1>${esc(branchName)}</h1>
     <div class="muted">Comprobante de entrega</div>
     <div class="muted">${fecha}</div>
     <hr>
-    <div><b>Paciente:</b> ${patient.full_name}</div>
-    <div>Cel: ${patient.phone || "—"}</div>
+    <div><b>Paciente:</b> ${esc(patient.full_name)}</div>
+    <div>Cel: ${esc(patient.phone || "—")}</div>
     <hr>
     <table>${rows}</table>
     <hr>
@@ -445,6 +451,7 @@ function printDeliveryTicket(opts: {
 }
 
 function EntregasTab() {
+  const branding = useBranding();
   const qc = useQueryClient();
   // Solo lo que tiene saldo o falta entregar (antes se bajaba toda la tabla)
   const { data: debtRows = [] } = useQuery({
@@ -545,6 +552,7 @@ function EntregasTab() {
     }
     // Print ticket
     printDeliveryTicket({
+      branchName: branding.name,
       patient,
       studies: pending.map((it) => ({
         name: it.study_name ?? "Estudio",
