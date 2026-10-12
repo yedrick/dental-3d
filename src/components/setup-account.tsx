@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
@@ -6,6 +6,7 @@ import { translateError } from "@/lib/translate-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +16,8 @@ import { toast } from "sonner";
  * este formulario no se puede usar el sistema.
  */
 export function SetupAccount() {
+  const pwId = useId();
+  const pw2Id = useId();
   const { user, setSessionToken, signOut } = useAuth();
   const branding = useBranding();
   const [fullName, setFullName] = useState("");
@@ -61,8 +64,8 @@ export function SetupAccount() {
           <label className="block space-y-1 sm:col-span-2"><span className="text-sm font-medium">Nombre completo</span><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
           <label className="block space-y-1"><span className="text-sm font-medium">Usuario</span><Input value={username} autoComplete="username" onChange={(e) => setUsername(e.target.value)} /></label>
           <label className="block space-y-1"><span className="text-sm font-medium">Email</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label className="block space-y-1"><span className="text-sm font-medium">Contraseña</span><Input type="password" value={pw} autoComplete="new-password" onChange={(e) => setPw(e.target.value)} /></label>
-          <label className="block space-y-1"><span className="text-sm font-medium">Repetir contraseña</span><Input type="password" value={pw2} autoComplete="new-password" onChange={(e) => setPw2(e.target.value)} /></label>
+          <div className="space-y-1"><label htmlFor={pwId} className="text-sm font-medium">Contraseña</label><PasswordInput id={pwId} value={pw} autoComplete="new-password" onChange={(e) => setPw(e.target.value)} /></div>
+          <div className="space-y-1"><label htmlFor={pw2Id} className="text-sm font-medium">Repetir contraseña</label><PasswordInput id={pw2Id} value={pw2} autoComplete="new-password" onChange={(e) => setPw2(e.target.value)} /></div>
           <p className="text-xs text-muted-foreground sm:col-span-2">Mínimo 10 caracteres, con mayúscula, minúscula, número y símbolo.</p>
           <div className="flex gap-2 sm:col-span-2">
             <Button onClick={save} disabled={busy}>{busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Activar cuenta</Button>

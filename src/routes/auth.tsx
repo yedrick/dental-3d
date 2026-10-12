@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -7,10 +7,11 @@ import { useBranding } from "@/lib/branding";
 import { translateError } from "@/lib/translate-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Eye, EyeOff, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -47,44 +48,30 @@ function Req({ ok, children }: { ok: boolean; children: ReactNode }) {
   );
 }
 
-function PasswordInput({
+function PasswordField({
   password,
-  showPwd,
   showHelp = false,
   checks,
   onPasswordChange,
-  onToggleShow,
   onEnter,
 }: {
   password: string;
-  showPwd: boolean;
   showHelp?: boolean;
   checks: PasswordChecks;
   onPasswordChange: (value: string) => void;
-  onToggleShow: () => void;
   onEnter?: () => void;
 }) {
+  const id = useId();
   return (
     <div>
-      <Label>Contraseña</Label>
-      <div className="relative">
-        <Input
-          type={showPwd ? "text" : "password"}
-          value={password}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          className="pr-10"
-          autoComplete={showHelp ? "new-password" : "current-password"}
-          onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
-        />
-        <button
-          type="button"
-          onClick={onToggleShow}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
-        >
-          {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      </div>
+      <Label htmlFor={id}>Contraseña</Label>
+      <PasswordInput
+        id={id}
+        value={password}
+        onChange={(e) => onPasswordChange(e.target.value)}
+        autoComplete={showHelp ? "new-password" : "current-password"}
+        onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
+      />
       {showHelp && (
         <div className="mt-2 rounded-md border bg-muted/40 p-2 text-xs">
           <p className="mb-1 font-medium">Tu contraseña debe cumplir:</p>
@@ -118,7 +105,6 @@ function AuthPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -132,7 +118,6 @@ function AuthPage() {
     
   }), [password]);
   const allOk = Object.values(checks).every(Boolean);
-  const togglePasswordVisibility = () => setShowPwd((v) => !v);
 
   const signIn = async () => {
     if (!email || !password) { toast.error("Ingresa tu email o usuario y la contraseña."); return; }
@@ -202,7 +187,7 @@ function AuthPage() {
             </TabsList>
             <TabsContent value="in" className="space-y-3">
               <div><Label>Email o usuario</Label><Input value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signIn()} /></div>
-              <PasswordInput password={password} showPwd={showPwd} checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} onEnter={signIn} />
+              <PasswordField password={password} checks={checks} onPasswordChange={setPassword} onEnter={signIn} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
               <button
                 type="button"
@@ -217,7 +202,7 @@ function AuthPage() {
               <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
               <div><Label>Usuario</Label><Input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
               <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-              <PasswordInput password={password} showPwd={showPwd} showHelp checks={checks} onPasswordChange={setPassword} onToggleShow={togglePasswordVisibility} />
+              <PasswordField password={password} showHelp checks={checks} onPasswordChange={setPassword} />
               <Button onClick={signUp} disabled={busy || !allOk} className="w-full">Crear cuenta</Button>
               <p className="text-xs text-muted-foreground">Tu cuenta quedará como RECEPCION y pendiente hasta que un administrador la apruebe.</p>
             </TabsContent>

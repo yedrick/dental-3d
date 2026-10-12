@@ -21,8 +21,9 @@ Cada punto está escrito para copiarlo como *issue*: paquete, qué pasa, cómo s
 | 9 | `@tenancy-node/db` | Mejora | Media: no hay un tope de conexiones por servidor; el límite de MySQL se alcanza sin aviso | Variables `TENANT_POOL_*` y fórmula en la guía |
 
 | 10 | `core` / `admin-ui` | Mejora | Baja: buscar un id que no existe queda como "error" de ese tenant | — (es solo visual) |
+| 11 | `admin-ui` | Mejora | Baja: los campos de contraseña del panel no tienen botón para mostrarla | — (la app ya lo tiene en todos sus campos) |
 
-**Estado en v0.10.0:** 1 a 7 ✅ corregidos y verificados. 8, 9 y 10 siguen abiertos.
+**Estado en v0.10.0:** 1 a 7 ✅ corregidos y verificados. 8 a 11 siguen abiertos.
 
 ## 1. `db-mysql`: `destroy()` no cierra el pool nativo si nunca se usó Kysely
 

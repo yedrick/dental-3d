@@ -5,10 +5,11 @@ import { useAuth } from "@/lib/auth";
 import { apiPatch, apiPost } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, EyeOff, Loader2, User as UserIcon, KeyRound } from "lucide-react";
+import { Loader2, User as UserIcon, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/profile")({
@@ -26,7 +27,6 @@ function ProfilePage() {
   const [currentPw, setCurrentPw] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
 
   useEffect(() => {
@@ -113,20 +113,15 @@ function ProfilePage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Contraseña actual</Label>
-            <Input type={showPw ? "text" : "password"} value={currentPw} autoComplete="current-password" onChange={e => setCurrentPw(e.target.value)} />
+            <PasswordInput value={currentPw} autoComplete="current-password" onChange={e => setCurrentPw(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Nueva contraseña</Label>
-            <div className="relative">
-              <Input type={showPw ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} />
-              <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
+            <PasswordInput value={pw} autoComplete="new-password" onChange={e => setPw(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Confirmar contraseña</Label>
-            <Input type={showPw ? "text" : "password"} value={pw2} onChange={e => setPw2(e.target.value)} />
+            <PasswordInput value={pw2} autoComplete="new-password" onChange={e => setPw2(e.target.value)} />
           </div>
           <div className="sm:col-span-2 flex justify-end">
             <Button onClick={changePassword} disabled={savingPw || !pw}>
