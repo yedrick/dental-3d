@@ -1,6 +1,6 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiGetAll, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -60,6 +60,7 @@ function warnOverlaps(res: any) {
 }
 
 function AppointmentsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   // Los permisos los controla la API; aquí solo se ocultan los botones
   const canCreate = can("appointments.create");
@@ -282,7 +283,7 @@ function AppointmentsPage() {
                     <div className="flex items-center gap-1 pt-1">
                       {canEdit && (
                         <Select value={a.status} onValueChange={(v) => changeStatus(a, v)}>
-                          <SelectTrigger className="h-7 text-[11px] flex-1"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-[11px] flex-1" aria-label={`Estado de la cita de ${a.patient_name}`}><SelectValue /></SelectTrigger>
                           <SelectContent>{STATUSES.map((s) => <SelectItem key={s.v} value={s.v}>{s.label}</SelectItem>)}</SelectContent>
                         </Select>
                       )}
@@ -302,47 +303,47 @@ function AppointmentsPage() {
           <DialogHeader><DialogTitle>{form.id ? "Editar cita" : "Nueva cita"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>Paciente registrado (opcional)</Label>
+              <Label htmlFor={`${uid}-patient`}>Paciente registrado (opcional)</Label>
               <Select value={form.patient_id} onValueChange={pickPatient}>
-                <SelectTrigger><SelectValue placeholder="Selecciona o escribe un nombre libre abajo" /></SelectTrigger>
+                <SelectTrigger id={`${uid}-patient`}><SelectValue placeholder="Selecciona o escribe un nombre libre abajo" /></SelectTrigger>
                 <SelectContent>
                   {activePatients.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.full_name}{p.phone ? ` — ${p.phone}` : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Nombre paciente *</Label><Input value={form.patient_name} onChange={(e) => setForm({ ...form, patient_name: e.target.value })} /></div>
-              <div><Label>Teléfono</Label><Input value={form.patient_phone} onChange={(e) => setForm({ ...form, patient_phone: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-name`}>Nombre paciente *</Label><Input id={`${uid}-name`} value={form.patient_name} onChange={(e) => setForm({ ...form, patient_name: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-phone`}>Teléfono</Label><Input id={`${uid}-phone`} value={form.patient_phone} onChange={(e) => setForm({ ...form, patient_phone: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label>Fecha *</Label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
-              <div><Label>Hora *</Label><Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></div>
-              <div><Label>Duración (min)</Label><Input type="number" min={5} step={5} value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} /></div>
+              <div><Label htmlFor={`${uid}-date`}>Fecha *</Label><Input id={`${uid}-date`} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-time`}>Hora *</Label><Input id={`${uid}-time`} type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-duration`}>Duración (min)</Label><Input id={`${uid}-duration`} type="number" min={5} step={5} value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Doctor</Label>
+                <Label htmlFor={`${uid}-doctor`}>Doctor</Label>
                 <Select value={form.doctor_id} onValueChange={(v) => setForm({ ...form, doctor_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{(doctors as any[]).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Estudio</Label>
+                <Label htmlFor={`${uid}-study`}>Estudio</Label>
                 <Select value={form.study_id} onValueChange={(v) => setForm({ ...form, study_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectTrigger id={`${uid}-study`}><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{(studies as any[]).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
             <div>
-              <Label>Estado</Label>
+              <Label htmlFor={`${uid}-status`}>Estado</Label>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id={`${uid}-status`}><SelectValue /></SelectTrigger>
                 <SelectContent>{STATUSES.map((s) => <SelectItem key={s.v} value={s.v}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Notas</Label><Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-notes`}>Notas</Label><Textarea id={`${uid}-notes`} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
           <DialogFooter><Button onClick={save}>{form.id ? "Actualizar" : "Guardar"}</Button></DialogFooter>
         </DialogContent>

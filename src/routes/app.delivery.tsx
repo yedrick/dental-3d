@@ -151,7 +151,7 @@ function DeliveryPage() {
 
       <div className="mb-3 relative max-w-md">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        <Input aria-label="Buscar paciente por nombre o celular" placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
       </div>
 
       <Tabs defaultValue="payment">

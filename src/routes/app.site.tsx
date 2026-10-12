@@ -128,9 +128,9 @@ function SitePage() {
         <div className="space-y-2 sm:col-span-2">
           {site.stats.map((st, i) => (
             <div key={i} className="flex gap-2">
-              <Input className="w-28" value={st.value} maxLength={12} placeholder="10+" onChange={(e) => setSite({ ...site, stats: site.stats.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })} />
-              <Input value={st.label} maxLength={40} placeholder="Años de experiencia" onChange={(e) => setSite({ ...site, stats: site.stats.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
-              <Button type="button" variant="ghost" size="icon" aria-label="Quitar" onClick={() => setSite({ ...site, stats: site.stats.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+              <Input className="w-28" aria-label={`Cifra ${i + 1}: valor`} value={st.value} maxLength={12} placeholder="10+" onChange={(e) => setSite({ ...site, stats: site.stats.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })} />
+              <Input aria-label={`Cifra ${i + 1}: descripción`} value={st.label} maxLength={40} placeholder="Años de experiencia" onChange={(e) => setSite({ ...site, stats: site.stats.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+              <Button type="button" variant="ghost" size="icon" aria-label={`Quitar cifra ${i + 1}`} onClick={() => setSite({ ...site, stats: site.stats.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
             </div>
           ))}
           {site.stats.length < 4 && (
@@ -159,9 +159,9 @@ function SitePage() {
         <div className="space-y-2 sm:col-span-2">
           {site.hours.map((h, i) => (
             <div key={i} className="flex gap-2">
-              <Input value={h.day} maxLength={40} placeholder="Lunes a Viernes" onChange={(e) => setSite({ ...site, hours: site.hours.map((x, j) => (j === i ? { ...x, day: e.target.value } : x)) })} />
-              <Input value={h.hours} maxLength={40} placeholder="08:00 – 19:00" onChange={(e) => setSite({ ...site, hours: site.hours.map((x, j) => (j === i ? { ...x, hours: e.target.value } : x)) })} />
-              <Button type="button" variant="ghost" size="icon" aria-label="Quitar" onClick={() => setSite({ ...site, hours: site.hours.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
+              <Input aria-label={`Horario ${i + 1}: días`} value={h.day} maxLength={40} placeholder="Lunes a Viernes" onChange={(e) => setSite({ ...site, hours: site.hours.map((x, j) => (j === i ? { ...x, day: e.target.value } : x)) })} />
+              <Input aria-label={`Horario ${i + 1}: horas`} value={h.hours} maxLength={40} placeholder="08:00 – 19:00" onChange={(e) => setSite({ ...site, hours: site.hours.map((x, j) => (j === i ? { ...x, hours: e.target.value } : x)) })} />
+              <Button type="button" variant="ghost" size="icon" aria-label={`Quitar horario ${i + 1}`} onClick={() => setSite({ ...site, hours: site.hours.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></Button>
             </div>
           ))}
           {site.hours.length < 7 && (

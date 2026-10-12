@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { apiDelete, apiPatch, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
@@ -22,6 +22,7 @@ const HEX = /^#([0-9a-fA-F]{6})$/;
  * aplica a todos los usuarios de la sucursal: logo, nombre y color principal.
  */
 function BrandingPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
   const branding = useBranding();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,23 +122,23 @@ function BrandingPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
-            <Label>Nombre de la sucursal</Label>
-            <Input value={name} maxLength={150} onChange={(e) => setName(e.target.value)} />
+            <Label htmlFor={`${uid}-name`}>Nombre de la sucursal</Label>
+            <Input id={`${uid}-name`} value={name} maxLength={150} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Dirección</Label>
-            <Input value={address} maxLength={300} onChange={(e) => setAddress(e.target.value)} />
+            <Label htmlFor={`${uid}-address`}>Dirección</Label>
+            <Input id={`${uid}-address`} value={address} maxLength={300} onChange={(e) => setAddress(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Teléfono</Label>
-            <Input value={phone} maxLength={50} onChange={(e) => setPhone(e.target.value)} />
+            <Label htmlFor={`${uid}-phone`}>Teléfono</Label>
+            <Input id={`${uid}-phone`} value={phone} maxLength={50} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Color principal</Label>
+            <Label htmlFor={`${uid}-color`}>Color principal</Label>
             <div className="flex items-center gap-2">
               <input type="color" value={HEX.test(primary) ? primary : "#0F172A"} onChange={(e) => setPrimary(e.target.value.toUpperCase())}
                 className="h-9 w-12 cursor-pointer rounded border bg-background p-1" aria-label="Elegir color" />
-              <Input value={primary} maxLength={7} onChange={(e) => setPrimary(e.target.value)} className="font-mono" />
+              <Input id={`${uid}-color`} value={primary} maxLength={7} onChange={(e) => setPrimary(e.target.value)} className="font-mono" />
             </div>
           </div>
           <div className="space-y-2">

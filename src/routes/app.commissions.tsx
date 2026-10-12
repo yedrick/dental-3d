@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { apiGet, type Paged } from "@/lib/api";
 import { formatDate, formatMoney } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
@@ -35,6 +35,7 @@ async function fetchAllCommissions(query: Record<string, string | undefined>) {
 const MONTHS_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
 function CommissionsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1)); // "all" or 1-12
@@ -204,16 +205,16 @@ function CommissionsPage() {
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div>
-            <Label>Año</Label>
+            <Label htmlFor={`${uid}-year`}>Año</Label>
             <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-year`} className="w-28"><SelectValue /></SelectTrigger>
               <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Mes</Label>
+            <Label htmlFor={`${uid}-month`}>Mes</Label>
             <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-month`} className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todo el año</SelectItem>
                 {MONTHS_ES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
@@ -221,9 +222,9 @@ function CommissionsPage() {
             </Select>
           </div>
           <div>
-            <Label>Doctor</Label>
+            <Label htmlFor={`${uid}-doctor`}>Doctor</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-doctor`} className="w-64"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los doctores</SelectItem>
                 {doctors.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
