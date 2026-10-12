@@ -27,7 +27,10 @@ for db in $(mysql -N -e "SHOW DATABASES LIKE '${TENANT_PREFIX//_/\\_}%'"); do
 done
 
 # Logos (públicos) y comprobantes (privados)
-tar -czf "$DEST/storage.tar.gz" -C "$APP_DIR/server" storage storage-private 2>/dev/null || true
+# Archivos: por defecto dentro de server/; en Forge, en una carpeta aparte (STORAGE_DIR / PRIVATE_STORAGE_DIR)
+PUB_DIR="${STORAGE_DIR:-$APP_DIR/server/storage}"
+PRIV_DIR="${PRIVATE_STORAGE_DIR:-$APP_DIR/server/storage-private}"
+tar -czf "$DEST/storage.tar.gz" -C / "${PUB_DIR#/}" "${PRIV_DIR#/}" 2>/dev/null || true
 echo "✔ archivos"
 
 # La llave TENANCY_KEY NO va en el respaldo: guárdala aparte (gestor de secretos). Sin ella no se
