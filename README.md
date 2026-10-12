@@ -438,7 +438,8 @@ npm run dev     # http://localhost:8080 (reenvía /api, /tenancy y /admin a la A
 
 ## Producción
 
-Sigue `deploy/DEPLOY.md` (servidor propio, sin Docker).
+- **Laravel Forge:** `deploy/FORGE.md`, con el script de despliegue, los daemons, nginx y `.env` listos para pegar.
+- **Servidor propio, sin Forge** (systemd): `deploy/DEPLOY.md`.
 
 ## Pruebas
 

@@ -10,6 +10,8 @@ internet ──443──► nginx ──┬── /api, /tenancy ──► API N
 API ──► MySQL 127.0.0.1:3306: dental3d_central + dental_<sucursal> (una base por sucursal)
 ```
 
+¿Usas **Laravel Forge**? Sigue `FORGE.md`: son los mismos pasos, adaptados al panel de Forge.
+
 En esta guía, `dental3d.com` es un ejemplo: reemplázalo por tu dominio en todos los archivos.
 
 **No usa Docker:** MySQL, Redis y nginx se instalan directo en el servidor, y la API y el frontend corren como servicios de systemd.
