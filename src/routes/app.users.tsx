@@ -10,13 +10,14 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
+import { Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth, ROLES, type AppRole } from "@/lib/auth";
 
 /** Reglas de la API: ≥10 caracteres, mayúscula, minúscula, número y símbolo. */
@@ -300,7 +301,6 @@ function UserFormDialog({
   const [username, setUsername] = useState(initial?.username ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [roles, setRoles] = useState<AppRole[]>(initial?.roles.length ? initial.roles : ["RECEPCION"]);
   const [active, setActive] = useState(initial?.active ?? true);
   const toggleRole = (r: AppRole, on: boolean) =>
@@ -372,22 +372,13 @@ function UserFormDialog({
         </div>
         <div>
           <Label>{mode === "create" ? "Contraseña" : "Nueva contraseña (opcional)"}</Label>
-          <div className="relative">
-            <Input
-              type={showPw ? "text" : "password"}
-              value={password}
-              disabled={!canEditData}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "edit" ? "Dejar vacío para no cambiar" : "Mín. 10: mayúscula, minúscula, número y símbolo"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <PasswordInput
+            autoComplete="new-password"
+            value={password}
+            disabled={!canEditData}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={mode === "edit" ? "Dejar vacío para no cambiar" : "Mín. 10: mayúscula, minúscula, número y símbolo"}
+          />
         </div>
         <div>
           <Label>Roles</Label>
