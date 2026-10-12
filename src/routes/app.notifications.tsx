@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Check, CheckCheck, ChevronDown, ChevronUp, Send, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { LinesSkeleton } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/notifications")({
   component: NotificationsPage,
@@ -200,7 +201,7 @@ function SentRecipients({ notificationId }: { notificationId: string }) {
       </Button>
       {open && (
         <div className="grid gap-1 max-h-48 overflow-auto rounded-md border p-2 text-xs">
-          {isLoading && <div className="text-muted-foreground">Cargando…</div>}
+          {isLoading && <LinesSkeleton lines={4} />}
           {!isLoading && recipients.length === 0 && <div className="text-muted-foreground">Sin destinatarios</div>}
           {recipients.map((r) => (
             <div key={r.user_id} className="flex items-center justify-between">

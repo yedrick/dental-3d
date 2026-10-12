@@ -84,4 +84,19 @@ check("paciente con doctor: descuento y comisión como antes (primer paciente 50
 s,p3=c("PATCH",f"/api/patients/{p2['id']}",{"doctor_id":None})
 check("quitarle el doctor a un paciente", s==200 and p3["doctor_id"] is None, (s,p3))
 s,lst=c("GET","/api/attentions?limit=50"); check("lista de atenciones incluye la sin doctor", lst["total"]==2, lst["total"])
+# ---- "Primer paciente": cuenta por el doctor de la ATENCIÓN (bug corregido) ----
+import concurrent.futures as cf
+s,dB=c("POST","/api/doctors",{"full_name":"Dr. Primer Paciente","use_percentage":True,"default_commission_pct":10,"agreement_discount_pct":0})
+s,pS=c("POST","/api/patients",{"full_name":"Sin doctor, atendido por Dr. Primer"})
+pcts=[c("POST","/api/attentions",{"patient_id":pS["id"],"doctor_id":dB["id"],"with_invoice":False,"payment_method":"cash","amount_paid":0,
+       "items":[{"study_id":pano,"has_report":True}]})[1]["items"][0]["percentage"] for _ in range(3)]
+check("paciente sin doctor atendido por un doctor: 50% solo la primera vez", pcts==[50,10,10], pcts)
+s,dC=c("POST","/api/doctors",{"full_name":"Dr. Concurrente","use_percentage":True,"default_commission_pct":10,"agreement_discount_pct":0})
+pats=[c("POST","/api/patients",{"full_name":f"Concurrente {i}"})[1]["id"] for i in range(15)]
+def una(pid):
+    return c("POST","/api/attentions",{"patient_id":pid,"doctor_id":dC["id"],"with_invoice":False,"payment_method":"cash","amount_paid":0,
+             "items":[{"study_id":pano,"has_report":True}]})[1]["items"][0]["percentage"]
+with cf.ThreadPoolExecutor(15) as ex: conc=list(ex.map(una,pats))
+check("15 atenciones a la vez del mismo doctor: exactamente UNA con 50%", conc.count(50)==1 and conc.count(10)==14, conc)
+
 print(f"\n{ok_n}/{ok_n+fail_n} OK"); sys.exit(1 if fail_n else 0)

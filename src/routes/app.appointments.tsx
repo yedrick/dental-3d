@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
+import { LinesSkeleton } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/appointments")({ component: AppointmentsPage });
 
@@ -253,7 +254,7 @@ function AppointmentsPage() {
               );
             })}
           </div>
-          {isLoading && <div className="text-xs text-muted-foreground mt-2">Cargando…</div>}
+          {isLoading && <div className="mt-2"><LinesSkeleton lines={3} /></div>}
         </Card>
 
         <Card className="p-3">
