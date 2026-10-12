@@ -438,8 +438,7 @@ npm run dev     # http://localhost:8080 (reenvía /api, /tenancy y /admin a la A
 
 ## Producción
 
-- **Laravel Forge:** `deploy/FORGE.md`, con el script de despliegue, los daemons, nginx y `.env` listos para pegar.
-- **Servidor propio, sin Forge** (systemd): `deploy/DEPLOY.md`.
+Las guías de despliegue (Laravel Forge y servidor propio con systemd) son documentos internos: no están en el repositorio. En `deploy/` quedan los archivos que usan: `nginx/`, `systemd/` y `backup.sh`.
 
 ## Pruebas
 

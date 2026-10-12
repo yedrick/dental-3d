@@ -1,4 +1,4 @@
-// Cuánto tiempo un dato se considera "fresco" en React Query, según su tipo (server/PLAN.md, Caché capa 4).
+// Cuánto tiempo un dato se considera "fresco" en React Query, según su tipo.
 // Antes era 5 minutos para todo: dos cajeras podían ver saldos distintos.
 export const STALE = {
   /** Estudios, tarifas, parámetros, permisos, marca */

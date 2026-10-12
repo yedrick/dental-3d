@@ -19,6 +19,6 @@ necesita además el frontend (`npx vite dev --port 8081`, o el puerto que indiqu
 Notas:
 - `masiva.py` y `e2e/` entran al panel con `OWNER_EMAIL` (por defecto `owner@dental3d.local`) y `OWNER_PASS`: exporta la contraseña del dueño antes de correrlas.
 - `masiva.py`: usa un **prefijo nuevo** en cada corrida (en tenancy-node el id de una sucursal borrada queda reservado).
-- No crees más sucursales a la vez que `CENTRAL_POOL_MAX` (ver `TENANCY-NODE-REPORTE.md` #8).
+- No crees más sucursales a la vez que `CENTRAL_POOL_MAX`.
 - Con muchas sucursales, sube `max_connections` de MySQL: `TENANT_POOL_MAX × sucursales + CENTRAL_POOL_MAX`.
 - Las pruebas de `api/` dependen de datos acumulados: alguna verificación de conteo puede fallar al repetirlas.

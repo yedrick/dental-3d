@@ -100,5 +100,5 @@ Máquina de 12 núcleos y 46 GB; MySQL 8.4 en Docker; API y frontend compilados;
 ## Notas
 
 - Si k6 corre en la misma máquina que la API, se reparten la CPU. Para medir el máximo real, corre k6 desde otra máquina con `DOMINIO=…`.
-- Las conexiones a MySQL siguen la regla `TENANT_POOL_MAX × sucursales activas + CENTRAL_POOL_MAX < max_connections` (ver `deploy/DEPLOY.md`).
+- Las conexiones a MySQL siguen la regla `TENANT_POOL_MAX × sucursales activas + CENTRAL_POOL_MAX < max_connections`.
 - Al terminar: `./limpiar.sh` y `docker rm -f dental3d-k6-redis`.

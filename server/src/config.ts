@@ -27,7 +27,7 @@ export const config = {
     // CREATE USER y GRANT OPTION para crear la base y el usuario de cada sucursal.
     databaseUrl: required("DATABASE_URL"),
     // Conexiones del pool de la base central (tenancy-node usa 10 por defecto). Crear sucursales
-    // retiene una conexión por sucursal mientras se aprovisiona (ver TENANCY-NODE-REPORTE.md #8):
+    // retiene una conexión por sucursal mientras se aprovisiona (falla de tenancy-node 0.10):
     // crear tantas a la vez como este número bloquea la API. Mantenerlo holgado.
     centralPoolMax: Number(process.env.CENTRAL_POOL_MAX ?? 30),
     // Pools de las sucursales. Conexiones máximas a MySQL ≈ TENANT_POOL_MAX × TENANT_MAX_OPEN_POOLS

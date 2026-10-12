@@ -35,3 +35,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Documentación interna (.md): solo los README.md van al repositorio y al servidor
+*.md
+!README.md
