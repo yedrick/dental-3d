@@ -73,7 +73,25 @@ function buildUrl(path: string, query?: Query) {
   return `${BASE}${path}${s ? `?${s}` : ""}`;
 }
 
-export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+/**
+ * Escrituras en curso. Si llega otra IGUAL (mismo método, ruta y datos) antes de que termine la
+ * primera, se devuelve la misma respuesta en vez de enviarla de nuevo: red de seguridad contra
+ * el doble clic en cualquier botón (los botones además se bloquean solos, ver ui/button.tsx).
+ */
+const inFlightWrites = new Map<string, Promise<unknown>>();
+
+export function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const method = opts.method ?? "GET";
+  if (method === "GET" || opts.file) return request<T>(path, opts);
+  const key = `${method} ${buildUrl(path, opts.query)} ${JSON.stringify(opts.body ?? null)}`;
+  const existing = inFlightWrites.get(key);
+  if (existing) return existing as Promise<T>;
+  const p = request<T>(path, opts).finally(() => inFlightWrites.delete(key));
+  inFlightWrites.set(key, p);
+  return p;
+}
+
+async function request<T>(path: string, opts: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
   const token = tokenStore.get();
   if (token) headers.Authorization = `Bearer ${token}`;

@@ -504,10 +504,11 @@ function EntregasTab() {
       || !!phoneIds?.has(g.patient.id);
   }).sort((a, b) => b.debt - a.debt);
 
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["attentions"] });
-    qc.invalidateQueries({ queryKey: ["audit_logs"] });
-  };
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["attentions"] }),
+      qc.invalidateQueries({ queryKey: ["audit_logs"] }),
+    ]);
 
   const openCharge = (g: typeof filtered[number], e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -528,9 +529,9 @@ function EntregasTab() {
       return;
     }
     toast.success("Saldo cobrado");
-    setBusy(null);
     setChargeTarget(null);
-    refresh();
+    await refresh(); // el paciente sigue bloqueado hasta ver el saldo nuevo
+    setBusy(null);
   };
 
   const deliverAll = async (g: typeof filtered[number], e: React.MouseEvent) => {
@@ -564,8 +565,8 @@ function EntregasTab() {
       totalDebt: g.debt,
     });
     toast.success(`${pending.length} estudio(s) entregados`);
+    await refresh();
     setBusy(null);
-    refresh();
   };
 
 

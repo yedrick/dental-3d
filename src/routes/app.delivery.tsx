@@ -83,7 +83,7 @@ function DeliveryPage() {
     }
     toast.success("Cobro registrado");
     setCharge(null);
-    qc.invalidateQueries();
+    await qc.invalidateQueries(); // el botón sigue bloqueado hasta ver el saldo nuevo
   };
 
   const deliver = async (row: any) => {
@@ -94,7 +94,7 @@ function DeliveryPage() {
       return toast.error(translateError(e));
     }
     toast.success("Estudio entregado");
-    qc.invalidateQueries();
+    await qc.invalidateQueries();
   };
 
   const chargeAll = async (patientId: string) => {
@@ -104,7 +104,7 @@ function DeliveryPage() {
       return toast.error(translateError(e));
     }
     toast.success(`Cobrado saldo total del paciente`);
-    qc.invalidateQueries();
+    await qc.invalidateQueries();
   };
 
   const renderRow = (r: any) => (

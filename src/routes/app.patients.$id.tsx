@@ -74,11 +74,13 @@ function PatientProfile() {
     vouchers: s.vouchers + (r.is_voucher ? 1 : 0),
   }), { total: 0, paid: 0, debt: 0, pendingDelivery: 0, delivered: 0, withInvoice: 0, vouchers: 0 }), [enriched]);
 
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["attentions"] });
-    qc.invalidateQueries({ queryKey: ["dashboard"] });
-    qc.invalidateQueries({ queryKey: ["cashbox"] });
-  };
+  // Se espera a tener los datos nuevos: mientras tanto el botón del cobro sigue bloqueado
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["attentions"] }),
+      qc.invalidateQueries({ queryKey: ["dashboard"] }),
+      qc.invalidateQueries({ queryKey: ["cashbox"] }),
+    ]);
 
   const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
   const doCharge = async () => {
@@ -91,7 +93,7 @@ function PatientProfile() {
     } catch (e) {
       return toast.error(translateError(e));
     }
-    toast.success("Cobro registrado"); setCharge(null); refresh();
+    toast.success("Cobro registrado"); setCharge(null); await refresh();
   };
 
   const deliver = async (row: any) => {
@@ -101,7 +103,7 @@ function PatientProfile() {
     } catch (e) {
       return toast.error(translateError(e));
     }
-    toast.success("Estudio entregado"); refresh();
+    toast.success("Estudio entregado"); await refresh();
   };
 
   const chargeAll = async () => {
@@ -110,7 +112,7 @@ function PatientProfile() {
     } catch (e) {
       return toast.error(translateError(e));
     }
-    toast.success("Saldo total cobrado"); refresh();
+    toast.success("Saldo total cobrado"); await refresh();
   };
 
   if (patientError) return <div className="p-6 text-sm text-destructive">{translateError(patientError)}</div>;
