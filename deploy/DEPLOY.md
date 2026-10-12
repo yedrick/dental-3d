@@ -126,7 +126,10 @@ Edita `server/.env`:
 | `API_PROCESSES` | Procesos de la API, uno por núcleo libre (deja núcleos para MySQL y el frontend). Medido con k6: **1 proceso ≈ 750 peticiones/s, 4 ≈ 1500**. Con más de 1 hace falta `REDIS_URL`. Con 4 procesos, bajar los pools: `TENANT_POOL_MAX=3` y `CENTRAL_POOL_MAX=10` |
 | `TENANCY_ADMIN_SECRET` | `openssl rand -base64 48`: enciende el **panel de la plataforma** en `https://dental3d.com/admin/` |
 | `ADMIN_SECURE_COOKIES` | `true` |
-| `TENANT_PUBLIC_URL` | `https://{tenant}.dental3d.com` ("Entrar como…" abre esta dirección) |
+| `TENANT_PUBLIC_URL` | `https://{tenant}.dental3d.com` ("Entrar como…" abre esta dirección; también el enlace del correo de recuperación) |
+| `PASSWORD_RESET_ENABLED` | `true` para "¿Olvidaste tu contraseña?" con código por correo en todas las sucursales; `false` para apagarlo |
+| `MAIL_SMTP_HOST` / `PORT` / `SECURE` / `USER` / `PASS` | Datos SMTP de tu proveedor (Brevo, Zoho, Google, Amazon SES; ejemplos en `.env.example`) |
+| `MAIL_FROM` | `no-responder@dental3d.com`. El dominio tiene que estar verificado en el proveedor (registros **SPF** y **DKIM** en el DNS), si no los correos caen en spam |
 
 Crear las tablas centrales y el **dueño de la plataforma** (el usuario del panel):
 
