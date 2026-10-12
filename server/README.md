@@ -16,28 +16,69 @@ Fases y pendientes: [PLAN.md](PLAN.md). Errores y mejoras para el equipo de tena
 
 ## Puesta en marcha (local)
 
+Probado desde cero el 12/10/2026 (copia limpia del repositorio y base vacía): panel, crear sucursales, "Entrar como", activar cuenta, doctor, atención, caja, página web y aislamiento entre sucursales, 15/15.
+
+**1. MySQL.** Usa el de Docker o el tuyo.
+
 ```sh
 cd server
-npm install                   # instala tenancy-node desde GitHub Releases
-cp .env.example .env
-npx tenancy key:generate      # pega el resultado en TENANCY_KEY
-# y pon un JWT_SECRET de 32+ caracteres
-
-# MySQL local (puerto 3307)
-docker run -d --name dental3d-mysql \
-  -e MYSQL_ROOT_PASSWORD=root_dev_password -e MYSQL_DATABASE=dental3d_central \
-  -p 3307:3306 mysql:8.4 --default-time-zone=+00:00
-# (o: docker compose up -d)
-
-npm run db:install            # tablas tenancy_* en la base central
-npm run tenant:create -- central --name="3D Dental Central"   # crea dental_central + migraciones
-npm run tenant:create -- sur --name="3D Dental Sur"
-ADMIN_PASSWORD='Admin123!xyz' npm run tenant:create-admin -- central admin@clinica.com admin "Nombre Apellido"
-
-npm run dev                   # http://central.localhost:4000 , http://sur.localhost:4000
+docker compose up -d          # MySQL 8.4 en el puerto 3307, ya en UTC (usuario root / root_dev_password)
 ```
 
-Los navegadores y `curl` resuelven `*.localhost` a `127.0.0.1` sin configurar nada.
+Con **tu propio MySQL** (8.0.13 o más nuevo):
+- Tiene que trabajar en **UTC**. En `mysqld.cnf`, `default-time-zone = '+00:00'`, y reinicia. Se comprueba con `SELECT @@global.time_zone;`.
+- Crea la base central y un usuario que pueda crear las bases y los usuarios de cada sucursal:
+
+```sql
+CREATE DATABASE dental3d_central CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'tenancy_admin'@'localhost' IDENTIFIED BY 'una-contraseña-larga';
+GRANT ALL PRIVILEGES ON `dental3d_central`.* TO 'tenancy_admin'@'localhost';
+GRANT ALL PRIVILEGES ON `dental\_%`.* TO 'tenancy_admin'@'localhost' WITH GRANT OPTION;
+GRANT CREATE USER ON *.* TO 'tenancy_admin'@'localhost';
+```
+
+**2. Backend.**
+
+```sh
+npm install                   # instala tenancy-node desde GitHub Releases
+cp .env.example .env
+npx tenancy key:generate      # copia el resultado (base64:...) en TENANCY_KEY
+```
+
+En `.env` cambia:
+
+| Variable | Valor en local |
+|---|---|
+| `DATABASE_URL` | Docker: `mysql://root:root_dev_password@127.0.0.1:3307/dental3d_central`. Tu MySQL: `mysql://tenancy_admin:<contraseña>@127.0.0.1:3306/dental3d_central` |
+| `TENANCY_KEY` | la que generaste. **Guárdala**: sin ella no se abren las bases de las sucursales |
+| `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `TENANCY_ADMIN_SECRET` | `openssl rand -base64 48` (enciende el panel `/admin`) |
+| `CORS_ORIGIN` | `http://localhost:8080` |
+| `ADMIN_SECURE_COOKIES` | `false` (en local no hay HTTPS) |
+| `TENANT_PUBLIC_URL` | `http://{tenant}.localhost:8080` |
+| `REDIS_URL` | vacío está bien en local (caché en memoria) |
+
+```sh
+npm run db:install                                       # tablas de la base central
+OWNER_PASS='<12+ caracteres>' npx tenancy admin:user tu@email.com --role=owner --password-env=OWNER_PASS
+npm run dev                                              # API en http://localhost:4000
+```
+
+**3. Frontend** (en otra terminal, desde la raíz del repo):
+
+```sh
+npm install                   # la primera vez tarda (~10 min con npm: no hay package-lock, ver Fase 6)
+npm run dev                   # http://localhost:8080 (reenvía /api, /tenancy y /admin a la API)
+```
+
+**4. Usarlo:**
+- **Panel de la plataforma:** http://localhost:8080/admin/. Ahí creas las sucursales (por ejemplo `calacoto` y `chasquipampa`), configuras el tema y el logo, creas usuarios y usas "Entrar como".
+- **Cada sucursal:** http://calacoto.localhost:8080 (portada pública) y http://calacoto.localhost:8080/auth (login). La primera vez, entra con "Entrar como" desde el panel: la app pide activar la cuenta del ADMIN (email, usuario y contraseña).
+- **No hace falta tocar `/etc/hosts`:** Chrome, Firefox, Edge y `curl` ya resuelven `*.localhost` a tu máquina. Solo si quieres otro dominio local (ej. `calacoto.dental.test`) agrega una línea por sucursal en `/etc/hosts` (`127.0.0.1 calacoto.dental.test`) y pon ese dominio en `CENTRAL_DOMAINS`.
+
+**Por terminal** (en vez del panel): `npm run tenant:create -- calacoto --name="Calacoto"` y `ADMIN_PASSWORD='...' npm run tenant:create-admin -- calacoto admin@clinica.com admin "Nombre Apellido"`.
+
+**Pruebas:** ver `test/README.md` (API, masivas, navegador y k6).
 
 ## Comandos
 
