@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { formatMoney, formatDate, todayLocal } from "@/lib/data";
 import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
+import { StudiesImport } from "@/components/studies-import";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -130,7 +131,11 @@ function StudiesPage() {
 
   return (
     <div>
-      <PageHeader title="Estudios y tarifas" description="El precio se toma siempre de la tarifa activa." />
+      <PageHeader
+        title="Estudios y tarifas"
+        description="El precio se toma siempre de la tarifa activa."
+        action={canCreate && canEdit && <StudiesImport studies={studies} />}
+      />
       <Tabs defaultValue="studies">
         <TabsList>
           <TabsTrigger value="studies">Estudios</TabsTrigger>

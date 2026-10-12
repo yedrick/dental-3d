@@ -23,6 +23,8 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/app/patients")({ component: PatientsPage });
 
 type PForm = { id?: string; doctor_id: string; full_name: string; birth_date: string; phone: string; email: string; notes: string; status: boolean };
+// Radix Select no admite "" como valor: "none" representa "sin doctor"
+const NO_DOCTOR = "none";
 const empty: PForm = { doctor_id: "", full_name: "", birth_date: "", phone: "", email: "", notes: "", status: true };
 const PAGE_SIZE = 50;
 
@@ -65,14 +67,14 @@ function PatientsPage() {
 
   const openNew = () => { setForm(empty); setOpen(true); };
   const openEdit = (p: any) => {
-    setForm({ id: p.id, doctor_id: p.doctor_id, full_name: p.full_name, birth_date: p.birth_date || "", phone: p.phone || "", email: p.email || "", notes: p.notes || "", status: p.status ?? true });
+    setForm({ id: p.id, doctor_id: p.doctor_id ?? "", full_name: p.full_name, birth_date: p.birth_date || "", phone: p.phone || "", email: p.email || "", notes: p.notes || "", status: p.status ?? true });
     setOpen(true);
   };
 
   const save = async () => {
-    if (!form.doctor_id || !form.full_name) return toast.error("Doctor y nombre requeridos");
+    if (!form.full_name.trim()) return toast.error("El nombre es obligatorio");
     const payload: any = {
-      doctor_id: form.doctor_id,
+      doctor_id: form.doctor_id || null, // opcional: sin doctor, sus atenciones van sin comisión
       full_name: form.full_name,
       birth_date: form.birth_date || null,
       phone: form.phone || null,
@@ -146,7 +148,7 @@ function PatientsPage() {
                   {p.full_name}
                   {p.email && <div className="text-[11px] text-muted-foreground">{p.email}</div>}
                 </TableCell>
-                <TableCell className="text-sm">{p.doctor_name || "—"}</TableCell>
+                <TableCell className="text-sm">{p.doctor_name || <span className="text-muted-foreground">Sin doctor</span>}</TableCell>
                 <TableCell className="text-sm">{p.birth_date ? `${calcAge(p.birth_date)}a` : "—"}</TableCell>
                 <TableCell className="text-sm">{p.phone || "—"}</TableCell>
                 <TableCell>
@@ -184,10 +186,11 @@ function PatientsPage() {
           <DialogHeader><DialogTitle>{form.id ? "Editar paciente" : "Nuevo paciente"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>Doctor remitente *</Label>
-              <Select value={form.doctor_id} onValueChange={(v) => setForm({ ...form, doctor_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un doctor" /></SelectTrigger>
+              <Label>Doctor remitente (opcional)</Label>
+              <Select value={form.doctor_id || NO_DOCTOR} onValueChange={(v) => setForm({ ...form, doctor_id: v === NO_DOCTOR ? "" : v })}>
+                <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={NO_DOCTOR}>Sin doctor (llegó por su cuenta)</SelectItem>
                   {activeDoctors.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>

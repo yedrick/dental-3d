@@ -93,6 +93,7 @@ function PasswordField({
 }
 
 function AuthPage() {
+  const ids = useId(); // etiquetas unidas a sus campos (lectores de pantalla y clic en la etiqueta)
   const { user, loading, signIn: login } = useAuth();
   const branding = useBranding();
   const navigate = useNavigate();
@@ -186,7 +187,7 @@ function AuthPage() {
               <TabsTrigger value="up">Registrar</TabsTrigger>
             </TabsList>
             <TabsContent value="in" className="space-y-3">
-              <div><Label>Email o usuario</Label><Input value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signIn()} /></div>
+              <div><Label htmlFor={`${ids}-login`}>Email o usuario</Label><Input id={`${ids}-login`} value={email} autoComplete="username" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && signIn()} /></div>
               <PasswordField password={password} checks={checks} onPasswordChange={setPassword} onEnter={signIn} />
               <Button onClick={signIn} disabled={busy} className="w-full">Ingresar</Button>
               <button
@@ -199,9 +200,9 @@ function AuthPage() {
               </button>
             </TabsContent>
             <TabsContent value="up" className="space-y-3">
-              <div><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
-              <div><Label>Usuario</Label><Input value={username} onChange={(e) => setUsername(e.target.value)} /></div>
-              <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+              <div><Label htmlFor={`${ids}-name`}>Nombre completo</Label><Input id={`${ids}-name`} value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
+              <div><Label htmlFor={`${ids}-user`}>Usuario</Label><Input id={`${ids}-user`} value={username} onChange={(e) => setUsername(e.target.value)} /></div>
+              <div><Label htmlFor={`${ids}-email`}>Email</Label><Input id={`${ids}-email`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
               <PasswordField password={password} showHelp checks={checks} onPasswordChange={setPassword} />
               <Button onClick={signUp} disabled={busy || !allOk} className="w-full">Crear cuenta</Button>
               <p className="text-xs text-muted-foreground">Tu cuenta quedará como RECEPCION y pendiente hasta que un administrador la apruebe.</p>

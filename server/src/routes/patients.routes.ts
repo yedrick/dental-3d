@@ -15,7 +15,8 @@ patientsRouter.use(requireAuth);
 const canRead = requireRole("ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR");
 
 const patientSchema = z.object({
-  doctor_id: uuid, // regla: todo paciente debe tener doctor
+  // Opcional: un paciente nuevo puede no tener doctor (sus atenciones van sin comisión)
+  doctor_id: uuid.nullish().transform((v) => v ?? null),
   full_name: z.string().trim().min(1, "Nombre requerido").max(200),
   birth_date: z.iso
     .date("Fecha inválida (YYYY-MM-DD)")
@@ -31,7 +32,7 @@ const COLUMNS = Object.keys(patientSchema.shape) as (keyof typeof patientSchema.
 
 const listSchema = paginationSchema.extend({
   q: z.string().trim().max(100).optional(),
-  doctor_id: uuid.optional(),
+  doctor_id: z.union([uuid, z.literal("none")]).optional(), // "none" = pacientes sin doctor
   status: z.enum(["true", "false"]).optional(),
   sort: z.enum(["recent", "name"]).default("recent"),
 });
@@ -39,7 +40,7 @@ const listSchema = paginationSchema.extend({
 async function findPatient(q: Db, id: string) {
   const rows = await q.query(
     `SELECT p.*, d.full_name AS doctor_name
-       FROM patients p JOIN doctors d ON d.id = p.doctor_id
+       FROM patients p LEFT JOIN doctors d ON d.id = p.doctor_id
       WHERE p.id = ?`,
     [id],
   );
@@ -59,7 +60,8 @@ patientsRouter.get("/", canRead, async (req, res) => {
     where.push("(p.full_name LIKE ? OR p.phone LIKE ? OR p.email LIKE ?)");
     params.push(`%${f.q}%`, `%${f.q}%`, `%${f.q}%`);
   }
-  if (f.doctor_id) { where.push("p.doctor_id = ?"); params.push(f.doctor_id); }
+  if (f.doctor_id === "none") where.push("p.doctor_id IS NULL");
+  else if (f.doctor_id) { where.push("p.doctor_id = ?"); params.push(f.doctor_id); }
   if (f.status) { where.push("p.status = ?"); params.push(f.status === "true"); }
   const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
   const { limit, offset } = paginate(f.page, f.limit);
@@ -67,7 +69,7 @@ patientsRouter.get("/", canRead, async (req, res) => {
   const [rows, [{ total }]] = await Promise.all([
     db().query(
       `SELECT p.*, d.full_name AS doctor_name
-         FROM patients p JOIN doctors d ON d.id = p.doctor_id
+         FROM patients p LEFT JOIN doctors d ON d.id = p.doctor_id
          ${whereSql}
         ORDER BY ${f.sort === "name" ? "p.full_name ASC" : "p.created_at DESC"}
         LIMIT ? OFFSET ?`,
@@ -101,7 +103,7 @@ patientsRouter.get("/:id/attentions", canRead, async (req, res) => {
 patientsRouter.post("/", requirePermission("patients.create"), async (req, res) => {
   const data = patientSchema.parse(req.body);
   const patient = await withTransaction(async (tx) => {
-    await assertDoctorExists(tx, data.doctor_id);
+    if (data.doctor_id) await assertDoctorExists(tx, data.doctor_id);
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
     await tx.query(
       `INSERT INTO patients (id, ${COLUMNS.join(", ")}, created_by) VALUES (?, ${COLUMNS.map(() => "?").join(", ")}, ?)`,

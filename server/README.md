@@ -193,10 +193,10 @@ Los filtros `from` y `to` (`YYYY-MM-DD`) son **días en la hora de la clínica**
 
 | Método | Ruta | Permiso |
 |---|---|---|
-| GET | `/api/patients?q=&doctor_id=&status=&sort=recent\|name&page=&limit=` | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, DOCTOR, AUDITOR |
+| GET | `/api/patients?q=&doctor_id=&status=&sort=recent\|name&page=&limit=` (`doctor_id=none`: los que no tienen doctor) | roles ADMIN, SUBADMIN, RECEPCION, CAJA, CONTABILIDAD, DOCTOR, AUDITOR |
 | GET | `/api/patients/:id` (con `doctor_name`) | ídem |
 | GET | `/api/patients/:id/attentions` (historial con `total` y `debt`) | ídem |
-| POST | `/api/patients` (`doctor_id` obligatorio) | `patients.create` |
+| POST | `/api/patients` (`doctor_id` **opcional**: sin doctor, sus atenciones van sin comisión ni descuento por convenio) | `patients.create` |
 | PATCH | `/api/patients/:id` | `patients.edit` |
 | DELETE | `/api/patients/:id` (409 si tiene atenciones: desactivarlo) | `patients.delete` |
 
@@ -209,8 +209,18 @@ Los filtros `from` y `to` (`YYYY-MM-DD`) son **días en la hora de la clínica**
 | POST · PATCH · DELETE | `/api/studies` · `/api/studies/:id` (DELETE: 409 si tiene atenciones) | `studies.create` / `studies.edit` |
 | POST | `/api/studies/:id/prices` `{ price_with_report, price_without_report, effective_date, is_active }` | `studies.edit` |
 | PATCH · DELETE | `/api/study-prices/:id` | `studies.edit` |
+| POST | `/api/studies/import` `{ filas, fecha_vigencia, aplicar }`: **carga masiva desde Excel** (ver abajo) | `studies.create` y `studies.edit` |
 
 **Una sola tarifa activa por estudio:** al crear o activar una tarifa, la anterior se desactiva en la misma transacción (y un índice único lo garantiza en la base).
+
+**Carga masiva (Excel), por sucursal.** En la app: Estudios y tarifas → "Carga masiva (Excel)".
+- **Plantilla:** trae los estudios y las tarifas actuales de la sucursal, con las columnas *Nombre del estudio · Descripción · Precio con informe · Precio sin informe · Comisión fija · Activo (SI/NO)* y una hoja de instrucciones.
+- **Lectura:** el navegador lee el Excel y manda las filas en JSON (máximo 2000). Acepta `150`, `150,50` y `1.250,00`.
+- **Coincidencia:** por **nombre**, sin importar mayúsculas, tildes ni espacios. Si el nombre ya existe, se actualiza; si no, se crea.
+- **Precios:** si cambian, se crea una **tarifa nueva** con la fecha de vigencia elegida y la anterior queda en el historial.
+- **Celdas vacías:** en un estudio existente no cambian nada.
+- **Vista previa:** con `aplicar: false` solo devuelve el plan (crear, actualizar, tarifas nuevas, sin cambios) y los **errores con su número de fila**.
+- **Aplicar:** con `aplicar: true` se ejecuta en una transacción, **todo o nada**: si hay un solo error, no se guarda ninguna fila.
 
 ### Atenciones 🔒
 

@@ -348,8 +348,8 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
         phone: form.phone || null,
         email: form.email || null,
         birth_date: form.birth_date || null,
-        // Todo paciente debe tener doctor: si no se eligió, no se envía
-        doctor_id: form.doctor_id || undefined,
+        // Opcional: "Sin doctor" lo deja vacío (sus atenciones van sin comisión)
+        doctor_id: form.doctor_id || null,
         notes: form.notes || null,
       });
     } catch (e) {
@@ -375,9 +375,10 @@ function PatientDataCard({ patient, doctors, canEdit, onSaved }: any) {
         <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!canEdit} /></div>
         <div>
           <Label>Doctor referente</Label>
-          <Select value={form.doctor_id} onValueChange={(v) => setForm({ ...form, doctor_id: v })} disabled={!canEdit}>
+          <Select value={form.doctor_id || "none"} onValueChange={(v) => setForm({ ...form, doctor_id: v === "none" ? "" : v })} disabled={!canEdit}>
             <SelectTrigger><SelectValue placeholder="Sin doctor" /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="none">Sin doctor</SelectItem>
               {(doctors as any[]).map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
