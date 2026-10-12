@@ -1,7 +1,7 @@
-import bcrypt from "bcryptjs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { sql, type Kysely } from "kysely";
 import type { Tenant } from "@tenancy-node/core";
+import { hashPassword } from "../lib/password.js";
 
 /**
  * Seed de tenancy-node: corre al crear cada sucursal (después de las migraciones), también cuando
@@ -16,7 +16,7 @@ export async function seedTenant(db: Kysely<any>, tenant: Tenant) {
   if (Number(rows[0]?.n ?? 0) > 0) return;
 
   const id = randomUUID();
-  const hash = await bcrypt.hash(randomBytes(32).toString("base64url"), 12);
+  const hash = await hashPassword(randomBytes(32).toString("base64url"));
   await sql`
     INSERT INTO users (id, username, full_name, email, password_hash, approved, active, must_change_password)
     VALUES (${id}, 'admin', ${`Administrador ${tenant.name}`.slice(0, 200)}, ${`admin@${tenant.id.value}.local`}, ${hash}, 1, 1, 1)

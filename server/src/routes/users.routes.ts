@@ -1,10 +1,10 @@
-import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { db, withTransaction, type Db } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { CacheKeys, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
+import { hashPassword } from "../lib/password.js";
 import { ROLES, type Role } from "../lib/permissions.js";
 import { requireAuth, requirePermission, signToken } from "../middleware/auth.js";
 import { sensitiveLimiter } from "../middleware/rate-limit.js";
@@ -103,7 +103,7 @@ const createSchema = z.object({
 usersRouter.post("/", requirePermission("users.create"), async (req, res) => {
   const data = createSchema.parse(req.body);
   if (isAdmin(data.roles) && !isAdmin(req.user!.roles)) throw new HttpError(403, "Solo un ADMIN puede crear otro ADMIN");
-  const hash = await bcrypt.hash(data.password, 12);
+  const hash = await hashPassword(data.password);
   const user = await withTransaction(async (tx) => {
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
     await tx.query(
@@ -132,7 +132,7 @@ usersRouter.patch("/:id", requirePermission("users.edit"), sensitiveLimiter, asy
   const data = updateSchema.parse(req.body);
   if (Object.keys(data).length === 0) throw new HttpError(400, "No hay campos para actualizar");
   if (id === req.user!.id && data.active === false) throw new HttpError(400, "No puedes desactivar tu propio usuario");
-  const hash = data.password ? await bcrypt.hash(data.password, 12) : null;
+  const hash = data.password ? await hashPassword(data.password) : null;
 
   const user = await withTransaction(async (tx) => {
     const target = await findUser(tx, id, true);
