@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ExternalLink, ImageUp, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -79,8 +78,8 @@ function SitePage() {
     if (file.size > IMAGE_MAX_BYTES) return toast.error("La imagen no puede pesar más de 2 MB");
     setUploading(true);
     try {
-      const { url } = await apiUpload<{ url: string }>("/api/site/images", file);
-      set("hero", "image", url);
+      const { key, url } = await apiUpload<{ key: string; url: string }>("/api/site/images", file);
+      setSite((s) => (s ? { ...s, hero: { ...s.hero, image: key, image_url: url } } : s));
       toast.success("Imagen subida. Guarda para publicarla.");
     } catch (e) {
       toast.error(translateError(e));
@@ -111,14 +110,16 @@ function SitePage() {
         <F label="Texto del botón de WhatsApp"><Input value={site.hero.cta_label} maxLength={60} onChange={(e) => set("hero", "cta_label", e.target.value)} /></F>
         <F label="Imagen principal (si no hay, se muestra el logo)">
           <div className="flex items-center gap-3">
-            {site.hero.image
-              ? <img src={site.hero.image} alt="" className="h-14 w-14 rounded-md border object-cover" />
+            {site.hero.image_url
+              ? <img src={site.hero.image_url} alt="" className="h-14 w-14 rounded-md border object-cover" />
               : <div className="grid h-14 w-14 place-items-center rounded-md border text-[10px] text-muted-foreground">Logo</div>}
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
             <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
               {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ImageUp className="mr-1 h-4 w-4" />}Subir
             </Button>
-            {site.hero.image && <Button type="button" variant="ghost" size="sm" onClick={() => set("hero", "image", "")}>Quitar</Button>}
+            {site.hero.image && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSite((s) => (s ? { ...s, hero: { ...s.hero, image: "", image_url: "" } } : s))}>Quitar</Button>
+            )}
           </div>
         </F>
       </Section>
@@ -207,11 +208,12 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
+// <label> envuelve el campo: el texto queda asociado (lectores de pantalla, clic en la etiqueta)
 function F({ label, span, children }: { label: string; span?: boolean; children: ReactNode }) {
   return (
-    <div className={`space-y-1.5 ${span ? "sm:col-span-2" : ""}`}>
-      <Label>{label}</Label>
+    <label className={`block space-y-1.5 ${span ? "sm:col-span-2" : ""}`}>
+      <span className="text-sm font-medium leading-none">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

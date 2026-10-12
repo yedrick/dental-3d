@@ -86,6 +86,10 @@ server/
     │                        notifications, users, roles, params, audit, reports (dashboard), branding
     └── scripts/             create-admin.ts, import-supabase.ts
 test/fixtures/               base de ejemplo con estructura de Supabase (para probar la importación)
+test/api/                    pruebas de la API por fase (Python, contra un servidor corriendo)
+test/massive/                prueba masiva (N sucursales a la vez) y prueba de carga
+test/e2e/                    pruebas en navegador (Playwright + Chrome): panel y flujo completo
+                             (ver test/README.md)
 ```
 
 ## Endpoints
@@ -376,6 +380,17 @@ La lista de estudios de la portada sale sola del catálogo activo de la sucursal
 ## Redis (caché compartida)
 
 Con `REDIS_URL=redis://127.0.0.1:6379`, tenancy-node usa `@tenancy-node/cache-redis` para toda la caché por sucursal (sesiones, permisos, catálogos, página web y reportes). Además usa `redisInvalidation`, así los cambios de sucursales llegan al instante a todas las réplicas. Sin `REDIS_URL` se usa la memoria del proceso.
+
+## Conexiones a MySQL
+
+| Variable | Por defecto | Qué controla |
+|---|---|---|
+| `CENTRAL_POOL_MAX` | 30 | Conexiones a la base central. **No crear más sucursales a la vez que este número** (tenancy-node 0.10 se bloquea; ver `TENANCY-NODE-REPORTE.md`, punto 8) |
+| `TENANT_POOL_MAX` | 5 | Conexiones por sucursal |
+| `TENANT_MAX_OPEN_POOLS` | 100 | Sucursales con pool abierto a la vez |
+| `TENANT_POOL_IDLE_MS` | 60000 | A los cuántos ms sin uso se cierra el pool de una sucursal |
+
+Regla: `TENANT_POOL_MAX × sucursales activas + CENTRAL_POOL_MAX < max_connections` de MySQL.
 
 ## Copiar datos desde Supabase
 

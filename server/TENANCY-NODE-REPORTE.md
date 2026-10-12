@@ -1,5 +1,7 @@
 # Reporte para el equipo de tenancy-node
 
+> **Actualización (v0.10.0, 12/10/2026):** los puntos 1 a 7 quedaron **corregidos en v0.9.0**. Los verificamos aquí con pruebas reales, ver "Verificación de v0.10.0". En las pruebas masivas apareció un problema nuevo y **grave**: el **#8**, un bloqueo del pool central al crear varias sucursales a la vez. Más abajo va también una sugerencia de capacidad (#9).
+
 Hallazgos al integrar **tenancy-node v0.8.0** (instalado desde GitHub Releases) en Dental-3D: Express 5, MySQL 8.4, una base por sucursal, resolver por subdominio, `credentials: 'per-tenant'`, panel `admin-api` + `admin-ui`, `cache-redis`.
 
 Cada punto está escrito para copiarlo como *issue*: paquete, qué pasa, cómo se reproduce, qué se esperaba, arreglo sugerido y cómo lo resolvimos aquí mientras tanto.
@@ -15,6 +17,10 @@ Cada punto está escrito para copiarlo como *issue*: paquete, qué pasa, cómo s
 | 5 | `@tenancy-node/admin-ui` | Mejora | Media: "Nuevo tenant" no permite `data` | El `seed` crea un ADMIN genérico |
 | 6 | `@tenancy-node/admin-ui` | Mejora | Media: el tema no permite **subir** el logo | Se sube desde la app |
 | 7 | `@tenancy-node/core` | Documentación | Baja: `tenancy.theme()` queda desactualizado en la misma petición | Se usa el valor que devuelve `update` |
+| **8** | `@tenancy-node/db` | **Bug** | **Crítica**: crear tantas sucursales a la vez como conexiones tiene el pool central **bloquea toda la API** | `CENTRAL_POOL_MAX=30` y la indicación de no crear más que eso a la vez |
+| 9 | `@tenancy-node/db` | Mejora | Media: no hay un tope de conexiones por servidor; el límite de MySQL se alcanza sin aviso | Variables `TENANT_POOL_*` y fórmula en la guía |
+
+**Estado en v0.10.0:** 1 a 7 ✅ corregidos y verificados. 8 y 9 siguen abiertos.
 
 ## 1. `db-mysql`: `destroy()` no cierra el pool nativo si nunca se usó Kysely
 
@@ -112,10 +118,65 @@ createAdminApi(tenancy, { sessionSecret, trustProxy: 1 }); // o: clientIp: (req)
 
 **Sugerencia:** documentarlo ("usa el `Theme` que devuelve `update`"), o refrescar el tenant del contexto actual cuando el `update` es sobre ese mismo tenant.
 
+## 8. `db`: bloqueo del pool central al aprovisionar en paralelo (crítico)
+
+**Qué pasa:** `DatabaseProvisioning.provision()` envuelve todo el aprovisionamiento en `driver.withLock(central, 'tenancy:<id>', …)`. En MySQL, `withLock` toma **una conexión del pool central** y la retiene durante todo el aprovisionamiento (`GET_LOCK` … `RELEASE_LOCK`). Por dentro, `run()` necesita **más** conexiones del mismo pool para registrar los pasos, leer y guardar el tenant y elegir el servidor.
+
+Con `C` aprovisionamientos simultáneos y un pool central de `C` conexiones, cada uno retiene una conexión y espera otra que nunca se libera: **bloqueo permanente**. Como `mysql2` espera indefinidamente una conexión libre, nada falla con error; todo queda colgado.
+
+**Consecuencias, medidas aquí:**
+- Las sucursales quedan para siempre en `provisioning`, en el paso `placement`.
+- `tenancy.health()` responde `database health check timed out`.
+- **Toda la API deja de responder**, incluidas las sucursales que ya existían: la identificación de cada petición usa la base central. Hay que reiniciar el proceso.
+- En MySQL no corre ninguna consulta (`PROCESSLIST` vacío): las conexiones están tomadas por el proceso esperando.
+
+**Cómo reproducirlo** (Express + `adminMiddleware`, MySQL 8.4):
+
+| `central.pool.max` | Tenants creados a la vez (`POST /admin/api/tenants`) | Resultado |
+|---|---|---|
+| 4 | 3 | Todos `active`, API sana |
+| 4 | **4** | Los 4 en `provisioning`; `/api/health` → `{"ok":false}`; un tenant existente (`/tenancy/me`) sin respuesta |
+| 10 (por defecto) | 30 | Igual: 11 quedaron en `provisioning` y la API se bloqueó |
+
+Lo mismo pasaría con `npx tenancy create --from=archivo.csv --concurrency=N` si `N ≥ central.pool.max`.
+
+**Arreglos sugeridos** (cualquiera sirve; lo ideal es combinar el primero con el tercero):
+1. Que `withLock` use una **conexión dedicada fuera del pool** (crearla y cerrarla con el driver nativo), así el candado nunca compite con el trabajo.
+2. Un **semáforo de aprovisionamiento** con un máximo de `pool.max - 2` en paralelo; el resto espera en cola.
+3. Un **tiempo máximo para obtener conexión** del pool central (en mysql2, `acquireTimeout`/`queueLimit` vía Kysely): en vez de colgarse, fallaría el aprovisionamiento con un error claro, reintentable.
+
+**Aquí:** `CENTRAL_POOL_MAX` (30 por defecto) y la indicación en la guía de no crear más sucursales a la vez que ese número.
+
+## 9. `db`: no hay un tope de conexiones por servidor
+
+**Qué pasa:** cada tenant abre un pool de hasta `pool.max` conexiones y `maxOpenPools` limita la cantidad de **pools**, pero no hay un presupuesto de **conexiones** por servidor. En la prueba masiva, 25 tenants × 5 + 30 del central = 155 superaron `max_connections = 151` (valor por defecto de MySQL). Las peticiones de las sucursales que llegaron últimas fallaron con `Too many connections` (500).
+
+**Sugerencias:**
+- Una opción `maxConnectionsPerServer`: el registro cierra los pools libres menos usados para no pasar del límite, o espera.
+- O al menos un aviso al arrancar o en `health()` si `maxOpenPools × pool.max + central.pool.max` supera el `max_connections` del servidor, que se puede consultar con `SELECT @@max_connections`.
+
+**Aquí:** `TENANT_POOL_MAX`, `TENANT_MAX_OPEN_POOLS` y `TENANT_POOL_IDLE_MS` configurables, y la fórmula en la guía de despliegue.
+
+## Verificación de v0.10.0 (12/10/2026)
+
+Hecha en Dental-3D con MySQL 8.4, Redis 7, `TRUST_PROXY=1` y Chrome real. Las pruebas están en `server/test/`.
+
+| Punto | Prueba | Resultado |
+|---|---|---|
+| 1. Fuga de conexiones | Solo pool nativo en 3 tenants → `tenancy.close()` | ✅ 0 sockets abiertos (con 0.8.0 quedaban) |
+| 1. A escala | 25 tenants con carga → 80 s sin tráfico | ✅ De 156 a 31 conexiones (solo queda el pool central) |
+| 2. IP real en el panel | 6 fallos desde `X-Forwarded-For: 10.0.0.1` → login desde `10.0.0.2` | ✅ Bloquea solo a 10.0.0.1 (429); 10.0.0.2 entra (200); la auditoría guarda las IP reales |
+| 3. Tema efectivo | Editor de tema de un tenant nuevo (en el navegador) | ✅ Parte de `#0F172A` (`theme.defaults` de la app) |
+| 6. Subir el logo desde el panel | `PUT /tenants/:id/theme/logo` con PNG y con SVG | ✅ PNG guardado y visible en `/tenancy/me`; SVG rechazado (415) |
+| `tenantUsers` (0.10.0) | 25 tenants: crear un ADMIN por tenant desde el panel, listar, rol o email inválidos | ✅ (con el adaptador de la app; email normalizado y rol validado, ver abajo) |
+| "Entrar como" (0.10.0) | Navegador: pestaña Usuarios → "Entrar como" | ✅ Abre la app del tenant con sesión y la app pide activar la cuenta |
+
+**Ajustes hechos en el adaptador `tenantUsers` de la app (no son del módulo):** email en minúsculas y validado, rol validado (422 en vez de 500) y nombre obligatorio.
+
 ## Qué vistas son del módulo y cuáles de la app
 
 | Vista | Origen |
 |---|---|
-| **Panel de la plataforma** (`dominio.com/admin/`): Login, Dashboard, Tenants, Nuevo tenant (con progreso), Detalle (Resumen, Dominios, Tema, Base de datos, Datos, Errores), Webhooks, Eventos, Usuarios, Auditoría, Mi cuenta (2FA) | **tenancy-node** (`@tenancy-node/admin-ui`), ya compilado. **No se modificó**: los puntos 3 a 6 son de aquí |
+| **Panel de la plataforma** (`dominio.com/admin/`): Login, Dashboard, Tenants, Nuevo tenant (con progreso), Detalle (Resumen, **Usuarios**, Dominios, Tema, Base de datos, Datos, Errores), Webhooks, Eventos, Usuarios del panel, Auditoría, Mi cuenta (2FA) | **tenancy-node** (`@tenancy-node/admin-ui` 0.10.0), ya compilado. **No se modificó**. Solo se le conecta el adaptador `tenantUsers` (`src/tenancy/admin-users.ts`) |
 | Pantallas de cada sucursal (`<sucursal>.dominio.com`): login, dashboard, doctores, pacientes, atenciones, caja, reportes, usuarios, etc. | La app. Las generó Lovable sobre Supabase; en la Fase 5 se reescribieron para usar la API Node |
 | Pantallas nuevas de la app: "Marca de la sucursal", "Página web", "Activa la cuenta de administrador", destino de "Entrar como…" (`/auth/impersonate`) | Nuevas, hechas en esta migración |

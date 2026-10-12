@@ -157,9 +157,9 @@ function Landing() {
               <div className="relative">
                 <div className="absolute -inset-8 rounded-full border border-white/10" />
                 <div className="absolute -inset-16 rounded-full border border-white/5" />
-                {site.hero.image ? (
+                {site.hero.image_url ? (
                   <img
-                    src={site.hero.image}
+                    src={site.hero.image_url}
                     alt={CONTACT.name}
                     className="relative h-64 w-64 sm:h-80 sm:w-80 rounded-3xl object-cover drop-shadow-[0_20px_60px_rgba(79,70,229,0.5)]"
                   />

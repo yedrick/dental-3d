@@ -574,7 +574,7 @@ Hoy el frontend tiene 5 minutos **para todo** (`src/router.tsx`). Es arriesgado 
 
 - **Paginación** en auditoría (Fase 4), igual que en pacientes, atenciones, caja, depósitos y pagos.
 - Revisar las consultas nuevas con `EXPLAIN` y activar `slow_query_log` (umbral de 200 ms) en producción.
-- **Conexiones:** `sucursales × 5 + pool central ≤ max_connections` de MySQL. Con más de 30 sucursales activas a la vez, subir `max_connections` o agregar un servidor (`npx tenancy servers:add`). tenancy-node reparte las sucursales nuevas al servidor con menos sucursales (`placement: 'least-tenants'`) y mueve una existente con `npx tenancy move`.
+- **Conexiones:** `TENANT_POOL_MAX (5) × sucursales activas + CENTRAL_POOL_MAX (30) < max_connections` de MySQL (todo configurable en `.env`). Con más de 20 sucursales activas a la vez, subir `max_connections` (la guía usa 400) o agregar un servidor (`npx tenancy servers:add`). tenancy-node reparte las sucursales nuevas al servidor con menos sucursales (`placement: 'least-tenants'`) y mueve una existente con `npx tenancy move`.
 - **Cambios de base:** siempre con una migración nueva en `db/tenant/` y `npm run db:migrate` (se aplica a todas las sucursales, de 5 en 5). Nunca editar una migración ya aplicada.
 
 ## Logos y marca por sucursal
@@ -681,3 +681,4 @@ Se agregó `"server"` a `ignores` en `eslint.config.js`. Pendiente: darle a `ser
 10. ✅ Fase 5.1: el frontend usa la API (rama `dev`).
 11. ✅ Fase 5.2 preparada para servidor propio (`deploy/`). Falta publicar: seguir `deploy/DEPLOY.md`.
 12. Fase 6: quitar Lovable. Incluye elegir **un** gestor de paquetes y subir su lockfile, para builds reproducibles.
+13. ✅ tenancy-node 0.10.0 revisado (12/10/2026): los puntos 1 a 7 del reporte están corregidos. Pruebas masivas, de carga y en navegador en `test/`. Apareció el **punto 8** (bloqueo al crear muchas sucursales a la vez), que está mitigado con `CENTRAL_POOL_MAX`. Falta avisarlo al equipo de tenancy-node.
