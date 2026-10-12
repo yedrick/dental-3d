@@ -8,7 +8,8 @@ import { STALE } from "@/lib/query-config";
 
 export interface SiteContent {
   seo: { title: string; description: string };
-  hero: { badge: string; title: string; highlight: string; subtitle: string; cta_label: string; image: string };
+  /** image = llave en el almacenamiento de la sucursal; image_url = URL para mostrarla (la calcula la API). */
+  hero: { badge: string; title: string; highlight: string; subtitle: string; cta_label: string; image: string; image_url?: string };
   stats: { value: string; label: string }[];
   studies: { title: string; subtitle: string; empty: string };
   contact: {

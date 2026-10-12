@@ -27,8 +27,12 @@ export const SITE_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const text = (max: number) => z.string().trim().max(max);
 // Solo https (o vacío): evita enlaces "javascript:" en la página pública
 const httpsUrl = z.union([z.literal(""), z.url({ protocol: /^https$/, message: "Usa un enlace https://" }).max(500)]);
-// Imagen subida a esta misma sucursal (o ninguna)
-const siteImage = z.union([z.literal(""), z.string().regex(/^\/tenancy\/assets\/site\/[0-9a-f]{16}\.(png|jpg|webp)$/, "Imagen inválida")]);
+// Imagen subida a esta misma sucursal (o ninguna). Se guarda la LLAVE del almacenamiento
+// (site/<hash>.png) y la URL se calcula al leer: así funciona con disco local, S3 y R2.
+// Se aceptan también las rutas viejas /tenancy/assets/site/… y se convierten a llave.
+const SITE_KEY = /^site\/[0-9a-f]{16}\.(png|jpg|webp)$/;
+const toKey = (v: unknown) => (typeof v === "string" ? v.replace(/^\/tenancy\/assets\//, "") : v);
+const siteImage = z.preprocess(toKey, z.union([z.literal(""), z.string().regex(SITE_KEY, "Imagen inválida")]));
 
 export const siteSchema = z.object({
   seo: z.object({ title: text(120), description: text(300) }),
@@ -39,6 +43,8 @@ export const siteSchema = z.object({
     subtitle: text(500),
     cta_label: text(60),
     image: siteImage,
+    // Solo de lectura: la API la calcula a partir de "image" (no se guarda)
+    image_url: z.string().optional(),
   }),
   stats: z.array(z.object({ value: text(12), label: text(40) })).max(4),
   studies: z.object({ title: text(120), subtitle: text(300), empty: text(200) }),
@@ -118,12 +124,16 @@ function withDefaults(stored: Partial<SiteContent> | null, name: string): SiteCo
   return merged as SiteContent;
 }
 
-async function loadSite() {
+async function loadSite(): Promise<SiteContent> {
   const name = tenancy.currentOrFail().name;
-  return cache().remember(CACHE_KEY, CACHE_TTL, async () => {
+  const site = await cache().remember(CACHE_KEY, CACHE_TTL, async () => {
     const [row] = await db().query<{ content: Partial<SiteContent> }[]>("SELECT content FROM site_content WHERE id = 1");
     return withDefaults(row?.content ?? null, name);
   });
+  // La URL se calcula en cada lectura (no se cachea): con S3/R2 sin dominio público son URLs firmadas que vencen
+  const key = toKey(site.hero.image) as string;
+  const image_url = key && SITE_KEY.test(key) ? await tenancy.storage().url(key) : "";
+  return { ...site, hero: { ...site.hero, image: key, image_url } };
 }
 
 // ---------- Público (portada) ----------
@@ -139,7 +149,8 @@ siteRouter.get("/", requirePermission("site.edit"), async (_req, res) => {
 });
 
 siteRouter.put("/", requirePermission("site.edit"), async (req, res) => {
-  const content = siteSchema.parse(req.body);
+  const parsed = siteSchema.parse(req.body);
+  const content = { ...parsed, hero: { ...parsed.hero, image_url: undefined } }; // la URL no se guarda
   await withTransaction(async (tx) => {
     await tx.query(
       `INSERT INTO site_content (id, content, updated_by) VALUES (1, ?, ?)
@@ -149,7 +160,7 @@ siteRouter.put("/", requirePermission("site.edit"), async (req, res) => {
     await audit(tx, req.user!.id, "SITE_UPDATE", "site_content", "1", content);
   });
   await cache().delete(CACHE_KEY);
-  res.json(content);
+  res.json(await loadSite());
 });
 
 /** Restablece el contenido por defecto. */

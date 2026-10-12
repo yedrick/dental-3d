@@ -38,7 +38,7 @@ export const tenancyConfig = defineConfig({
   plugins: [
     database({
       driver: mysql(),
-      central: { url: config.tenancy.databaseUrl },
+      central: { url: config.tenancy.databaseUrl, pool: { max: config.tenancy.centralPoolMax } },
       encryptionKey: config.tenancy.encryptionKey,
       // Cada sucursal tiene su propio usuario MySQL con acceso SOLO a su base
       credentials: "per-tenant",
@@ -46,7 +46,11 @@ export const tenancyConfig = defineConfig({
       migrations: { tenant: fileURLToPath(new URL("../../db/tenant", import.meta.url)) },
       // ADMIN por defecto de cada sucursal nueva (cuenta por activar)
       seed: seedTenant,
-      pool: { max: 5, maxOpenPools: 100, idleTimeoutMs: 60_000 },
+      pool: {
+        max: config.tenancy.tenantPoolMax,
+        maxOpenPools: config.tenancy.tenantMaxOpenPools,
+        idleTimeoutMs: config.tenancy.tenantPoolIdleMs,
+      },
     }),
   ],
 });

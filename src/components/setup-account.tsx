@@ -6,7 +6,6 @@ import { translateError } from "@/lib/translate-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -59,11 +58,11 @@ export function SetupAccount() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1 sm:col-span-2"><Label>Nombre completo</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></div>
-          <div className="space-y-1"><Label>Usuario</Label><Input value={username} autoComplete="username" onChange={(e) => setUsername(e.target.value)} /></div>
-          <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div className="space-y-1"><Label>Contraseña</Label><Input type="password" value={pw} autoComplete="new-password" onChange={(e) => setPw(e.target.value)} /></div>
-          <div className="space-y-1"><Label>Repetir contraseña</Label><Input type="password" value={pw2} autoComplete="new-password" onChange={(e) => setPw2(e.target.value)} /></div>
+          <label className="block space-y-1 sm:col-span-2"><span className="text-sm font-medium">Nombre completo</span><Input value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+          <label className="block space-y-1"><span className="text-sm font-medium">Usuario</span><Input value={username} autoComplete="username" onChange={(e) => setUsername(e.target.value)} /></label>
+          <label className="block space-y-1"><span className="text-sm font-medium">Email</span><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="block space-y-1"><span className="text-sm font-medium">Contraseña</span><Input type="password" value={pw} autoComplete="new-password" onChange={(e) => setPw(e.target.value)} /></label>
+          <label className="block space-y-1"><span className="text-sm font-medium">Repetir contraseña</span><Input type="password" value={pw2} autoComplete="new-password" onChange={(e) => setPw2(e.target.value)} /></label>
           <p className="text-xs text-muted-foreground sm:col-span-2">Mínimo 10 caracteres, con mayúscula, minúscula, número y símbolo.</p>
           <div className="flex gap-2 sm:col-span-2">
             <Button onClick={save} disabled={busy}>{busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Activar cuenta</Button>

@@ -41,7 +41,16 @@ default-time-zone = '+00:00'      # obligatorio: las fechas se guardan en UTC
 bind-address      = 127.0.0.1
 character-set-server = utf8mb4
 collation-server     = utf8mb4_unicode_ci
+max_connections      = 400        # ver "Conexiones" abajo
 ```
+
+**Conexiones:** cada sucursal con tráfico abre hasta `TENANT_POOL_MAX` conexiones (5 por defecto); la base central, hasta `CENTRAL_POOL_MAX` (30). Tiene que cumplirse:
+
+```
+TENANT_POOL_MAX × sucursales activas a la vez + CENTRAL_POOL_MAX  <  max_connections
+```
+
+El valor por defecto de MySQL (151) alcanza para unas 20 sucursales activas. Con 400 alcanza para unas 70. Los pools sin uso se cierran solos a los `TENANT_POOL_IDLE_MS` (60 s).
 
 Después, `sudo systemctl restart mysql` y, como root de MySQL:
 
@@ -86,6 +95,8 @@ Edita `server/.env`:
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `STORAGE_DIR` / `PRIVATE_STORAGE_DIR` | `./storage` / `./storage-private` |
 | `REDIS_URL` | `redis://127.0.0.1:6379`: caché compartida por sucursal (sesiones, catálogos, página web, reportes) |
+| `CENTRAL_POOL_MAX` | `30`. **No crear más sucursales a la vez que este número**: tenancy-node 0.10 se bloquea entero (ver `server/TENANCY-NODE-REPORTE.md`, punto 8) |
+| `TENANT_POOL_MAX` / `TENANT_MAX_OPEN_POOLS` / `TENANT_POOL_IDLE_MS` | `5` / `100` / `60000`: ver "Conexiones" en el paso 2 |
 | `TENANCY_ADMIN_SECRET` | `openssl rand -base64 48`: enciende el **panel de la plataforma** en `https://dental3d.com/admin/` |
 | `ADMIN_SECURE_COOKIES` | `true` |
 | `TENANT_PUBLIC_URL` | `https://{tenant}.dental3d.com` ("Entrar como…" abre esta dirección) |

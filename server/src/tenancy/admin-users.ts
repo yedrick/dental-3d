@@ -5,6 +5,7 @@ import { db, withTransaction } from "../db.js";
 import { audit } from "../lib/audit.js";
 import { ROLES, type Role } from "../lib/permissions.js";
 import { passwordSchema } from "../routes/auth.routes.js";
+import { z } from "zod";
 
 const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Administrador",
@@ -68,7 +69,15 @@ export const tenantUsers: TenantUsersAdapter = {
     };
   },
 
-  async create({ name, email, role, password }) {
+  async create({ name, email: rawEmail, role, password }) {
+    // El login busca el email en minúsculas: se guarda igual que en POST /api/users
+    const emailCheck = z.email().safeParse(String(rawEmail ?? "").trim().toLowerCase());
+    if (!emailCheck.success) throw new AdminHttpError(422, "INVALID_EMAIL", "Email inválido");
+    const email = emailCheck.data;
+    if (role !== undefined && role !== null && !(ROLES as readonly string[]).includes(role)) {
+      throw new AdminHttpError(422, "INVALID_ROLE", `Rol inválido. Usa uno de: ${ROLES.join(", ")}`);
+    }
+    if (!String(name ?? "").trim()) throw new AdminHttpError(422, "INVALID_NAME", "El nombre es obligatorio");
     const roleValue = (role ?? "RECEPCION") as Role;
     if (password !== undefined) {
       const check = passwordSchema.safeParse(password);
@@ -88,7 +97,7 @@ export const tenantUsers: TenantUsersAdapter = {
         await tx.query(
           `INSERT INTO users (id, username, full_name, email, password_hash, approved, active, must_change_password)
            VALUES (?, ?, ?, ?, ?, 1, 1, ?)`,
-          [id, username, name.slice(0, 200), email, hash, password === undefined ? 1 : 0],
+          [id, username, name.trim().slice(0, 200), email, hash, password === undefined ? 1 : 0],
         );
         await tx.query("INSERT INTO user_roles (user_id, role) VALUES (?, ?)", [id, roleValue]);
         await audit(tx, null, "USER_CREATE_PLATFORM", "users", id, {
@@ -103,7 +112,7 @@ export const tenantUsers: TenantUsersAdapter = {
       return { id, name, email, role: roleValue, active: true };
     } catch (error) {
       if ((error as { code?: string }).code === "ER_DUP_ENTRY")
-        throw new AdminHttpError(409, "EMAIL_TAKEN", "Ya existe un usuario con ese email en esta sucursal");
+        throw new AdminHttpError(409, "USER_TAKEN", "Ya existe un usuario con ese email o nombre de usuario en esta sucursal");
       throw error;
     }
   },
