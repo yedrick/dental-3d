@@ -71,7 +71,7 @@ async function loadParams(tx: Db): Promise<Params> {
  * - Vale: monto fijo del parámetro voucher_amount (50 Bs), porcentaje 0.
  * - Doctor con porcentaje: precio × su %, o el % de primer paciente (50) si es su primera atención.
  * - Doctor sin porcentaje: comisión fija del estudio.
- * DECISIÓN PENDIENTE (PLAN.md): hoy el 50% del primer paciente solo aplica a doctores con porcentaje.
+ * DECISIÓN PENDIENTE: hoy el 50% del primer paciente solo aplica a doctores con porcentaje.
  */
 export function commissionFor(
   doctor: CommissionDoctor,

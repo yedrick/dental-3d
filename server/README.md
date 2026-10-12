@@ -6,7 +6,7 @@ Backend propio que reemplaza a Supabase, **multi-sucursal** con [tenancy-node](h
 - La sucursal se identifica por **subdominio**: `sur.dental3d.com` → sucursal `sur`. En local: `sur.localhost:4000`.
 - Caché, archivos (logo) y logs van **aislados por sucursal**.
 
-Fases y pendientes: [PLAN.md](PLAN.md). Errores y mejoras para el equipo de tenancy-node: [TENANCY-NODE-REPORTE.md](TENANCY-NODE-REPORTE.md). Publicar en un servidor propio: [deploy/DEPLOY.md](../deploy/DEPLOY.md).
+El plan, el reporte para el equipo de tenancy-node y las guías de despliegue son documentos internos: no están en el repositorio.
 
 ## Requisitos
 
@@ -476,7 +476,7 @@ Seguridad:
 
 | Variable | Por defecto | Qué controla |
 |---|---|---|
-| `CENTRAL_POOL_MAX` | 30 | Conexiones a la base central. **No crear más sucursales a la vez que este número** (tenancy-node 0.10 se bloquea; ver `TENANCY-NODE-REPORTE.md`, punto 8) |
+| `CENTRAL_POOL_MAX` | 30 | Conexiones a la base central. **No crear más sucursales a la vez que este número** (tenancy-node 0.10 se bloquea si se crean más a la vez) |
 | `TENANT_POOL_MAX` | 5 | Conexiones por sucursal |
 | `TENANT_MAX_OPEN_POOLS` | 100 | Sucursales con pool abierto a la vez |
 | `TENANT_POOL_IDLE_MS` | 60000 | A los cuántos ms sin uso se cierra el pool de una sucursal |
