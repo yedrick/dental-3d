@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Eye, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/patients")({ component: PatientsPage });
 
@@ -140,7 +141,7 @@ function PatientsPage() {
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={7}>Cargando…</TableCell></TableRow>}
+            {isLoading && <TableSkeletonRows cols={7} />}
             {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
             {filtered.map((p: any) => (
               <TableRow key={p.id} className={!p.status ? "opacity-60" : ""}>

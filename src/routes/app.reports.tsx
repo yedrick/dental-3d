@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatMoney, todayLocal } from "@/lib/data";
+import { LinesSkeleton } from "@/components/table-skeleton";
 import {
   Download, TrendingUp, TrendingDown, Users, Wallet, Landmark, Receipt, Activity,
   AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight,
@@ -198,9 +199,11 @@ function ReportsPage() {
           </CardHeader>
           <CardContent>
             {(data?.byDay ?? []).length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                {isLoading ? "Cargando…" : "Sin datos en el período."}
-              </div>
+              isLoading ? (
+                <div className="py-4"><LinesSkeleton lines={6} /></div>
+              ) : (
+                <div className="py-10 text-center text-sm text-muted-foreground">Sin datos en el período.</div>
+              )
             ) : (
               <div className="space-y-1.5 max-h-[360px] overflow-auto pr-1">
                 {(data?.byDay ?? []).slice(0, 30).map(([d, v]) => {

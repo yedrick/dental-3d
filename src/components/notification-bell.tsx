@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet, type Paged } from "@/lib/api";
+import { apiGet, apiGetQuiet, type Paged } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export function NotificationBell() {
   // vuelve a pedir cuando el contador cambia.
   const { data: count } = useQuery({
     queryKey: ["notif-unread-count", user?.id],
-    queryFn: () => apiGet<{ count: number }>("/api/notifications/unread-count"),
+    queryFn: () => apiGetQuiet<{ count: number }>("/api/notifications/unread-count"),
     enabled: !!user,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,

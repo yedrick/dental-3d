@@ -157,14 +157,17 @@ export async function createAttention(tx: Db, input: CreateAttentionInput, userI
     // Lectura con bloqueo (FOR SHARE): ve lo último confirmado. Una lectura normal usaría la
     // "foto" de REPEATABLE READ tomada al inicio de la transacción y no vería la atención que
     // otra transacción acaba de confirmar mientras esta esperaba el bloqueo del doctor.
-    const prior = doctor
-      ? await tx.query<{ one: number }[]>(
+    // Se buscan las atenciones DE ESTE DOCTOR (ps.doctor_id), no las de los pacientes asignados a él:
+    // un paciente sin doctor (o con otro) atendido por este doctor también cuenta. Si no hay, se
+    // revisan además los pacientes asignados a él, por los datos viejos de Supabase sin ps.doctor_id.
+    const has_any = doctor
+      ? (await tx.query<{ one: number }[]>("SELECT 1 AS one FROM patient_studies WHERE doctor_id = ? LIMIT 1 FOR SHARE", [doctor.id])).length > 0 ||
+        (await tx.query<{ one: number }[]>(
           `SELECT 1 AS one FROM patient_studies ps JOIN patients p ON p.id = ps.patient_id
             WHERE p.doctor_id = ? LIMIT 1 FOR SHARE`,
           [doctor.id],
-        )
-      : [];
-    const has_any = prior.length > 0;
+        )).length > 0
+      : false;
 
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
     await tx.query(

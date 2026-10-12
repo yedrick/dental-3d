@@ -2,7 +2,12 @@
 // (sur.dental3d.com/api): la sucursal se identifica por el subdominio. En desarrollo, Vite
 // reenvía /api y /tenancy a http://localhost:4000 (vite.config.ts).
 
+import { activity } from "@/lib/activity";
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+/** Tiempo máximo de espera por petición; los archivos (logos, comprobantes) tienen más. */
+const TIMEOUT_MS = 60_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
 const TOKEN_KEY = "dental3d.token";
 /** Token del ADMIN mientras suplanta a otro usuario, para volver a su sesión. */
 const ADMIN_TOKEN_KEY = "dental3d.admin_token";
@@ -55,6 +60,8 @@ interface RequestOptions {
   body?: unknown;
   /** Archivo binario (logo, comprobante): se envía tal cual con su Content-Type. */
   file?: Blob;
+  /** Consulta en segundo plano (p. ej. cada 30 s): no muestra el indicador de carga. */
+  background?: boolean;
 }
 
 function buildUrl(path: string, query?: Query) {
@@ -79,15 +86,29 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     body = JSON.stringify(opts.body);
   }
 
+  const method = opts.method ?? "GET";
+  const kind = method === "GET" ? "read" : "write";
+  if (!opts.background) activity.start(kind);
   let res: Response;
+  let text: string;
   try {
-    res = await fetch(buildUrl(path, opts.query), { method: opts.method ?? "GET", headers, body });
-  } catch {
-    throw new ApiError(0, "NETWORK_ERROR", "Error de conexión. Verifica tu internet e inténtalo de nuevo.");
+    try {
+      res = await fetch(buildUrl(path, opts.query), {
+        method, headers, body,
+        signal: AbortSignal.timeout(opts.file ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS),
+      });
+      text = res.status === 204 ? "" : await res.text();
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "TimeoutError") {
+        throw new ApiError(0, "TIMEOUT", "El servidor tardó demasiado en responder. Inténtalo de nuevo en un momento.");
+      }
+      throw new ApiError(0, "NETWORK_ERROR", "Error de conexión. Verifica tu internet e inténtalo de nuevo.");
+    }
+  } finally {
+    if (!opts.background) activity.end(kind);
   }
   if (res.status === 204) return undefined as T;
 
-  const text = await res.text();
   const json = text ? safeJson(text) : null;
   if (!res.ok) {
     const err = (json as { error?: { code?: string; message?: string; details?: { field: string; message: string }[] } } | null)?.error;
@@ -111,6 +132,8 @@ function safeJson(text: string) {
 }
 
 export const apiGet = <T = unknown>(path: string, query?: Query) => api<T>(path, { query });
+/** GET en segundo plano: no muestra el indicador de carga (consultas periódicas). */
+export const apiGetQuiet = <T = unknown>(path: string, query?: Query) => api<T>(path, { query, background: true });
 export const apiPost = <T = unknown>(path: string, body?: unknown) => api<T>(path, { method: "POST", body: body ?? {} });
 export const apiPatch = <T = unknown>(path: string, body: unknown) => api<T>(path, { method: "PATCH", body });
 export const apiPut = <T = unknown>(path: string, body?: unknown) => api<T>(path, { method: "PUT", body: body ?? {} });

@@ -19,6 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "sonner";
 import { Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth, ROLES, type AppRole } from "@/lib/auth";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 /** Reglas de la API: ≥10 caracteres, mayúscula, minúscula, número y símbolo. */
 function passwordProblem(pw: string): string | null {
@@ -161,9 +162,7 @@ function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
-            )}
+            {isLoading && <TableSkeletonRows cols={6} />}
             {!isLoading && filtered.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/40">
                 <TableCell>

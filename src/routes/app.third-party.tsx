@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { uploadReceipt, ReceiptThumb } from "@/components/receipt-image";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/third-party")({ component: ThirdPartyPage });
 
@@ -216,8 +217,9 @@ function ThirdPartyPage() {
                 <TableCell><ReceiptThumb path={r.receipt_url} /></TableCell>
               </TableRow>
             ))}
-            {rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground text-center py-6">{isLoading ? "Cargando…" : "Sin pagos en el período."}</TableCell></TableRow>
+            {isLoading && rows.length === 0 && <TableSkeletonRows cols={6} />}
+            {!isLoading && rows.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground text-center py-6">Sin pagos en el período.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

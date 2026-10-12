@@ -22,6 +22,7 @@ import {
   Building2, CalendarDays, FileText, Save, Percent, Stethoscope, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LinesSkeleton } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/patients/$id")({ component: PatientProfile });
 
@@ -113,7 +114,12 @@ function PatientProfile() {
   };
 
   if (patientError) return <div className="p-6 text-sm text-destructive">{translateError(patientError)}</div>;
-  if (!patient) return <div className="p-6 text-sm text-muted-foreground">Cargando…</div>;
+  if (!patient) return (
+    <div className="grid gap-4 p-2 md:grid-cols-3">
+      <div className="space-y-3 rounded-lg border bg-background p-4 md:col-span-2"><LinesSkeleton lines={6} /></div>
+      <div className="space-y-3 rounded-lg border bg-background p-4"><LinesSkeleton lines={4} /></div>
+    </div>
+  );
 
   return (
     <div>

@@ -1,14 +1,13 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useIsFetching, useIsMutating } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { tokenStore } from "@/lib/api";
 import { useBranding } from "@/lib/branding";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
 import { SetupAccount } from "@/components/setup-account";
@@ -17,27 +16,6 @@ export const Route = createFileRoute("/app")({
   ssr: false,
   component: AppLayout,
 });
-
-function GlobalLoader() {
-  const fetching = useIsFetching();
-  const mutating = useIsMutating();
-  const active = fetching + mutating > 0;
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    if (!active) { setShow(false); return; }
-    const t = setTimeout(() => setShow(true), 400);
-    return () => clearTimeout(t);
-  }, [active]);
-  if (!show) return null;
-  return (
-    <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur">
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-      <span>Actualizando…</span>
-    </div>
-  );
-}
-
-
 
 function ImpersonationBanner() {
   const { user, impersonatedBy, setSessionToken, signOut } = useAuth();
@@ -92,9 +70,15 @@ function AppLayout() {
   const navigate = useNavigate();
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [user, loading, navigate]);
   if (loading || !user) return (
-    <div className="grid min-h-screen place-items-center gap-3 text-sm text-muted-foreground">
-      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      <div>Cargando…</div>
+    <div className="grid min-h-screen place-items-center bg-muted/30" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-4">
+        <img src={branding.logo} alt="" className="h-16 w-16 animate-pulse rounded-xl object-contain" />
+        <div className="text-sm font-semibold">{branding.name}</div>
+        <div className="h-1 w-40 overflow-hidden rounded-full bg-primary/15">
+          <div className="loader-bar h-full w-2/5 rounded-full bg-primary" />
+        </div>
+        <span className="sr-only">Cargando…</span>
+      </div>
     </div>
   );
 
@@ -103,7 +87,6 @@ function AppLayout() {
 
   return (
     <SidebarProvider>
-      <GlobalLoader />
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <div className="flex flex-1 flex-col">

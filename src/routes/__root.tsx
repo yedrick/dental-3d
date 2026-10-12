@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth";
 import { BrandingProvider } from "@/lib/branding";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalLoader } from "@/components/global-loader";
 
 function NotFoundComponent() {
   return (
@@ -96,6 +97,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <BrandingProvider>
         <AuthProvider>
+          <GlobalLoader />
           <Outlet />
           <Toaster richColors position="top-right" />
         </AuthProvider>

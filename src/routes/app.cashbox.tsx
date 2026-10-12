@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/cashbox")({ component: CashboxPage });
 
@@ -118,8 +119,9 @@ function CashboxPage() {
                 <TableCell className="text-muted-foreground">{r.created_by_name ?? "-"}</TableCell>
               </TableRow>
             ))}
-            {rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground">{isLoading ? "Cargando…" : "Sin movimientos."}</TableCell></TableRow>
+            {isLoading && rows.length === 0 && <TableSkeletonRows cols={6} />}
+            {!isLoading && rows.length === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground">Sin movimientos.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
