@@ -7,11 +7,15 @@ import { mysql } from "@tenancy-node/db-mysql";
  * - time_zone UTC: created_at (DEFAULT CURRENT_TIMESTAMP) se guarda en UTC aunque el servidor
  *   MySQL esté en otra zona (p. ej. un MySQL local en hora de Bolivia).
  * - sql_mode estricto: un dato inválido da error en vez de guardarse recortado o en cero.
+ *   ONLY_FULL_GROUP_BY solo en MySQL: MariaDB no reconoce las columnas que dependen de la clave
+ *   primaria y rechaza consultas válidas (GROUP BY u.id con u.nombre…). En MySQL sigue activo y
+ *   detecta los GROUP BY ambiguos en desarrollo.
  * Se aplica solo a las conexiones de esta app (base central, sucursales, migraciones y seed):
  * no cambia nada global del servidor ni de otras bases que convivan en él.
  */
+const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION";
 const SESSION_SQL =
-  "SET time_zone = '+00:00', sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'";
+  `SET time_zone = '+00:00', sql_mode = IF(VERSION() LIKE '%MariaDB%', '${STRICT}', 'ONLY_FULL_GROUP_BY,${STRICT}')`;
 
 export function mysqlWithSession(): DatabaseDriver {
   const base = mysql();

@@ -22,7 +22,7 @@ type DashboardData = {
   patients: number;
   doctors: number | null;
   attentions_today: number;
-  /** Facturado hoy: precio + recargo − descuento */
+  /** Ventas de hoy: precio + recargo − descuento */
   income_today: number | null;
   /** Cobrado hoy por la fecha de cada pago, aunque la atención sea de otro día */
   collected_today: number | null;
@@ -53,7 +53,7 @@ function Dashboard() {
         { icon: Users, label: "Pacientes totales", val: data?.patients ?? 0 },
         { icon: Stethoscope, label: "Doctores", val: data?.doctors ?? 0 },
         { icon: ClipboardList, label: "Atenciones hoy", val: data?.attentions_today ?? 0 },
-        { icon: Wallet, label: "Facturado hoy", val: formatMoney(data?.income_today) },
+        { icon: Wallet, label: "Ventas de hoy", val: formatMoney(data?.income_today) },
         {
           icon: HandCoins, label: "Cobrado hoy", val: formatMoney(data?.collected_today),
           // Saldos de atenciones de otros días que se pagaron hoy

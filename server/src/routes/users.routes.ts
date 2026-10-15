@@ -87,10 +87,13 @@ usersRouter.get("/", requirePermission("view.users"), async (req, res) => {
   if (f.approved) { where.push("u.approved = ?"); params.push(f.approved === "true"); }
   if (f.role) { where.push("EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = ?)"); params.push(f.role); }
   const rows = await db().query<{ id: string; roles: string | null }[]>(
-    `SELECT ${USER_FIELDS}, GROUP_CONCAT(ur.role ORDER BY ur.role) AS roles
-       FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id
+    // Roles con subconsulta y no con GROUP BY u.id: MariaDB no acepta columnas fuera del GROUP BY
+    // aunque dependan de la clave primaria (ONLY_FULL_GROUP_BY), y daba "Error interno" en Usuarios.
+    `SELECT ${USER_FIELDS},
+            (SELECT GROUP_CONCAT(ur.role ORDER BY ur.role) FROM user_roles ur WHERE ur.user_id = u.id) AS roles
+       FROM users u
        ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      GROUP BY u.id ORDER BY u.created_at DESC`,
+      ORDER BY u.created_at DESC`,
     params,
   );
   res.json(rows.map((r) => ({ ...r, roles: r.roles ? r.roles.split(",") : [] })));

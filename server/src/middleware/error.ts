@@ -37,7 +37,15 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (e?.type === "entity.parse.failed") return send(res, 400, "BAD_REQUEST", "JSON inválido");
   if (e?.type === "entity.too.large") return send(res, 413, "PAYLOAD_TOO_LARGE", "El archivo o los datos son demasiado grandes");
 
-  // Error inesperado: al log de tenancy (con tenantId) y respuesta sin detalles
-  tenancy.observability.logger.error({ err, method: req.method, path: req.originalUrl }, "error no controlado");
+  // Error inesperado: al registro de errores de tenancy (log + panel /admin → Errores, con la sucursal)
+  // y respuesta sin detalles. Sin la query string: puede llevar datos de pacientes.
+  // La operación es "GET /api/users": es lo que el panel muestra en la columna Operación.
+  const path = req.originalUrl.split("?")[0];
+  tenancy.observability.report(`${req.method} ${path}`, err, {
+    method: req.method,
+    path,
+    status: 500,
+    userId: req.user?.id ?? null,
+  });
   send(res, 500, "INTERNAL_ERROR", "Error interno del servidor");
 }

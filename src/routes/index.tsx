@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
@@ -8,7 +8,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Activity, ShieldCheck, Clock, MapPin, Phone, MessageCircle,
-  ScanLine, Sparkles, ArrowRight, CheckCircle2, Loader2,
+  ScanLine, Sparkles, ArrowRight, CheckCircle2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -68,12 +68,8 @@ function Landing() {
     },
   });
 
-  if (loading) return (
-    <div className="grid min-h-screen place-items-center bg-[#0a1230]">
-      <Loader2 className="h-8 w-8 animate-spin text-white/80" />
-    </div>
-  );
-  if (user) return <Navigate to="/app" />;
+  // Sin redirección a /app: así "Ver página" (Página web) muestra la portada también con sesión abierta
+  const loggedIn = !loading && !!user;
 
   return (
     <div className="min-h-screen bg-[#0a1230] text-white overflow-x-hidden">
@@ -103,7 +99,7 @@ function Landing() {
               <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
             </a>
             <Button asChild size="sm" className="bg-white text-[#0a1230] hover:bg-white/90">
-              <Link to="/auth">Ingresar</Link>
+              {loggedIn ? <Link to="/app">Ir al sistema</Link> : <Link to="/auth">Ingresar</Link>}
             </Button>
           </div>
         </header>

@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, formatMoney, todayLocal } from "@/lib/data";
 import { LinesSkeleton } from "@/components/table-skeleton";
+import { useBranding } from "@/lib/branding";
 import {
-  Download, TrendingUp, TrendingDown, Users, Wallet, Landmark, Receipt, Activity,
+  Download, Printer, TrendingUp, TrendingDown, Users, Wallet, Landmark, Receipt, Activity,
   AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
 
@@ -39,6 +40,8 @@ type ReportSummary = {
   };
   financial: {
     billed: number;
+    billed_with_invoice: { count: number; total: number };
+    billed_without_invoice: { count: number; total: number };
     /** Cobrado en el período por la fecha de cada pago */
     collected: number;
     /** De lo cobrado, lo que es de atenciones de antes del período */
@@ -97,6 +100,8 @@ function ReportsPage() {
     const { operational: op, financial: fin, control: ctl } = raw;
     return {
       totalStudies: fin.billed,
+      withInvoice: fin.billed_with_invoice,
+      withoutInvoice: fin.billed_without_invoice,
       paid: fin.collected,
       paidPrevious: fin.collected_previous ?? 0,
       debt: fin.debt,
@@ -120,14 +125,59 @@ function ReportsPage() {
     [data],
   );
 
-  const exportPdf = () => window.print();
+  const branding = useBranding();
+
+  /** Descarga el reporte del período en PDF (jsPDF se carga solo al usarlo). */
+  const exportPdf = async () => {
+    if (!raw || !data) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+    const doc = new jsPDF();
+    const dmy = (d: string) => d.slice(0, 10).split("-").reverse().join("/");
+    const head = { fillColor: [30, 41, 59] as [number, number, number] };
+    let y = 14;
+    doc.setFontSize(14);
+    doc.text(`Reporte - ${branding.name}`, 14, y);
+    doc.setFontSize(10);
+    doc.text(`Período: ${dmy(from)} al ${dmy(to)}`, 14, (y += 7));
+    const table = (title: string, columns: string[], body: (string | number)[][]) => {
+      const last = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable;
+      y = (last ? last.finalY : y) + 10;
+      doc.setFontSize(11);
+      doc.text(title, 14, y);
+      autoTable(doc, { startY: y + 2, head: [columns], body: body.length ? body : [["Sin datos", ...columns.slice(1).map(() => "")]], headStyles: head, styles: { fontSize: 9 } });
+    };
+    table("Resumen", ["Concepto", "Monto"], [
+      [`Ventas (${data.studies} atenciones)`, formatMoney(data.totalStudies)],
+      [`  Con factura (${data.withInvoice.count})`, formatMoney(data.withInvoice.total)],
+      [`  Sin factura (${data.withoutInvoice.count})`, formatMoney(data.withoutInvoice.total)],
+      ["Cobrado en el período", formatMoney(data.paid)],
+      ["Por cobrar", formatMoney(data.debt)],
+      ["Comisiones", formatMoney(data.commissions)],
+      ["Pagos a terceros", formatMoney(data.tppTotal)],
+      ["Utilidad estimada (ventas - comisiones - terceros)", formatMoney(data.netFinancial)],
+      ["Depósitos", formatMoney(data.depTotal)],
+      ["Caja ingresos", formatMoney(data.cashIn)],
+      ["Caja gastos", formatMoney(data.cashOut)],
+      ["Estudios entregados / pendientes", `${data.delivered} / ${data.pending}`],
+    ]);
+    table("Cobros por forma de pago", ["Forma de pago", "Monto"], data.byMethod.map(([m, v]) => [methodLabel(m), formatMoney(v)]));
+    table("Atenciones por día", ["Fecha", "Atenciones", "Ventas"], data.byDay.map(([d, v]) => [dmy(d), v.count, formatMoney(v.income)]));
+    table("Por estudio", ["Estudio", "Cantidad", "Ventas"], raw.operational.by_study.map((r) => [r.study, r.count, formatMoney(r.income)]));
+    table("Comisiones por doctor", ["Doctor", "Atenciones", "Total"], raw.financial.commissions_by_doctor.map((r) => [r.doctor, r.count, formatMoney(r.total)]));
+    doc.save(`reporte_${from}_${to}.pdf`);
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Reportes"
         description="Panel financiero y operativo del centro radiológico."
-        action={<Button variant="outline" onClick={exportPdf}><Download className="mr-1 h-4 w-4" />PDF</Button>}
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => window.print()}><Printer className="mr-1 h-4 w-4" />Imprimir</Button>
+            <Button variant="outline" onClick={exportPdf} disabled={!data}><Download className="mr-1 h-4 w-4" />Descargar PDF</Button>
+          </div>
+        }
       />
 
       {/* Filter bar */}
@@ -158,9 +208,15 @@ function ReportsPage() {
       {/* Hero KPIs */}
       <div className="grid gap-3 md:grid-cols-4">
         <HeroCard
-          title="Facturado"
+          title="Ventas"
           value={formatMoney(data?.totalStudies)}
-          hint={`${data?.studies ?? 0} atenciones`}
+          hint={
+            <span className="block space-y-0.5">
+              <span className="block">{data?.studies ?? 0} atenciones</span>
+              <span className="block">Con factura: {formatMoney(data?.withInvoice.total)} ({data?.withInvoice.count ?? 0})</span>
+              <span className="block">Sin factura: {formatMoney(data?.withoutInvoice.total)} ({data?.withoutInvoice.count ?? 0})</span>
+            </span>
+          }
           icon={<Receipt className="h-4 w-4" />}
           accent="from-indigo-500/20 to-indigo-500/5"
         />
@@ -188,7 +244,7 @@ function ReportsPage() {
         <HeroCard
           title="Utilidad estimada"
           value={formatMoney(data?.netFinancial)}
-          hint="Facturado − comisiones − terceros"
+          hint="Ventas − comisiones − terceros"
           icon={<Wallet className="h-4 w-4" />}
           accent="from-violet-500/20 to-violet-500/5"
         />
@@ -302,7 +358,7 @@ function ReportsPage() {
         <CardHeader><CardTitle>Detalle diario</CardTitle></CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Atenciones</TableHead><TableHead>Facturado</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Atenciones</TableHead><TableHead>Ventas</TableHead></TableRow></TableHeader>
             <TableBody>
               {(data?.byDay ?? []).map(([d, v]) => (
                 <TableRow key={d}><TableCell>{formatDate(d)}</TableCell><TableCell>{v.count}</TableCell><TableCell>{formatMoney(v.income)}</TableCell></TableRow>

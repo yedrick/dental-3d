@@ -113,7 +113,8 @@ async function buildSummary(from: string, to: string) {
     [zeroPrices], [noPrice], [overpaid], [pays],
   ] = await limited([
     () => q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total, SUM(ps.amount_paid) AS paid,
-                    SUM(ps.delivered_at IS NOT NULL) AS delivered
+                    SUM(ps.delivered_at IS NOT NULL) AS delivered,
+                    SUM(ps.with_invoice = 1) AS invoice_n, SUM(CASE WHEN ps.with_invoice = 1 THEN ${TOTAL} ELSE 0 END) AS invoice_total
                FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?`, range),
     () => q.query(`SELECT ${LOCAL_DAY("ps.created_at")} AS day, COUNT(*) AS count, SUM(${TOTAL}) AS income
                FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?
@@ -172,6 +173,9 @@ async function buildSummary(from: string, to: string) {
     },
     financial: {
       billed: total,
+      // Ventas del período separadas: atenciones con factura y sin factura
+      billed_with_invoice: { count: num(ps.invoice_n), total: num(ps.invoice_total) },
+      billed_without_invoice: { count: num(ps.n) - num(ps.invoice_n), total: Number((total - num(ps.invoice_total)).toFixed(2)) },
       // Cobrado en el período por la fecha de cada pago (incluye saldos de atenciones anteriores)
       collected: num(pays.total),
       collected_previous: num(pays.previous),
@@ -183,7 +187,7 @@ async function buildSummary(from: string, to: string) {
       cash_out: num(cash.expense),
       third_party: thirdParty,
       deposits: num(dep.total),
-      // mismo cálculo que el reporte actual: facturado − comisiones − pagos a terceros
+      // mismo cálculo que el reporte actual: ventas − comisiones − pagos a terceros
       net: Number((total - commissions - thirdParty).toFixed(2)),
       by_method: money(byMethod, ["amount"]),
     },

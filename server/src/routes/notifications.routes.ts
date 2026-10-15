@@ -84,7 +84,7 @@ notificationsRouter.get("/sent", requirePermission("notifications.send"), async 
               COUNT(nr.id) AS recipients, SUM(nr.read_at IS NOT NULL) AS read_count
          FROM notifications n LEFT JOIN notification_recipients nr ON nr.notification_id = n.id
         WHERE n.sender_id = ?
-        GROUP BY n.id ORDER BY n.created_at DESC LIMIT ? OFFSET ?`,
+        GROUP BY n.id, n.title, n.body, n.created_at ORDER BY n.created_at DESC LIMIT ? OFFSET ?`,
       [req.user!.id, limit, offset],
     ),
     db().query<{ total: number }[]>("SELECT COUNT(*) AS total FROM notifications WHERE sender_id = ?", [req.user!.id]),

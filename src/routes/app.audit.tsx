@@ -39,6 +39,47 @@ const ACTION_META: Record<string, { label: string; variant: "default" | "seconda
   IMPERSONATE_START: { label: "Inicio como otro usuario", variant: "outline" },
   PERMISSION_GRANT: { label: "Permiso otorgado", variant: "secondary" },
   PERMISSION_REVOKE: { label: "Permiso quitado", variant: "destructive" },
+  USER_REGISTER: { label: "Usuario registrado", variant: "outline" },
+  USER_CREATE_PLATFORM: { label: "Usuario creado (plataforma)", variant: "default" },
+  ADMIN_CREATE_CLI: { label: "Administrador creado", variant: "default" },
+  DEFAULT_ADMIN_CREATE: { label: "Administrador inicial", variant: "default" },
+  ACCOUNT_SETUP: { label: "Cuenta activada", variant: "default" },
+  IMPERSONATE_PLATFORM: { label: "Ingreso desde la plataforma", variant: "outline" },
+  PASSWORD_CHANGE: { label: "Contraseña cambiada", variant: "secondary" },
+  PASSWORD_RESET: { label: "Contraseña recuperada", variant: "secondary" },
+  PASSWORD_RESET_REQUEST: { label: "Pidió recuperar contraseña", variant: "outline" },
+  PROFILE_UPDATE: { label: "Perfil editado", variant: "secondary" },
+  NOTIFICATION_SEND: { label: "Notificación enviada", variant: "outline" },
+  BRANDING_UPDATE: { label: "Marca editada", variant: "secondary" },
+  LOGO_UPDATE: { label: "Logo cambiado", variant: "secondary" },
+  LOGO_DELETE: { label: "Logo quitado", variant: "destructive" },
+  SITE_UPDATE: { label: "Página web editada", variant: "secondary" },
+  SITE_RESET: { label: "Página web restablecida", variant: "destructive" },
+  SITE_IMAGE_UPLOAD: { label: "Imagen de la página web", variant: "outline" },
+  STUDIES_IMPORT: { label: "Estudios importados (Excel)", variant: "default" },
+  IMPORT_SUPABASE: { label: "Datos importados", variant: "outline" },
+};
+
+/** Nombre en español de cada tabla registrada en la auditoría. */
+const TABLE_LABELS: Record<string, string> = {
+  appointments: "Citas",
+  app_params: "Parámetros",
+  bank_deposits: "Depósitos",
+  cashbox: "Caja",
+  commissions: "Comisiones",
+  doctors: "Doctores",
+  notifications: "Notificaciones",
+  patients: "Pacientes",
+  patient_studies: "Atenciones",
+  payments: "Pagos",
+  role_permissions: "Permisos",
+  site_content: "Página web",
+  studies: "Estudios",
+  study_prices: "Tarifas",
+  tenancy: "Sucursal",
+  tenancy_tenants: "Sucursal",
+  third_party_payments: "Pagos a terceros",
+  users: "Usuarios",
 };
 
 type AuditRow = {
@@ -53,6 +94,8 @@ type AuditRow = {
 };
 
 const PAGE_SIZE = 50;
+
+const tableLabel = (t: string | null) => (t ? TABLE_LABELS[t] ?? t : "—");
 
 function AuditPage() {
   const uid = useId(); // ids para unir cada etiqueta con su campo
@@ -174,7 +217,7 @@ function AuditPage() {
               <SelectTrigger id={`${uid}-table`} className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todas</SelectItem>
-                {tables.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                {tables.map((t) => <SelectItem key={t} value={t}>{tableLabel(t)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -224,7 +267,7 @@ function AuditPage() {
                 <TableRow key={r.id} className="hover:bg-muted/40 cursor-pointer" onClick={() => setDetail(r)}>
                   <TableCell className="text-xs text-muted-foreground tabular-nums">{formatDateTime(r.timestamp)}</TableCell>
                   <TableCell><Badge variant={meta.variant} className={meta.className}>{meta.label}</Badge></TableCell>
-                  <TableCell className="text-xs font-mono">{r.table_name}</TableCell>
+                  <TableCell className="text-xs">{tableLabel(r.table_name)}</TableCell>
                   <TableCell className="text-xs">{describe(r)}</TableCell>
                   <TableCell className="text-xs">
                     {userName(r) ?? <span className="text-muted-foreground">—</span>}
@@ -259,7 +302,7 @@ function AuditPage() {
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Fecha" value={formatDateTime(detail.timestamp)} />
                 <Field label="Acción" value={ACTION_META[detail.action]?.label ?? detail.action} />
-                <Field label="Tabla" value={detail.table_name} />
+                <Field label="Tabla" value={tableLabel(detail.table_name)} />
                 <Field label="Registro" value={detail.record_id} mono />
                 <Field label="Usuario" value={userName(detail) ?? detail.user_id} />
                 {detail.data?._impersonated_by && (
