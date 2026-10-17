@@ -6,13 +6,14 @@ import {
 import {
   LayoutDashboard, Stethoscope, Users, TestTube2, ClipboardList, Percent,
   Wallet, Landmark, Receipt, BarChart3, ShieldCheck, UserCog, LogOut,
-  PackageCheck, KeyRound, Settings2, CalendarDays, Bell, UserCircle,
+  PackageCheck, KeyRound, Settings2, CalendarDays, Bell, UserCircle, Palette, Globe,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import logoAsset from "@/assets/logo-3d.png.asset.json";
+import { useBranding } from "@/lib/branding";
 
-type Item = { title: string; url: string; icon: any; perm: string };
+// feature: módulo del plan que necesita (server/src/tenancy/plans.ts); sin feature = núcleo
+type Item = { title: string; url: string; icon: any; perm: string; feature?: string };
 
 const nav: { label: string; items: Item[] }[] = [
   { label: "General", items: [
@@ -23,42 +24,45 @@ const nav: { label: string; items: Item[] }[] = [
     { title: "Pacientes", url: "/app/patients", icon: Users, perm: "view.patients" },
     { title: "Estudios y tarifas", url: "/app/studies", icon: TestTube2, perm: "view.studies" },
     { title: "Atenciones", url: "/app/attention", icon: ClipboardList, perm: "view.attention" },
-    { title: "Agenda de citas", url: "/app/appointments", icon: CalendarDays, perm: "view.appointments" },
+    { title: "Agenda de citas", url: "/app/appointments", icon: CalendarDays, perm: "view.appointments", feature: "agenda" },
     { title: "Entregas y cobros", url: "/app/delivery", icon: PackageCheck, perm: "view.delivery" },
   ]},
   { label: "Financiero", items: [
-    { title: "Comisiones", url: "/app/commissions", icon: Percent, perm: "view.commissions" },
-    { title: "Caja chica", url: "/app/cashbox", icon: Wallet, perm: "view.cashbox" },
-    { title: "Depósitos", url: "/app/deposits", icon: Landmark, perm: "view.deposits" },
-    { title: "Pagos a terceros", url: "/app/third-party", icon: Receipt, perm: "view.third_party" },
+    { title: "Comisiones", url: "/app/commissions", icon: Percent, perm: "view.commissions", feature: "comisiones" },
+    { title: "Caja chica", url: "/app/cashbox", icon: Wallet, perm: "view.cashbox", feature: "caja" },
+    { title: "Depósitos", url: "/app/deposits", icon: Landmark, perm: "view.deposits", feature: "finanzas" },
+    { title: "Pagos a terceros", url: "/app/third-party", icon: Receipt, perm: "view.third_party", feature: "finanzas" },
   ]},
   { label: "Control", items: [
-    { title: "Reportes", url: "/app/reports", icon: BarChart3, perm: "view.reports" },
-    { title: "Auditoría", url: "/app/audit", icon: ShieldCheck, perm: "view.audit" },
+    { title: "Reportes", url: "/app/reports", icon: BarChart3, perm: "view.reports", feature: "reportes" },
+    { title: "Auditoría", url: "/app/audit", icon: ShieldCheck, perm: "view.audit", feature: "auditoria" },
     { title: "Usuarios", url: "/app/users", icon: UserCog, perm: "view.users" },
     { title: "Roles y permisos", url: "/app/roles", icon: KeyRound, perm: "view.roles" },
     { title: "Parámetros", url: "/app/params", icon: Settings2, perm: "view.params" },
+    { title: "Marca de la sucursal", url: "/app/branding", icon: Palette, perm: "branding.edit" },
+    { title: "Página web", url: "/app/site", icon: Globe, perm: "site.edit", feature: "pagina_web" },
   ]},
 ];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { can, signOut, user, roles } = useAuth();
+  const branding = useBranding();
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <img src={logoAsset.url} alt="" className="h-8 w-8 shrink-0 rounded-md" />
+          <img src={branding.logo} alt="" className="h-8 w-8 shrink-0 rounded-md object-contain" />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <div className="truncate text-sm font-semibold">3 Dental Imagen</div>
+            <div className="truncate text-sm font-semibold">{branding.name}</div>
             <div className="truncate text-xs text-muted-foreground">{roles.join(", ") || "sin rol"}</div>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         {nav.map((group) => {
-          const visible = group.items.filter((i) => can(i.perm));
+          const visible = group.items.filter((i) => can(i.perm) && (!i.feature || branding.hasFeature(i.feature)));
           if (visible.length === 0) return null;
           return (
             <SidebarGroup key={group.label}>

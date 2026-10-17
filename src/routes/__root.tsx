@@ -6,13 +6,15 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth";
+import { BrandingProvider } from "@/lib/branding";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalLoader } from "@/components/global-loader";
 
 function NotFoundComponent() {
   return (
@@ -30,14 +32,16 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
-  useEffect(() => { reportLovableError(error, { boundary: "root" }); }, [error]);
+  // Queda en la consola del navegador
+  useEffect(() => { console.error(error); }, [error]);
+  const message = error instanceof Error ? error.message : String(error);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Error al cargar</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <button onClick={() => { router.invalidate(); reset(); }} className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">Reintentar</button>
       </div>
     </div>
@@ -49,29 +53,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "3 Dental Imagen · Radiología Dental" },
-      { name: "description", content: "Centro de imagen dental 2D y 3D en Bolivia. Estudios radiológicos con entrega ágil y sistema de gestión para clínicas." },
-      { property: "og:site_name", content: "3 Dental Imagen" },
+      { title: "IONIX · Gestión para centros de radiología dental" },
+      { name: "description", content: "IONIX: sistema para centros de radiología dental. Pacientes, atenciones, cobros, comisiones, caja, reportes y página web propia." },
+      { property: "og:site_name", content: "IONIX" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
-    ],
-    scripts: [
-      {
-        type: "application/ld+json",
-        children: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          name: "3 Dental Imagen",
-          url: "https://3d.kollatek.com",
-          logo: "https://3d.kollatek.com/favicon.png",
-          telephone: "+591-77726685",
-          address: { "@type": "PostalAddress", addressCountry: "BO" },
-        }),
-      },
     ],
   }),
   shellComponent: RootShell,
@@ -93,10 +83,13 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Outlet />
-        <Toaster richColors position="top-right" />
-      </AuthProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          <GlobalLoader />
+          <Outlet />
+          <Toaster richColors position="top-right" />
+        </AuthProvider>
+      </BrandingProvider>
     </QueryClientProvider>
   );
 }

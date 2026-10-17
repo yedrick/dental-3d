@@ -1,9 +1,9 @@
-# 3 Dental Imagen
+# IONIX
 
-> Centro radiológico dental en Bolivia. Estudios de imagen 2D y 3D (CBCT) para profesionales y pacientes, con entrega ágil y agendamiento por WhatsApp.
+> Sistema en la nube para centros de radiología dental: pacientes, atenciones, cobros, comisiones de doctores, caja, reportes y página web propia para cada clínica.
 
-3 Dental Imagen ofrece servicios de radiología dental de alta precisión y opera además una plataforma interna de gestión clínica, administrativa y financiera para centros radiológicos dentales.
+Cada clínica tiene su propio subdominio, su propia base de datos y su propia página web editable.
 
-## Pages
+## Páginas
 
-- [Inicio](/): Servicios, horarios, contacto y catálogo público de estudios disponibles.
+- [Inicio](/): Qué es IONIX, módulos y planes.

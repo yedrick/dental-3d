@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useList, formatMoney } from "@/lib/data";
+import { useId, useMemo, useState } from "react";
+import { apiGet, type Paged } from "@/lib/api";
+import { formatDate, formatMoney } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,22 +12,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileSpreadsheet, FileText } from "lucide-react";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 export const Route = createFileRoute("/app/commissions")({ component: CommissionsPage });
+
+type CommissionSummary = { total: number; by_doctor: { doctor_id: string | null; doctor_name: string; external: boolean; count: number; total: number }[] };
+
+/** Grupo de cada comisión: el doctor registrado, o el NOMBRE del doctor no registrado. */
+const doctorKey = (r: { doctor_id: string | null; doctor_name?: string }) => r.doctor_id ?? `ext:${r.doctor_name ?? ""}`;
+
+/** Trae todas las páginas del rango (el reporte y la exportación muestran todo) y el resumen del servidor. */
+async function fetchAllCommissions(query: Record<string, string | undefined>) {
+  const rows: any[] = [];
+  let summary: CommissionSummary | undefined;
+  for (let page = 1; ; page++) {
+    const res = await apiGet<Paged<any, CommissionSummary>>("/api/commissions", { ...query, page, limit: 500 });
+    rows.push(...res.data);
+    summary ??= res.summary;
+    if (page >= res.pages) return { rows, summary };
+  }
+}
 
 const MONTHS_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
 function CommissionsPage() {
+  const uid = useId(); // ids para unir cada etiqueta con su campo
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1)); // "all" or 1-12
   const [doctorId, setDoctorId] = useState<string>("all");
 
-  const { data: doctors = [] } = useList<any>("doctors", "full_name", true);
-  const dmap = useMemo(() => new Map(doctors.map((d: any) => [d.id, d])), [doctors]);
+  const { data: doctors = [] } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
 
   const range = useMemo(() => {
     const y = Number(year);
@@ -40,52 +59,54 @@ function CommissionsPage() {
     return { from, to };
   }, [year, month]);
 
-  const { data: rows = [] } = useQuery({
+  const { data } = useQuery({
     queryKey: ["commissions-detail", range.from, range.to, doctorId],
-    queryFn: async () => {
-      let q = supabase
-        .from("commissions")
-        .select("id,doctor_id,commission_amount,percentage,created_at,patient_study_id,patient_studies(id,price,has_report,with_invoice,patient_id,study_id,patients(full_name),studies(name))")
-        .gte("created_at", range.from)
-        .lte("created_at", range.to + "T23:59:59")
-        .order("created_at", { ascending: true });
-      if (doctorId !== "all") q = q.eq("doctor_id", doctorId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchAllCommissions({ from: range.from, to: range.to, doctor_id: doctorId === "all" ? undefined : doctorId }),
+    staleTime: STALE.money,
   });
+  const rows = useMemo(() => data?.rows ?? [], [data]);
 
-  // Group: month -> doctor -> rows
+  // Nombre del doctor por id (las filas ya traen doctor_name)
+  const dmap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const r of rows) {
+      m.set(doctorKey(r), { id: r.doctor_id, full_name: r.doctor_id ? r.doctor_name : `${r.doctor_name} (no registrado)` });
+    }
+    return m;
+  }, [rows]);
+
+  // Agrupar: mes (local) -> doctor -> filas
   const grouped = useMemo(() => {
     const g: Record<string, Record<string, any[]>> = {};
-    for (const r of rows as any[]) {
+    for (const r of rows) {
       const d = new Date(r.created_at);
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const doc = dmap.get(r.doctor_id);
-      const dk = r.doctor_id;
+      const dk = doctorKey(r);
       g[mk] ??= {};
       g[mk][dk] ??= [];
       g[mk][dk].push({
-        fecha: d.toISOString().slice(0, 10),
-        codigo: doc?.code || doc?.id?.slice(0, 8) || "-",
-        doctor: doc?.full_name || "-",
-        paciente: r.patient_studies?.patients?.full_name || "-",
-        estudio: r.patient_studies?.studies?.name || "-",
-        informe: r.patient_studies?.has_report ? "con informe" : "sin informe",
-        factura: r.patient_studies?.with_invoice ? "Sí" : "No",
-        precio: Number(r.patient_studies?.price ?? 0),
+        fecha: formatDate(r.created_at),
+        codigo: r.doctor_id?.slice(0, 8) || "no reg.",
+        doctor: r.doctor_id ? r.doctor_name || "-" : `${r.doctor_name} (no registrado)`,
+        paciente: r.patient_name || "-",
+        estudio: r.study_name || "-",
+        informe: r.has_report ? "con informe" : "sin informe",
+        factura: r.with_invoice ? "Sí" : "No",
+        precio: Number(r.price ?? 0),
         pct: Number(r.percentage ?? 0),
         monto: Number(r.commission_amount ?? 0),
       });
     }
     return g;
-  }, [rows, dmap]);
+  }, [rows]);
 
-  const totalGeneral = (rows as any[]).reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
+  const totalGeneral = data?.summary?.total ?? rows.reduce((s, r) => s + Number(r.commission_amount ?? 0), 0);
 
-  const exportExcel = () => {
+  // Las librerías de Excel y PDF se cargan solo al exportar (la pantalla abre más rápido)
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
+    const usedNames = new Set<string>();
     const monthKeys = Object.keys(grouped).sort();
     for (const mk of monthKeys) {
       const [yy, mm] = mk.split("-").map(Number);
@@ -107,8 +128,12 @@ function CommissionsPage() {
         sheetData.push(["", "", "", "", "", "", "", "", "TOTAL", sub]);
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 28 }, { wch: 30 }, { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 6 }, { wch: 12 }];
-        const safeName = `${monthName.slice(0, 3)}${yy}_${(doc?.full_name || did).replace(/[^\w]/g, "").slice(0, 20)}`;
-        XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 31));
+        // Nombre de hoja único (máx. 31 caracteres): dos doctores parecidos no chocan
+        const base = `${monthName.slice(0, 3)}${yy}_${(doc?.full_name || did).normalize("NFD").replace(/[^\w]/g, "").slice(0, 20)}`.slice(0, 28);
+        let name = base;
+        for (let i = 2; usedNames.has(name); i++) name = `${base}_${i}`;
+        usedNames.add(name);
+        XLSX.utils.book_append_sheet(wb, ws, name);
       }
     }
     if (monthKeys.length === 0) {
@@ -118,7 +143,8 @@ function CommissionsPage() {
     XLSX.writeFile(wb, `comisiones_${range.from}_${range.to}.xlsx`);
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
     const doc = new jsPDF({ orientation: "landscape" });
     const monthKeys = Object.keys(grouped).sort();
     let first = true;
@@ -179,16 +205,16 @@ function CommissionsPage() {
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div>
-            <Label>Año</Label>
+            <Label htmlFor={`${uid}-year`}>Año</Label>
             <Select value={year} onValueChange={setYear}>
-              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-year`} className="w-28"><SelectValue /></SelectTrigger>
               <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Mes</Label>
+            <Label htmlFor={`${uid}-month`}>Mes</Label>
             <Select value={month} onValueChange={setMonth}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-month`} className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todo el año</SelectItem>
                 {MONTHS_ES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
@@ -196,9 +222,9 @@ function CommissionsPage() {
             </Select>
           </div>
           <div>
-            <Label>Doctor</Label>
+            <Label htmlFor={`${uid}-doctor`}>Doctor</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${uid}-doctor`} className="w-64"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los doctores</SelectItem>
                 {doctors.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}

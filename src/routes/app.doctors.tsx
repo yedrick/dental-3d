@@ -1,10 +1,10 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useId, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useList } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsPage });
 
@@ -23,12 +24,18 @@ type DForm = { id?: string; full_name: string; clinic_address: string; phone: st
 const empty: DForm = { full_name: "", clinic_address: "", phone: "", email: "", bank_account: "", use_percentage: false, default_commission_pct: 0, agreement_discount_pct: 0, status: true };
 
 function DoctorsPage() {
-  const { user, hasAny, can } = useAuth();
-  const canCreate = hasAny(["ADMIN", "RECEPCION"]);
-  const canEdit = can("doctors.edit") || hasAny(["ADMIN"]);
-  const canDelete = can("doctors.delete") || hasAny(["ADMIN"]);
+  const uid = useId(); // ids para unir cada etiqueta con su campo
+  const { can } = useAuth();
+  // Los permisos los controla la API; aquí solo se ocultan los botones
+  const canCreate = can("doctors.create");
+  const canEdit = can("doctors.edit");
+  const canDelete = can("doctors.delete");
   const qc = useQueryClient();
-  const { data = [], isLoading } = useList<any>("doctors");
+  const { data = [], isLoading } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<any[]>("/api/doctors"),
+    staleTime: STALE.master,
+  });
   const [q, setQ] = useState("");
   const [form, setForm] = useState<DForm>(empty);
   const [open, setOpen] = useState(false);
@@ -47,32 +54,40 @@ function DoctorsPage() {
 
   const save = async () => {
     if (!form.full_name) return toast.error("Nombre requerido");
-    const payload: any = { ...form };
-    delete payload.id;
-    if (form.id) {
-      const { error } = await supabase.from("doctors").update(payload).eq("id", form.id);
-      if (error) return toast.error(translateError(error));
-      toast.success("Doctor actualizado");
-    } else {
-      payload.created_by = user!.id;
-      const { error } = await supabase.from("doctors").insert(payload);
-      if (error) return toast.error(translateError(error));
-      toast.success("Doctor registrado");
+    const { id, ...payload } = form;
+    try {
+      if (id) {
+        await apiPatch(`/api/doctors/${id}`, payload);
+        toast.success("Doctor actualizado");
+      } else {
+        // created_by lo pone la API con el usuario de la sesión
+        await apiPost("/api/doctors", payload);
+        toast.success("Doctor registrado");
+      }
+    } catch (e) {
+      return toast.error(translateError(e));
     }
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
   const del = async (d: any) => {
-    if (!confirm(`¿Eliminar doctor "${d.full_name}"? Los pacientes vinculados quedarán sin doctor y podría fallar si tiene registros históricos.`)) return;
-    const { error } = await supabase.from("doctors").delete().eq("id", d.id);
-    if (error) return toast.error("No se puede eliminar: " + translateError(error));
+    if (!confirm(`¿Eliminar doctor "${d.full_name}"? Si tiene pacientes o atenciones no se podrá eliminar: desactívalo en su lugar.`)) return;
+    try {
+      await apiDelete(`/api/doctors/${d.id}`);
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Doctor eliminado");
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
   const toggle = async (d: any, v: boolean) => {
-    await supabase.from("doctors").update({ status: v }).eq("id", d.id);
+    try {
+      await apiPatch(`/api/doctors/${d.id}`, { status: v });
+    } catch (e) {
+      toast.error(translateError(e));
+    }
     qc.invalidateQueries({ queryKey: ["doctors"] });
   };
 
@@ -86,7 +101,7 @@ function DoctorsPage() {
 
       <div className="mb-3 relative max-w-md">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input className="pl-8" placeholder="Buscar por nombre, teléfono o email…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="pl-8" aria-label="Buscar doctores" placeholder="Buscar por nombre, teléfono o email…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <Card>
@@ -97,7 +112,7 @@ function DoctorsPage() {
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={7}>Cargando…</TableCell></TableRow>}
+            {isLoading && <TableSkeletonRows cols={7} />}
             {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-muted-foreground">Sin resultados.</TableCell></TableRow>}
             {filtered.map((d: any) => (
               <TableRow key={d.id} className={!d.status ? "opacity-60" : ""}>
@@ -111,14 +126,14 @@ function DoctorsPage() {
                 <TableCell className="text-sm">{Number(d.agreement_discount_pct ?? 0)}%</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Switch checked={d.status} disabled={!canEdit} onCheckedChange={(v) => toggle(d, v)} />
+                    <Switch checked={d.status} aria-label={`Activo: ${d.full_name}`} disabled={!canEdit} onCheckedChange={(v) => toggle(d, v)} />
                     <Badge variant={d.status ? "secondary" : "outline"} className="text-[10px]">{d.status ? "Activo" : "Inactivo"}</Badge>
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex gap-1 justify-end">
-                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(d)} title="Editar"><Pencil className="h-4 w-4" /></Button>}
-                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(d)} title="Eliminar" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
+                    {canEdit && <Button size="sm" variant="ghost" onClick={() => openEdit(d)} title="Editar" aria-label={`Editar ${d.full_name}`}><Pencil className="h-4 w-4" /></Button>}
+                    {canDelete && <Button size="sm" variant="ghost" onClick={() => del(d)} title="Eliminar" aria-label={`Eliminar ${d.full_name}`} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>}
                   </div>
                 </TableCell>
               </TableRow>
@@ -131,32 +146,32 @@ function DoctorsPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{form.id ? "Editar doctor" : "Nuevo doctor"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label>Nombre completo *</Label><Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-name`}>Nombre completo *</Label><Input id={`${uid}-name`} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-              <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-phone`}>Teléfono</Label><Input id={`${uid}-phone`} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-email`}>Email</Label><Input id={`${uid}-email`} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             </div>
-            <div><Label>Dirección consultorio</Label><Input value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
+            <div><Label htmlFor={`${uid}-address`}>Dirección consultorio</Label><Input id={`${uid}-address`} value={form.clinic_address} onChange={(e) => setForm({ ...form, clinic_address: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Cuenta bancaria</Label><Input value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
+              <div><Label htmlFor={`${uid}-bank`}>Cuenta bancaria</Label><Input id={`${uid}-bank`} value={form.bank_account} onChange={(e) => setForm({ ...form, bank_account: e.target.value })} /></div>
               <div>
-                <Label>% Descuento convenio</Label>
-                <Input type="number" step="0.01" min="0" max="100" value={form.agreement_discount_pct} onChange={(e) => setForm({ ...form, agreement_discount_pct: Number(e.target.value) })} />
+                <Label htmlFor={`${uid}-discount`}>% Descuento convenio</Label>
+                <Input id={`${uid}-discount`} type="number" step="0.01" min="0" max="100" value={form.agreement_discount_pct} onChange={(e) => setForm({ ...form, agreement_discount_pct: Number(e.target.value) })} />
                 <p className="text-[10px] text-muted-foreground mt-1">Se aplica automático al paciente en cada estudio.</p>
               </div>
             </div>
             <div className="rounded-md border p-3 bg-muted/30">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <Label className="text-sm font-semibold">Comisión por porcentaje</Label>
+                  <Label htmlFor={`${uid}-usepct`} className="text-sm font-semibold">Comisión por porcentaje</Label>
                   <p className="text-[11px] text-muted-foreground">Si está apagado, se usa la comisión fija definida en cada estudio.</p>
                 </div>
-                <Switch checked={form.use_percentage} onCheckedChange={(v) => setForm({ ...form, use_percentage: v })} />
+                <Switch id={`${uid}-usepct`} checked={form.use_percentage} onCheckedChange={(v) => setForm({ ...form, use_percentage: v })} />
               </div>
               {form.use_percentage && (
                 <div className="mt-3">
-                  <Label>% Comisión (máx. 20%)</Label>
-                  <Input type="number" step="0.01" min="0" max="20" value={form.default_commission_pct}
+                  <Label htmlFor={`${uid}-pct`}>% Comisión (máx. 20%)</Label>
+                  <Input id={`${uid}-pct`} type="number" step="0.01" min="0" max="20" value={form.default_commission_pct}
                     onChange={(e) => {
                       const v = Math.min(20, Math.max(0, Number(e.target.value) || 0));
                       setForm({ ...form, default_commission_pct: v });
@@ -165,7 +180,7 @@ function DoctorsPage() {
               )}
             </div>
             {form.id && (
-              <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
+              <div className="flex items-center gap-2"><Switch checked={form.status} aria-label="Activo" onCheckedChange={(v) => setForm({ ...form, status: v })} /><span className="text-sm">Activo</span></div>
             )}
           </div>
           <DialogFooter><Button onClick={save}>{form.id ? "Actualizar" : "Guardar"}</Button></DialogFooter>
