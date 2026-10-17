@@ -34,7 +34,30 @@ export const tenancyConfig = defineConfig({
         invalidation: redisInvalidation({ url: config.tenancy.redisUrl }),
       }
     : {}),
-  theme: { defaults: { primary: "#0F172A", secondary: "#64748B", radius: "md" } }, // #0F172A = color actual de la app
+  theme: {
+    defaults: { primary: "#0F172A", secondary: "#64748B", radius: "md" }, // #0F172A = color actual de la app
+    // Fuentes que se pueden elegir en el panel (/admin): lista con vista previa, y
+    // /tenancy/theme.css ya trae la carga de la fuente. Las mismas que src/lib/branding.tsx.
+    fonts: [
+      ...[
+        "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins", "Nunito", "Raleway", "Source Sans 3",
+        "Work Sans", "DM Sans", "Manrope", "Rubik", "Quicksand", "Mulish", "Ubuntu",
+      ].map((family) => ({ family, weights: [400, 500, 600, 700] })),
+      ...["Merriweather", "Playfair Display", "Lora"].map((family) => ({
+        family,
+        weights: [400, 500, 600, 700],
+        fallback: "Georgia, serif",
+      })),
+      { family: "Arial", source: "system" as const, fallback: "Helvetica, sans-serif" },
+      { family: "Helvetica", source: "system" as const, fallback: "Arial, sans-serif" },
+      { family: "Verdana", source: "system" as const, fallback: "Geneva, sans-serif" },
+      { family: "Tahoma", source: "system" as const, fallback: "Geneva, sans-serif" },
+      { family: "Trebuchet MS", source: "system" as const, fallback: "sans-serif" },
+      { family: "Georgia", source: "system" as const, fallback: "serif" },
+      { family: "Times New Roman", source: "system" as const, fallback: "Times, serif" },
+      { family: "Courier New", source: "system" as const, fallback: "monospace" },
+    ],
+  },
   plugins: [
     database({
       driver: mysqlWithSession(), // UTC y modo estricto en cada conexión (ver mysql-session.ts)
