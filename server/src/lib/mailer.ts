@@ -78,6 +78,27 @@ export function passwordResetEmail(opts: { branchName: string; userName: string;
   return { subject, text, html };
 }
 
+/** Aviso a ventas: nueva solicitud de demo desde la web comercial (panel → Solicitudes). */
+export function leadEmail(lead: { name: string; company?: string | null; city?: string | null; phone?: string | null; email?: string | null; plan?: string | null; message?: string | null }, panelUrl: string) {
+  const who = lead.company ? `${lead.name} (${lead.company})` : lead.name;
+  const rows: [string, string | null | undefined][] = [
+    ["Nombre", lead.name], ["Clínica", lead.company], ["Ciudad", lead.city], ["WhatsApp / teléfono", lead.phone],
+    ["Correo", lead.email], ["Plan de interés", lead.plan], ["Mensaje", lead.message],
+  ];
+  const filled = rows.filter(([, v]) => v);
+  const subject = `Nueva solicitud de demo: ${who}`;
+  const text = [...filled.map(([k, v]) => `${k}: ${v}`), "", `Verla en el panel: ${panelUrl}`].join("\n");
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;padding:28px">
+      <tr><td style="font-size:18px;font-weight:bold;padding-bottom:14px">Nueva solicitud de demo · IONIX</td></tr>
+      ${filled.map(([k, v]) => `<tr><td style="font-size:14px;padding:4px 0"><b>${esc(k)}:</b> ${esc(String(v))}</td></tr>`).join("")}
+      <tr><td style="padding-top:18px"><a href="${esc(panelUrl)}" style="color:#0e7490">Ver en el panel (Solicitudes)</a></td></tr>
+    </table>
+  </td></tr></table></body></html>`;
+  return { subject, text, html };
+}
+
 /** Envía sin bloquear la respuesta (y sin revelar por el tiempo de respuesta si el email existe). */
 export function sendInBackground(send: () => Promise<void>, context: Record<string, unknown>) {
   send().catch((err) => tenancy.observability.logger.error({ err, ...context }, "no se pudo enviar el correo"));

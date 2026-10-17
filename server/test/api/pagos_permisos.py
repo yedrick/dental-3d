@@ -49,7 +49,7 @@ def sql(q):
 # ---------- Sucursal y usuarios ----------
 _, b = call("POST", "/admin/api/auth/login", {"email": os.environ.get("OWNER_EMAIL", "owner@dental3d.local"), "password": os.environ["OWNER_PASS"], "mode": "token"})
 PT = b["token"]
-call("POST", "/admin/api/tenants", {"id": T, "name": "Prueba Pagos"}, tok=PT)
+call("POST", "/admin/api/tenants", {"id": T, "name": "Prueba Pagos", "plan": "clinica"}, tok=PT)  # todos los módulos
 for _ in range(60):
     s, t = call("GET", f"/admin/api/tenants/{T}", tok=PT)
     if s == 200 and (t.get("tenant") or t)["status"] == "active":

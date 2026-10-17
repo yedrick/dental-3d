@@ -3,7 +3,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import { z } from "zod";
-import { tenancyMiddleware } from "@tenancy-node/adapter-express";
+import { requireFeature, tenancyMiddleware } from "@tenancy-node/adapter-express";
 import { adminMiddleware, createAdminApi } from "@tenancy-node/admin-api";
 import { config } from "./config.js";
 import { tenantUsers } from "./tenancy/admin-users.js";
@@ -29,6 +29,7 @@ import { RECEIPT_MAX_BYTES, RECEIPT_TYPES, receiptsRouter } from "./routes/recei
 import { publicSiteRouter, SITE_IMAGE_MAX_BYTES, siteRouter } from "./routes/site.routes.js";
 import { publicStudiesRouter, studiesRouter, studyPricesRouter } from "./routes/studies.routes.js";
 import { tenancy } from "./tenancy/index.js";
+import { notifySalesOnLeads } from "./lib/leads.js";
 
 // Mensajes de validación en español
 z.config(z.locales.es());
@@ -53,8 +54,12 @@ if (config.admin.sessionSecret) {
     trustProxy: config.trustProxy,
     // Usuarios de cada sucursal en el panel: verlos, crearlos y "Entrar como"
     tenantUsers,
+    // "Solicitar demo" de la web comercial: POST /admin/api/leads (5 por hora por IP, con consentimiento).
+    // En el panel: Solicitudes → "Crear tenant" con el plan elegido.
+    leads: { requireConsent: true },
   });
   app.use(adminMiddleware(admin));
+  notifySalesOnLeads();
 }
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } })); // el logo se muestra desde el dominio del frontend
 app.use(cors({ origin: config.corsOrigin, exposedHeaders: ["X-Cache", "RateLimit", "RateLimit-Policy"] }));
@@ -109,23 +114,25 @@ app.use("/api/doctors", doctorsRouter);
 app.use("/api/patients", patientsRouter);
 app.use("/api/public/studies", publicStudiesRouter);
 app.use("/api/public/site", publicSiteRouter);
-app.use("/api/site", siteRouter);
+// Módulos por plan (src/tenancy/plans.ts): si el plan no lo incluye, 403 TENANCY_FEATURE_NOT_IN_PLAN.
+// Además de estos, cada ruta sigue exigiendo el permiso del rol.
+app.use("/api/site", requireFeature(tenancy, "pagina_web"), siteRouter);
 app.use("/api/studies", studiesRouter);
 app.use("/api/study-prices", studyPricesRouter);
 app.use("/api/attentions", attentionsRouter);
-app.use("/api/commissions", commissionsRouter);
-app.use("/api/cashbox", cashboxRouter);
-app.use("/api/deposits", depositsRouter);
-app.use("/api/third-party-payments", thirdPartyRouter);
+app.use("/api/commissions", requireFeature(tenancy, "comisiones"), commissionsRouter);
+app.use("/api/cashbox", requireFeature(tenancy, "caja"), cashboxRouter);
+app.use("/api/deposits", requireFeature(tenancy, "finanzas"), depositsRouter);
+app.use("/api/third-party-payments", requireFeature(tenancy, "finanzas"), thirdPartyRouter);
 app.use("/api/receipts", receiptsRouter);
-app.use("/api/appointments", appointmentsRouter);
+app.use("/api/appointments", requireFeature(tenancy, "agenda"), appointmentsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/roles", rolesRouter);
 app.use("/api/params", paramsRouter);
-app.use("/api/audit", auditRouter);
+app.use("/api/audit", requireFeature(tenancy, "auditoria"), auditRouter);
 app.use("/api/dashboard", dashboardRouter);
-app.use("/api/reports", reportsRouter);
+app.use("/api/reports", requireFeature(tenancy, "reportes"), reportsRouter);
 app.use("/api/branding", brandingRouter);
 
 app.use(notFound);

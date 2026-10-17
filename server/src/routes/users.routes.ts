@@ -10,6 +10,7 @@ import { ROLES, type Role } from "../lib/permissions.js";
 import { requireAuth, requirePermission, signToken } from "../middleware/auth.js";
 import { sensitiveLimiter } from "../middleware/rate-limit.js";
 import { passwordSchema } from "./auth.routes.js";
+import { tenancy } from "../tenancy/index.js";
 
 /**
  * Usuarios de la sucursal (reemplaza src/lib/users-admin.functions.ts + profiles/user_roles).
@@ -69,6 +70,17 @@ async function assertDoctorLink(tx: Db, doctorId: string | null | undefined, use
   if (other) throw new HttpError(409, `Esa ficha de doctor ya está enlazada al usuario "${other.full_name}"`);
 }
 
+/**
+ * Límite de usuarios del plan (src/tenancy/plans.ts): cuentan los activos y aprobados. Se revisa al
+ * crear, aprobar o reactivar; con bloqueo, para que dos altas a la vez no pasen el límite.
+ * 403 TENANCY_PLAN_LIMIT_REACHED (details.max). Si el plan baja, nadie se desactiva: solo no entran más.
+ */
+async function assertUserLimit(tx: Db) {
+  if (tenancy.features.limit("usuarios") === null) return;
+  const [{ n }] = await tx.query<{ n: number }[]>("SELECT COUNT(*) AS n FROM users WHERE active = 1 AND approved = 1 FOR UPDATE");
+  tenancy.features.assertLimit("usuarios", Number(n));
+}
+
 async function revokeSessions(tx: Db, userId: string) {
   await tx.query("UPDATE users SET token_version = token_version + 1 WHERE id = ?", [userId]);
 }
@@ -123,6 +135,7 @@ usersRouter.post("/", requirePermission("users.create"), async (req, res) => {
   if (isAdmin(data.roles) && !isAdmin(req.user!.roles)) throw new HttpError(403, "Solo un ADMIN puede crear otro ADMIN");
   const hash = await hashPassword(data.password);
   const user = await withTransaction(async (tx) => {
+    await assertUserLimit(tx);
     const [{ id }] = await tx.query<{ id: string }[]>("SELECT UUID() AS id");
     await assertDoctorLink(tx, data.doctor_id, null);
     await tx.query(
@@ -159,6 +172,7 @@ usersRouter.patch("/:id", requirePermission("users.edit"), sensitiveLimiter, asy
     if (!target) throw new HttpError(404, "Usuario no encontrado");
     assertCanManage(req.user!.roles, target);
     if (data.active === false && isAdmin(target.roles)) await assertAnotherAdminRemains(tx, id);
+    if (data.active === true && !target.active && target.approved) await assertUserLimit(tx);
 
     if (data.doctor_id !== undefined) await assertDoctorLink(tx, data.doctor_id, id);
     const changes: Record<string, unknown> = {};
@@ -187,6 +201,7 @@ usersRouter.post("/:id/approve", requirePermission("users.approve"), async (req,
     if (!target) throw new HttpError(404, "Usuario no encontrado");
     assertCanManage(req.user!.roles, target);
     if (!approved && isAdmin(target.roles)) await assertAnotherAdminRemains(tx, id);
+    if (approved && !target.approved && target.active) await assertUserLimit(tx);
     await tx.query("UPDATE users SET approved = ? WHERE id = ?", [approved, id]);
     if (!approved) await revokeSessions(tx, id);
     await audit(tx, req.user!.id, approved ? "USER_APPROVE" : "USER_UNAPPROVE", "users", id, { email: target.email });

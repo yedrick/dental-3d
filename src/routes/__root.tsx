@@ -53,29 +53,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "3 Dental Imagen · Radiología Dental" },
-      { name: "description", content: "Centro de imagen dental 2D y 3D en Bolivia. Estudios radiológicos con entrega ágil y sistema de gestión para clínicas." },
-      { property: "og:site_name", content: "3 Dental Imagen" },
+      { title: "IONIX · Gestión para centros de radiología dental" },
+      { name: "description", content: "IONIX: sistema para centros de radiología dental. Pacientes, atenciones, cobros, comisiones, caja, reportes y página web propia." },
+      { property: "og:site_name", content: "IONIX" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
-    ],
-    scripts: [
-      {
-        type: "application/ld+json",
-        children: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          name: "3 Dental Imagen",
-          url: "https://3d.kollatek.com",
-          logo: "https://3d.kollatek.com/favicon.png",
-          telephone: "+591-77726685",
-          address: { "@type": "PostalAddress", addressCountry: "BO" },
-        }),
-      },
     ],
   }),
   shellComponent: RootShell,

@@ -1,4 +1,4 @@
-# API Dental-3D (Node + Express + MySQL + tenancy-node)
+# API IONIX (Node + Express + MySQL + tenancy-node)
 
 Backend propio que reemplaza a Supabase, **multi-sucursal** con [tenancy-node](https://github.com/yedrick/tenat-node) v0.8.0:
 

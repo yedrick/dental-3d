@@ -55,7 +55,7 @@ function limiter(name: string, windowMs: number, limit: number, message: string)
     legacyHeaders: false,
     keyGenerator: (req) => `${tenancy.currentId() ?? "central"}:${ipKeyGenerator(req.ip ?? "")}`,
     handler: (_req, _res, next) => next(new HttpError(429, message)),
-    ...(client ? { store: new RedisStore(client, `dental3d:rl:${name}:`), passOnStoreError: true } : {}),
+    ...(client ? { store: new RedisStore(client, `ionix:rl:${name}:`), passOnStoreError: true } : {}),
   });
 }
 

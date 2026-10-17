@@ -1,6 +1,7 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useId, useMemo, useState, useEffect } from "react";
+import { useBranding } from "@/lib/branding";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { methodLabel, type PaymentMethod } from "@/lib/payments";
@@ -59,10 +60,13 @@ function PatientProfile() {
     queryFn: () => apiGet<any[]>("/api/attentions/payments", { patient_id: id }),
     staleTime: STALE.ops,
   });
+  const { hasFeature } = useBranding();
+  const hasAgenda = hasFeature("agenda"); // pestaña Citas solo si el plan incluye la agenda
   const { data: appointments = [] } = useQuery({
     queryKey: ["appointments", "patient", id],
     queryFn: () => apiGet<any[]>("/api/appointments", { patient_id: id }),
     staleTime: STALE.ops,
+    enabled: hasAgenda,
   });
 
   const doctorName = (did?: string | null) => (doctors as any[]).find((d) => d.id === did)?.full_name;
@@ -183,7 +187,7 @@ function PatientProfile() {
           <TabsTrigger value="tratamientos">Estudios ({enriched.length})</TabsTrigger>
           <TabsTrigger value="pagos">Pagos</TabsTrigger>
           <TabsTrigger value="entregas">Entregas {summary.pendingDelivery > 0 && <Badge variant="outline" className="ml-1">{summary.pendingDelivery}</Badge>}</TabsTrigger>
-          <TabsTrigger value="citas">Citas ({appointments.length})</TabsTrigger>
+          {hasAgenda && <TabsTrigger value="citas">Citas ({appointments.length})</TabsTrigger>}
           <TabsTrigger value="datos">Datos</TabsTrigger>
         </TabsList>
 
@@ -205,7 +209,11 @@ function PatientProfile() {
                     <TableCell className="font-mono">{formatMoney(r.total)}</TableCell>
                     <TableCell className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(r.paid)}</TableCell>
                     <TableCell className="font-mono">{r.debt > 0.009 ? <Badge variant="outline" className="text-amber-600 border-amber-500">{formatMoney(r.debt)}</Badge> : <Badge variant="secondary">—</Badge>}</TableCell>
-                    <TableCell className="text-xs">{r.with_invoice ? (r.invoice_number || "Sí") : "—"}</TableCell>
+                    <TableCell className="text-xs">
+                      {r.with_invoice ? (
+                        <>Sí{r.invoice_number && <span className="block text-[10px] text-muted-foreground">N° {r.invoice_number}</span>}</>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell className="text-xs">{r.delivered_at ? formatDate(r.delivered_at) : <Badge variant="outline">Pendiente</Badge>}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">

@@ -1,6 +1,6 @@
-# Dental Flow Pro
+# IONIX
 
-🦷 “Dental-3D”
+🦷 Sistema para centros de radiología dental (antes "Dental-3D"): cada clínica con su subdominio, su base de datos, su página web y los módulos de su plan.
 
 Debe ser un sistema de gestión para un centro radiológico dental con control clínico, administrativo y financiero.
 

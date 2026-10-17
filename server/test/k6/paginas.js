@@ -68,7 +68,7 @@ export default async function (data) {
     for (const [nombre, ruta, selector, sesion] of PAGINAS) {
       if (sesion) {
         // La sesión se pone directo (el login tiene límite de intentos por IP; aquí se mide la página, no bcrypt)
-        await page.evaluate((tk) => localStorage.setItem("dental3d.token", tk), data.tokens[t.id]);
+        await page.evaluate((tk) => localStorage.setItem("ionix.token", tk), data.tokens[t.id]);
       }
       const tags = { pagina: nombre, sucursal: t.id };
       const t0 = Date.now();

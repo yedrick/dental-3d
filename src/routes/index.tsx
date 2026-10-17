@@ -4,7 +4,9 @@ import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { useBranding } from "@/lib/branding";
 import { DEFAULT_SITE, useSiteContent, whatsappLink } from "@/lib/site";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { SimpleLanding } from "@/components/site/simple-landing";
+import { TenantNotFound } from "@/components/site/tenant-not-found";
 import { Button } from "@/components/ui/button";
 import {
   Activity, ShieldCheck, Clock, MapPin, Phone, MessageCircle,
@@ -13,36 +15,40 @@ import {
 
 export const Route = createFileRoute("/")({
   ssr: false,
+  // Datos de la sucursal: el título, la descripción y el contenido salen de su "Página web"
   head: () => ({
     meta: [
-      { title: "3 Dental Imagen · Radiología Dental 2D y 3D en Bolivia" },
-      { name: "description", content: "Centro de radiología dental en Bolivia. Estudios 2D y 3D (CBCT) con entrega ágil. Agenda por WhatsApp." },
-      { property: "og:title", content: "3 Dental Imagen · Radiología Dental 2D y 3D" },
-      { property: "og:description", content: "Estudios radiológicos dentales 2D y 3D con la última tecnología. Agenda tu cita por WhatsApp." },
-      { property: "og:url", content: "https://3d.kollatek.com/" },
+      { title: "Radiología dental 2D y 3D" },
+      { name: "description", content: "Centro de radiología dental. Estudios 2D y 3D con entrega ágil. Agenda por WhatsApp." },
       { property: "og:type", content: "website" },
-      { name: "twitter:title", content: "3 Dental Imagen · Radiología Dental" },
-      { name: "twitter:description", content: "Estudios radiológicos dentales 2D y 3D. Agenda por WhatsApp." },
-    ],
-    links: [{ rel: "canonical", href: "https://3d.kollatek.com/" }],
-    scripts: [
-      {
-        type: "application/ld+json",
-        children: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "MedicalBusiness",
-          name: "3 Dental Imagen",
-          description: "Centro radiológico dental especializado en imagen 2D y 3D.",
-          url: "https://3d.kollatek.com/",
-          address: { "@type": "PostalAddress", addressCountry: "BO" },
-          openingHours: ["Mo-Fr 08:00-19:00", "Sa 08:00-13:00"],
-        }),
-      },
     ],
   }),
-  component: Landing,
+  component: Home,
 });
 
+
+// Web comercial de IONIX: se descarga solo en el dominio principal (trae las animaciones)
+const PlatformHome = lazy(() => import("@/components/platform/home"));
+
+function Splash() {
+  return <div className="min-h-screen bg-[#070b1d]" aria-busy="true" />;
+}
+
+/**
+ * Qué se muestra en "/" según el dominio:
+ * - dominio principal (ionix.kollatech.site) → web comercial con planes y "Solicitar demo";
+ * - clínica con el módulo "Página web" → su página completa (editable);
+ * - clínica sin ese módulo → portada simple con contacto y acceso al sistema;
+ * - subdominio que no existe → aviso.
+ */
+function Home() {
+  const branding = useBranding();
+  if (!branding.loaded) return <Splash />;
+  if (branding.central) return <Suspense fallback={<Splash />}><PlatformHome /></Suspense>;
+  if (branding.tenantMissing) return <TenantNotFound />;
+  if (!branding.hasFeature("pagina_web")) return <SimpleLanding />;
+  return <Landing />;
+}
 
 function Landing() {
   const { user, loading } = useAuth();
@@ -50,12 +56,17 @@ function Landing() {
   const logoAsset = { url: branding.logo };
   // Contenido editable de la página web de la sucursal (tabla site_content en su base)
   const { data: siteData } = useSiteContent();
-  const site = siteData ?? DEFAULT_SITE;
+  // Sin teléfono o dirección propios en "Página web" se usan los de la sucursal (panel → Datos)
+  const base = siteData ?? DEFAULT_SITE;
+  const site = {
+    ...base,
+    contact: { ...base.contact, phone: base.contact.phone || branding.phone || "", address: base.contact.address || branding.address || "" },
+  };
   const CONTACT = { name: site.footer.name || branding.name, tagline: "Centro Radiológico Dental" };
   useEffect(() => {
-    if (site.seo.title) document.title = site.seo.title;
+    document.title = site.seo.title || `${branding.name} · Radiología dental`;
     document.querySelector('meta[name="description"]')?.setAttribute("content", site.seo.description);
-  }, [site.seo.title, site.seo.description]);
+  }, [site.seo.title, site.seo.description, branding.name]);
   // Estudios activos de la sucursal (sin precios). En el dominio central no hay sucursal: la sección queda vacía.
   const { data: studies, isLoading: sLoading } = useQuery({
     queryKey: ["public-studies"],
@@ -91,6 +102,7 @@ function Landing() {
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            {site.contact.whatsapp && (
             <a
               href={whatsappLink(site)}
               target="_blank" rel="noreferrer"
@@ -98,6 +110,7 @@ function Landing() {
             >
               <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
             </a>
+            )}
             <Button asChild size="sm" className="bg-white text-[#0a1230] hover:bg-white/90">
               {loggedIn ? <Link to="/app">Ir al sistema</Link> : <Link to="/auth">Ingresar</Link>}
             </Button>
@@ -122,6 +135,7 @@ function Landing() {
                 {site.hero.subtitle}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
+                {site.contact.whatsapp && (
                 <a
                   href={whatsappLink(site, true)}
                   target="_blank" rel="noreferrer"
@@ -129,6 +143,7 @@ function Landing() {
                 >
                   <MessageCircle className="h-4 w-4" /> {site.hero.cta_label}
                 </a>
+                )}
                 <a
                   href="#estudios"
                   className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold backdrop-blur hover:bg-white/10"
@@ -239,6 +254,7 @@ function Landing() {
                     <Phone className="h-4 w-4 text-[#8ba9ff]" /> {site.contact.phone}
                   </a>
                 )}
+                {site.contact.whatsapp && (
                 <a
                   href={whatsappLink(site)}
                   target="_blank" rel="noreferrer"
@@ -246,6 +262,7 @@ function Landing() {
                 >
                   <MessageCircle className="h-4 w-4 text-[#8ba9ff]" /> WhatsApp directo
                 </a>
+                )}
                 {site.contact.email && (
                   <a href={`mailto:${site.contact.email}`} className="flex items-center gap-2 hover:text-[#8ba9ff]">{site.contact.email}</a>
                 )}
@@ -278,6 +295,7 @@ function Landing() {
               <p className="mt-3 max-w-lg text-sm text-white/70 sm:text-base">
                 {site.cta.subtitle}
               </p>
+              {site.contact.whatsapp && (
               <a
                 href={whatsappLink(site, true)}
                 target="_blank" rel="noreferrer"
@@ -285,6 +303,7 @@ function Landing() {
               >
                 <MessageCircle className="h-4 w-4" /> Agendar ahora
               </a>
+              )}
             </div>
           </div>
         </section>

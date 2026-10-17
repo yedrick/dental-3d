@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /app/
-Disallow: /auth
-
-Sitemap: https://3d.kollatek.com/sitemap.xml

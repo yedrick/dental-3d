@@ -72,7 +72,7 @@ try {
   ok("crear doctor desde la pantalla", true);
 
   // ---------- Estudio + tarifa (vía la API con la sesión del navegador, para no depender del diseño) ----------
-  const token = await app.evaluate(() => localStorage.getItem("dental3d.token"));
+  const token = await app.evaluate(() => localStorage.getItem("ionix.token"));
   const api = async (method, path, body) => {
     const r = await app.request.fetch(`${BASE}${path}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, data: body });
     return r.json();

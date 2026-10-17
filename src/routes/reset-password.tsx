@@ -17,7 +17,7 @@ export const Route = createFileRoute("/reset-password")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Recuperar contraseña · 3 Dental Imagen" },
+      { title: "Recuperar contraseña · IONIX" },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),

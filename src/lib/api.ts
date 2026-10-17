@@ -1,5 +1,5 @@
 // Cliente de la API Node (server/). El frontend y la API se sirven desde el MISMO host
-// (sur.dental3d.com/api): la sucursal se identifica por el subdominio. En desarrollo, Vite
+// (sur.ionix.kollatech.site/api): la sucursal se identifica por el subdominio. En desarrollo, Vite
 // reenvía /api y /tenancy a http://localhost:4000 (vite.config.ts).
 
 import { activity } from "@/lib/activity";
@@ -8,11 +8,11 @@ const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 /** Tiempo máximo de espera por petición; los archivos (logos, comprobantes) tienen más. */
 const TIMEOUT_MS = 60_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
-const TOKEN_KEY = "dental3d.token";
+const TOKEN_KEY = "ionix.token";
 /** Token del ADMIN mientras suplanta a otro usuario, para volver a su sesión. */
-const ADMIN_TOKEN_KEY = "dental3d.admin_token";
+const ADMIN_TOKEN_KEY = "ionix.admin_token";
 
-export const LOGOUT_EVENT = "dental3d:logout";
+export const LOGOUT_EVENT = "ionix:logout";
 
 function storage(): Storage | null {
   try {
@@ -21,6 +21,20 @@ function storage(): Storage | null {
     return null;
   }
 }
+
+// Antes de IONIX las claves eran "dental3d.*": se pasan a las nuevas una vez, sin cerrar la sesión
+function migrateLegacyKeys() {
+  const ls = storage();
+  if (!ls) return;
+  for (const [legacy, key] of [["dental3d.token", TOKEN_KEY], ["dental3d.admin_token", ADMIN_TOKEN_KEY]] as const) {
+    const v = ls.getItem(legacy);
+    if (v !== null) {
+      if (ls.getItem(key) === null) ls.setItem(key, v);
+      ls.removeItem(legacy);
+    }
+  }
+}
+try { migrateLegacyKeys(); } catch { /* almacenamiento bloqueado: se inicia sesión de nuevo */ }
 
 export const tokenStore = {
   get: () => storage()?.getItem(TOKEN_KEY) ?? null,
@@ -37,7 +51,8 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
-    public details?: { field: string; message: string }[],
+    // Validación: [{ field, message }]. Errores de tenancy-node (planes): objeto { max, limit, feature… }
+    public details?: { field: string; message: string }[] | Record<string, unknown>,
   ) {
     super(message);
   }

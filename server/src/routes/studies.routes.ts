@@ -6,6 +6,8 @@ import { cache, CacheKeys, CacheTtl, invalidate } from "../lib/cache.js";
 import { HttpError } from "../lib/http-error.js";
 import { money, optionalText } from "../lib/schemas.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { requireFeature } from "@tenancy-node/adapter-express";
+import { tenancy } from "../tenancy/index.js";
 
 // Estudios y tarifas. Lectura para cualquier usuario autenticado (como la RLS "Read studies").
 export const studiesRouter = Router();
@@ -259,7 +261,7 @@ function importReport(plan: PlanRow[], errores: { fila: number; mensaje: string 
   };
 }
 
-studiesRouter.post("/import", requirePermission("studies.create"), requirePermission("studies.edit"), async (req, res) => {
+studiesRouter.post("/import", requireFeature(tenancy, "importar"), requirePermission("studies.create"), requirePermission("studies.edit"), async (req, res) => {
   const { filas, fecha_vigencia, aplicar } = importSchema.parse(req.body);
   if (!aplicar) {
     const { plan, errores } = await planImport(db(), filas, false);

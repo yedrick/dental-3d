@@ -63,8 +63,10 @@ export const config = {
     secure: process.env.MAIL_SMTP_SECURE === "true",
     user: process.env.MAIL_SMTP_USER || undefined,
     pass: process.env.MAIL_SMTP_PASS || undefined,
-    // Remitente: "Dental 3D <no-responder@dominio.com>". El nombre de la sucursal se agrega solo.
+    // Remitente: "IONIX <no-responder@dominio.com>". El nombre de la sucursal se agrega solo.
     from: process.env.MAIL_FROM ?? "no-responder@localhost",
+    // Correo que recibe las solicitudes de "Solicitar demo" de la web comercial (vacío = sin aviso)
+    salesTo: process.env.SALES_NOTIFY_TO || undefined,
   },
   // Archivos privados (comprobantes): nunca se sirven sin un enlace firmado
   privateStorageDir: process.env.PRIVATE_STORAGE_DIR ?? "./storage-private",

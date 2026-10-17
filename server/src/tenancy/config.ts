@@ -6,6 +6,7 @@ import { redis, redisInvalidation } from "@tenancy-node/cache-redis";
 import { config } from "../config.js";
 import { mysqlWithSession } from "./mysql-session.js";
 import { seedTenant } from "./seed.js";
+import { defaultPlan, features, plans } from "./plans.js";
 
 /**
  * Configuración de tenancy-node. La usan la API (src/tenancy/index.ts) y la CLI
@@ -13,7 +14,7 @@ import { seedTenant } from "./seed.js";
  */
 export const tenancyConfig = defineConfig({
   centralDomains: config.tenancy.centralDomains,
-  // sur.dental3d.com → tenant "sur" (en local: sur.localhost)
+  // imagendent.ionix.kollatech.site → tenant "imagendent" (en local: sur.localhost)
   resolver: "subdomain",
   // Solo archivos PÚBLICOS (logo, favicon): http.assets los sirve sin autenticación.
   // Los archivos privados (comprobantes) NO deben guardarse con tenancy.storage().
@@ -23,14 +24,26 @@ export const tenancyConfig = defineConfig({
     me: true, // GET /tenancy/me → nombre, datos públicos y tema (con logo)
     theme: true, // GET /tenancy/theme.css → variables CSS de la sucursal
     assets: true, // GET /tenancy/assets/branding/logo-....png
-    cacheControl: "public, max-age=60",
+    plans: true, // GET /tenancy/plans → planes y precios para la web comercial
+    platform: true, // GET /tenancy/platform → marca y contacto de IONIX (panel → Plataforma)
+    // no-cache + ETag: un cambio de plan o de tema se ve al recargar, sin bajar todo otra vez
+    cacheControl: "no-cache",
   },
-  publicFields: ["name", "address", "phone"],
+  // plan, features y limits: el frontend muestra solo los módulos del plan (ver plans.ts)
+  publicFields: ["name", "address", "phone", "plan", "planLabel", "features", "limits"],
+  // Módulos y planes de IONIX: menú, API (requireFeature), límites, panel y precios públicos
+  features,
+  // Planes base: en el panel (/admin → Planes) se editan precios, módulos y límites sin desplegar;
+  // "Restablecer" vuelve a estos valores
+  plans,
+  defaultPlan,
+  // Marca de la plataforma mientras nadie la edite en el panel (/admin → Plataforma)
+  platform: { defaults: { name: "IONIX", ...(config.mail.salesTo ? { salesNotifyTo: [config.mail.salesTo] } : {}) } },
   // Caché por sucursal (tenant:<id>:…) en Redis si hay REDIS_URL; si no, en memoria. Con Redis,
   // los cambios de sucursales y dominios también llegan al instante a todas las réplicas.
   ...(config.tenancy.redisUrl
     ? {
-        cache: redis({ url: config.tenancy.redisUrl, keyPrefix: "dental3d:" }),
+        cache: redis({ url: config.tenancy.redisUrl, keyPrefix: "ionix:" }),
         invalidation: redisInvalidation({ url: config.tenancy.redisUrl }),
       }
     : {}),

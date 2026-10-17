@@ -25,7 +25,7 @@ async function session(login) {
   await page.waitForURL(/\/app/);
   return page;
 }
-const api = (page, path) => page.evaluate(async (p) => (await fetch(p, { headers: { Authorization: "Bearer " + localStorage.getItem("dental3d.token") } })).json(), path);
+const api = (page, path) => page.evaluate(async (p) => (await fetch(p, { headers: { Authorization: "Bearer " + localStorage.getItem("ionix.token") } })).json(), path);
 const sfx = Date.now().toString(36);
 
 try {

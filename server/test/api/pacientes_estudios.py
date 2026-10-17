@@ -21,7 +21,7 @@ def call(m,p,b=None,host="localhost",tok=None):
         try: return e.code,json.loads(b)
         except: return e.code,b
 _,b=call("POST","/admin/api/auth/login",{"email":os.environ.get("OWNER_EMAIL","owner@dental3d.local"),"password":os.environ["OWNER_PASS"],"mode":"token"}); PT=b["token"]
-call("POST","/admin/api/tenants",{"id":T,"name":"Prueba Excel"},tok=PT)
+call("POST","/admin/api/tenants",{"id":T,"name":"Prueba Excel","plan":"clinica"},tok=PT)  # todos los módulos
 for _ in range(60):
     s,t=call("GET",f"/admin/api/tenants/{T}",tok=PT)
     if s==200 and (t.get("tenant") or t)["status"]=="active": break

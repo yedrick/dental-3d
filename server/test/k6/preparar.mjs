@@ -68,7 +68,7 @@ async function estado(id) {
 }
 await enLotes(ids, A_LA_VEZ, async (id) => {
   if ((await estado(id)) === "active") return;
-  const r = await call("POST", "/admin/api/tenants", { body: { id, name: `Sucursal ${id}` }, token: PT });
+  const r = await call("POST", "/admin/api/tenants", { body: { id, name: `Sucursal ${id}`, plan: "clinica" }, token: PT }); // todos los módulos
   if (r.status !== 202) throw new Error(`No se pudo crear ${id}: ${r.status} ${JSON.stringify(r.body)}`);
   for (let i = 0; i < 300; i++) {
     const s = await estado(id);

@@ -31,7 +31,7 @@ check("panel: login del dueño", st == 200, b); PT = b["token"]
 # ---------- 1. Crear N sucursales a la vez ----------
 t0 = time.time()
 with cf.ThreadPoolExecutor(N) as ex:
-    created = list(ex.map(lambda i: call("POST", "/admin/api/tenants", {"id": i, "name": f"Sucursal {i}"}, token=PT), IDS))
+    created = list(ex.map(lambda i: call("POST", "/admin/api/tenants", {"id": i, "name": f"Sucursal {i}", "plan": "clinica"}, token=PT), IDS))
 check(f"crear {N} sucursales a la vez (202)", all(s == 202 for s, _ in created), [c for c in created if c[0] != 202][:3])
 pending = set(IDS); deadline = time.time() + 600
 while pending and time.time() < deadline:

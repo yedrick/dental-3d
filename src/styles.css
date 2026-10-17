@@ -154,3 +154,8 @@
 @media (prefers-reduced-motion: reduce) {
   .loader-bar { animation-duration: 3s; }
 }
+
+/* Títulos de la web comercial de IONIX (Sora se carga solo en el dominio principal) */
+@utility font-display {
+  font-family: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+}

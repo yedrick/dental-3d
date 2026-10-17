@@ -21,11 +21,14 @@ import {
 
 export const Route = createFileRoute("/app/reports")({ component: ReportsPage });
 
-const PRESETS = [
-  { key: "7d", label: "7 días", days: 7 },
-  { key: "30d", label: "30 días", days: 30 },
-  { key: "90d", label: "90 días", days: 90 },
-  { key: "ytd", label: "Este año", days: null },
+/** Períodos rápidos: [desde, hasta] en días locales. Reportes abre en "Hoy" (cierre del día). */
+const PRESETS: { key: string; label: string; range: () => [string, string] }[] = [
+  { key: "today", label: "Hoy", range: () => [todayLocal(), todayLocal()] },
+  { key: "yesterday", label: "Ayer", range: () => [daysAgoLocal(1), daysAgoLocal(1)] },
+  { key: "7d", label: "7 días", range: () => [daysAgoLocal(6), todayLocal()] },
+  { key: "month", label: "Este mes", range: () => [`${todayLocal().slice(0, 7)}-01`, todayLocal()] },
+  { key: "30d", label: "30 días", range: () => [daysAgoLocal(29), todayLocal()] },
+  { key: "ytd", label: "Este año", range: () => [`${todayLocal().slice(0, 4)}-01-01`, todayLocal()] },
 ];
 
 type ReportSummary = {
@@ -76,14 +79,15 @@ const daysAgoLocal = (days: number) => formatDate(new Date(Date.now() - days * 8
 
 function ReportsPage() {
   const uid = useId(); // ids para unir cada etiqueta con su campo
-  const [from, setFrom] = useState(() => daysAgoLocal(30));
+  const [from, setFrom] = useState(() => todayLocal());
   const [to, setTo] = useState(() => todayLocal());
 
   const setPreset = (p: (typeof PRESETS)[number]) => {
-    setTo(todayLocal());
-    if (p.days) setFrom(daysAgoLocal(p.days));
-    else setFrom(`${new Date().getFullYear()}-01-01`);
+    const [f, t] = p.range();
+    setFrom(f);
+    setTo(t);
   };
+  const activePreset = PRESETS.find((p) => { const [f, t] = p.range(); return f === from && t === to; })?.key;
 
   const validRange = !!from && !!to && from <= to;
 
@@ -147,10 +151,11 @@ function ReportsPage() {
       autoTable(doc, { startY: y + 2, head: [columns], body: body.length ? body : [["Sin datos", ...columns.slice(1).map(() => "")]], headStyles: head, styles: { fontSize: 9 } });
     };
     table("Resumen", ["Concepto", "Monto"], [
-      [`Ventas (${data.studies} atenciones)`, formatMoney(data.totalStudies)],
+      [`Ventas: atenciones registradas (${data.studies})`, formatMoney(data.totalStudies)],
       [`  Con factura (${data.withInvoice.count})`, formatMoney(data.withInvoice.total)],
       [`  Sin factura (${data.withoutInvoice.count})`, formatMoney(data.withoutInvoice.total)],
-      ["Cobrado en el período", formatMoney(data.paid)],
+      ["Cobrado: pagos recibidos en el período", formatMoney(data.paid)],
+      ...(data.paidPrevious > 0 ? [["  de atenciones de días anteriores", formatMoney(data.paidPrevious)]] : []),
       ["Por cobrar", formatMoney(data.debt)],
       ["Comisiones", formatMoney(data.commissions)],
       ["Pagos a terceros", formatMoney(data.tppTotal)],
@@ -164,6 +169,9 @@ function ReportsPage() {
     table("Atenciones por día", ["Fecha", "Atenciones", "Ventas"], data.byDay.map(([d, v]) => [dmy(d), v.count, formatMoney(v.income)]));
     table("Por estudio", ["Estudio", "Cantidad", "Ventas"], raw.operational.by_study.map((r) => [r.study, r.count, formatMoney(r.income)]));
     table("Comisiones por doctor", ["Doctor", "Atenciones", "Total"], raw.financial.commissions_by_doctor.map((r) => [r.doctor, r.count, formatMoney(r.total)]));
+    const end = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
+    doc.setFontSize(8);
+    doc.text("Ventas: cada atención el día en que se registró. Cobrado: cada pago el día en que se recibió.", 14, Math.min(end + 8, 287));
     doc.save(`reporte_${from}_${to}.pdf`);
   };
 
@@ -197,9 +205,9 @@ function ReportsPage() {
           {validRange && error && (
             <p className="text-xs text-destructive self-center">{translateError(error)}</p>
           )}
-          <div className="flex gap-1 ml-auto">
+          <div className="flex flex-wrap gap-1 ml-auto">
             {PRESETS.map((p) => (
-              <Button key={p.key} variant="outline" size="sm" onClick={() => setPreset(p)}>{p.label}</Button>
+              <Button key={p.key} variant={activePreset === p.key ? "default" : "outline"} size="sm" onClick={() => setPreset(p)}>{p.label}</Button>
             ))}
           </div>
         </CardContent>
@@ -212,7 +220,7 @@ function ReportsPage() {
           value={formatMoney(data?.totalStudies)}
           hint={
             <span className="block space-y-0.5">
-              <span className="block">{data?.studies ?? 0} atenciones</span>
+              <span className="block">{data?.studies ?? 0} atenciones registradas</span>
               <span className="block">Con factura: {formatMoney(data?.withInvoice.total)} ({data?.withInvoice.count ?? 0})</span>
               <span className="block">Sin factura: {formatMoney(data?.withoutInvoice.total)} ({data?.withoutInvoice.count ?? 0})</span>
             </span>
@@ -221,14 +229,14 @@ function ReportsPage() {
           accent="from-indigo-500/20 to-indigo-500/5"
         />
         <HeroCard
-          title="Cobrado"
+          title="Cobrado (ingresos)"
           value={formatMoney(data?.paid)}
           hint={
             <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
               <ArrowUpRight className="h-3 w-3" />
               {(data?.paidPrevious ?? 0) > 0
                 ? `incluye ${formatMoney(data?.paidPrevious)} de atenciones anteriores`
-                : "ingresado en el período"}
+                : "pagos recibidos en el período"}
             </span>
           }
           icon={<TrendingUp className="h-4 w-4" />}
@@ -237,24 +245,30 @@ function ReportsPage() {
         <HeroCard
           title="Por cobrar"
           value={formatMoney(data?.debt)}
-          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />saldo de las atenciones del período</span>}
+          hint={<span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><ArrowDownRight className="h-3 w-3" />saldo de las atenciones registradas</span>}
           icon={<TrendingDown className="h-4 w-4" />}
           accent="from-amber-500/20 to-amber-500/5"
         />
         <HeroCard
           title="Utilidad estimada"
           value={formatMoney(data?.netFinancial)}
-          hint="Ventas − comisiones − terceros"
+          hint="Ventas − comisiones − pagos a terceros"
           icon={<Wallet className="h-4 w-4" />}
           accent="from-violet-500/20 to-violet-500/5"
         />
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        <b>Ventas</b> cuenta cada atención el día en que se <b>registró</b>; <b>Cobrado</b> cuenta cada pago el día en que se <b>recibió</b>.
+        Una atención registrada el 14 y cobrada el 16 suma en Ventas el 14 y en Cobrado el 16.
+      </p>
+
       {/* Secondary KPIs */}
-      <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-4 lg:grid-cols-7">
         <MiniStat icon={<Activity className="h-3.5 w-3.5" />} label="Estudios entregados" value={data?.delivered ?? 0} tone="ok" />
         <MiniStat icon={<Activity className="h-3.5 w-3.5" />} label="Estudios pendientes" value={data?.pending ?? 0} tone={data?.pending ? "warn" : "muted"} />
         <MiniStat icon={<Users className="h-3.5 w-3.5" />} label="Comisiones" value={formatMoney(data?.commissions)} />
+        <MiniStat icon={<Wallet className="h-3.5 w-3.5" />} label="Pagos a terceros" value={formatMoney(data?.tppTotal)} />
         <MiniStat icon={<Landmark className="h-3.5 w-3.5" />} label="Depósitos" value={formatMoney(data?.depTotal)} />
         <MiniStat icon={<Wallet className="h-3.5 w-3.5" />} label="Caja ingresos" value={formatMoney(data?.cashIn)} tone="ok" />
         <MiniStat icon={<Wallet className="h-3.5 w-3.5" />} label="Caja gastos" value={formatMoney(data?.cashOut)} tone="warn" />

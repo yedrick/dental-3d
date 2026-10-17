@@ -7,7 +7,7 @@ errorTracker.start();
 
 const server = app.listen(config.port, config.host ?? "::", () => {
   const proc = config.processes > 1 ? ` [proceso ${process.pid}]` : "";
-  console.log(`API Dental-3D escuchando en http://localhost:${config.port} (sucursal: http://<id>.localhost:${config.port})${proc}`);
+  console.log(`API IONIX escuchando en http://localhost:${config.port} (sucursal: http://<id>.localhost:${config.port})${proc}`);
 });
 
 // Apagado ordenado: dejar de aceptar conexiones, terminar las peticiones en curso y cerrar pools

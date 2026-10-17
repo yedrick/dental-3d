@@ -17,7 +17,7 @@ await page.route("**/api/**", async (route) => {
   if (m !== "GET") { writes.push(`${m} ${new URL(route.request().url()).pathname}`); await new Promise((r) => setTimeout(r, 1500)); }
   await route.continue();
 });
-const api = async (path) => page.evaluate(async (p) => (await fetch(p, { headers: { Authorization: "Bearer " + localStorage.getItem("dental3d.token") } })).json(), path);
+const api = async (path) => page.evaluate(async (p) => (await fetch(p, { headers: { Authorization: "Bearer " + localStorage.getItem("ionix.token") } })).json(), path);
 const count = (re) => writes.filter((w) => re.test(w)).length;
 // Doble clic "humano" (dos clics seguidos) y doble clic en el mismo instante (dos .click() en el mismo tick)
 const dbl = (loc) => loc.dblclick();

@@ -18,14 +18,12 @@ export const Route = createFileRoute("/auth")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Iniciar sesión · 3 Dental Imagen" },
-      { name: "description", content: "Accede al sistema de gestión de 3 Dental Imagen para agendar, registrar pacientes y consultar estudios." },
+      { title: "Iniciar sesión · IONIX" },
+      { name: "description", content: "Accede al sistema IONIX de tu clínica." },
       { name: "robots", content: "noindex,nofollow" },
-      { property: "og:title", content: "Iniciar sesión · 3 Dental Imagen" },
-      { property: "og:description", content: "Acceso al sistema de gestión de 3 Dental Imagen." },
-      { property: "og:url", content: "https://3d.kollatek.com/auth" },
+      { property: "og:title", content: "Iniciar sesión · IONIX" },
+      { property: "og:description", content: "Acceso al sistema IONIX de tu clínica." },
     ],
-    links: [{ rel: "canonical", href: "https://3d.kollatek.com/auth" }],
   }),
   component: AuthPage,
 });
@@ -84,7 +82,7 @@ function PasswordField({
             
           </ul>
           <p className="mt-2 text-muted-foreground">
-            Inventa una contraseña nueva que NO uses en otros sitios. Ejemplo válido: <code className="rounded bg-background px-1">Dental3D#Clinica-2026!</code>
+            Inventa una contraseña nueva que NO uses en otros sitios. Ejemplo válido: <code className="rounded bg-background px-1">Ionix#Clinica-2026!</code>
           </p>
         </div>
       )}

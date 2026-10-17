@@ -24,7 +24,8 @@ export interface SiteContent {
 
 export const DEFAULT_SITE: SiteContent = {
   seo: {
-    title: "3 Dental Imagen · Radiología Dental 2D y 3D en Bolivia",
+    // Vacío: la portada usa "<nombre de la sucursal> · Radiología dental"
+    title: "",
     description: "Centro de radiología dental en Bolivia. Estudios 2D y 3D (CBCT) con entrega ágil. Agenda por WhatsApp.",
   },
   hero: {
@@ -36,9 +37,9 @@ export const DEFAULT_SITE: SiteContent = {
     image: "",
   },
   stats: [
-    { value: "10+", label: "Años de experiencia" },
-    { value: "3D", label: "Tomografía CBCT" },
-    { value: "24h", label: "Entrega ágil" },
+    { value: "2D · 3D", label: "Imágenes dentales" },
+    { value: "Digital", label: "Entrega de resultados" },
+    { value: "WhatsApp", label: "Agenda tu cita" },
   ],
   studies: {
     title: "Estudios disponibles",
@@ -46,8 +47,8 @@ export const DEFAULT_SITE: SiteContent = {
     empty: "Estamos actualizando nuestro catálogo. Escríbenos por WhatsApp.",
   },
   contact: {
-    phone: "77726685", whatsapp: "59177726685", whatsapp_message: "Hola, quisiera agendar un estudio",
-    email: "", address: "Bolivia", address_note: "Consulta la dirección exacta al agendar.", map_url: "",
+    phone: "", whatsapp: "", whatsapp_message: "Hola, quisiera agendar un estudio",
+    email: "", address: "", address_note: "Consulta la dirección exacta al agendar.", map_url: "",
   },
   hours: [
     { day: "Lunes a Viernes", hours: "08:00 – 19:00" },
@@ -59,7 +60,7 @@ export const DEFAULT_SITE: SiteContent = {
     subtitle: "Escríbenos por WhatsApp y agenda tu cita. Recibirás tus imágenes en formato digital y físico.",
   },
   social: { facebook: "", instagram: "", tiktok: "" },
-  footer: { name: "3 Dental Imagen" },
+  footer: { name: "" },
 };
 
 export function useSiteContent() {
@@ -77,6 +78,7 @@ export function useSiteContent() {
 }
 
 /** Enlace de WhatsApp con mensaje opcional. */
+/** Enlace a WhatsApp de la clínica. Solo usarlo si site.contact.whatsapp no está vacío. */
 export function whatsappLink(site: SiteContent, withMessage = false) {
   const base = `https://wa.me/${site.contact.whatsapp}`;
   return withMessage && site.contact.whatsapp_message

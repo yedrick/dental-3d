@@ -1,5 +1,5 @@
 import { translateError } from "@/lib/translate-error";
-import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, Link, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { tokenStore } from "@/lib/api";
@@ -11,6 +11,8 @@ import { LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
 import { SetupAccount } from "@/components/setup-account";
+import { PlanLocked } from "@/components/plan-locked";
+import { moduleFor } from "@/lib/plan";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
@@ -68,6 +70,7 @@ function AppLayout() {
   const { user, loading } = useAuth();
   const branding = useBranding();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [user, loading, navigate]);
   if (loading || !user) return (
     <div className="grid min-h-screen place-items-center bg-muted/30" role="status" aria-live="polite">
@@ -84,6 +87,10 @@ function AppLayout() {
 
   // Cuenta ADMIN por defecto de una sucursal nueva: primero se activa
   if (user.must_change_password) return <SetupAccount />;
+
+  // Módulo que el plan no incluye (entró por enlace): la API también lo rechaza
+  const locked = moduleFor(pathname);
+  const blocked = locked && branding.loaded && !branding.hasFeature(locked.feature) ? locked : null;
 
   return (
     <SidebarProvider>
@@ -106,7 +113,7 @@ function AppLayout() {
           </header>
 
           <main className="flex-1 bg-muted/30 p-3 sm:p-4 md:p-6">
-            <Outlet />
+            {blocked ? <PlanLocked label={blocked.label} /> : <Outlet />}
           </main>
         </div>
       </div>

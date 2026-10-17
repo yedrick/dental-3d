@@ -80,9 +80,9 @@ export function defaultSite(name: string): SiteContent {
       image: "",
     },
     stats: [
-      { value: "10+", label: "Años de experiencia" },
-      { value: "3D", label: "Tomografía CBCT" },
-      { value: "24h", label: "Entrega ágil" },
+      { value: "2D · 3D", label: "Imágenes dentales" },
+      { value: "Digital", label: "Entrega de resultados" },
+      { value: "WhatsApp", label: "Agenda tu cita" },
     ],
     studies: {
       title: "Estudios disponibles",
@@ -90,11 +90,12 @@ export function defaultSite(name: string): SiteContent {
       empty: "Estamos actualizando nuestro catálogo. Escríbenos por WhatsApp.",
     },
     contact: {
-      phone: "77726685",
-      whatsapp: "59177726685",
+      // Vacíos: cada clínica pone los suyos en "Página web" (antes salían los de la primera clínica)
+      phone: "",
+      whatsapp: "",
       whatsapp_message: "Hola, quisiera agendar un estudio",
       email: "",
-      address: "Bolivia",
+      address: "",
       address_note: "Consulta la dirección exacta al agendar.",
       map_url: "",
     },

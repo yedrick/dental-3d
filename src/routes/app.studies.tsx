@@ -1,4 +1,5 @@
 import { translateError } from "@/lib/translate-error";
+import { useBranding } from "@/lib/branding";
 import { createFileRoute } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ const emptyPrice = { id: null as string | null, study_id: "", price_with_report:
 function StudiesPage() {
   const uid = useId(); // ids para unir cada etiqueta con su campo
   const { can } = useAuth();
+  const { hasFeature } = useBranding();
   // Los permisos los controla la API; aquí solo se ocultan los botones
   const canCreate = can("studies.create");
   const canEdit = can("studies.edit");
@@ -132,7 +134,7 @@ function StudiesPage() {
       <PageHeader
         title="Estudios y tarifas"
         description="El precio se toma siempre de la tarifa activa."
-        action={canCreate && canEdit && <StudiesImport studies={studies} />}
+        action={canCreate && canEdit && hasFeature("importar") && <StudiesImport studies={studies} />}
       />
       <Tabs defaultValue="studies">
         <TabsList>

@@ -11,13 +11,23 @@ export interface Branding {
   phone: string | null;
   logo: string;
   primary: string | null;
+  /** Plan de la sucursal (tenancy-node 0.11, ver server/src/tenancy/plans.ts). */
+  plan: string | null;
+  planLabel: string | null;
+  /** Módulos del plan. null = sin control de planes (todo habilitado). */
+  features: string[] | null;
+  limits: Record<string, number | null>;
+  /** true si el plan incluye el módulo (o si no hay planes). */
+  hasFeature: (feature: string) => boolean;
+  /** true en el dominio principal de IONIX (sin subdominio de sucursal): web comercial. */
+  central: boolean;
   /** true si la página se abrió sin el subdominio de una sucursal (o la sucursal no existe). */
   tenantMissing: boolean;
   loaded: boolean;
   reload: () => Promise<void>;
 }
 
-const DEFAULT_NAME = "3 Dental Imagen";
+const DEFAULT_NAME = "IONIX";
 
 const Ctx = createContext<Branding | null>(null);
 
@@ -46,11 +56,6 @@ const hex = (v?: string) => (v && HEX.test(v) ? v : null);
 
 const RADIUS: Record<string, string> = { none: "0rem", sm: "0.25rem", md: "0.625rem", lg: "1rem" };
 
-/** Fuentes de Google que se descargan solas al elegirlas. Otro nombre se usa si está instalado en el equipo. */
-const GOOGLE_FONTS = new Set([
-  "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins", "Nunito", "Raleway", "Source Sans 3",
-  "Work Sans", "DM Sans", "Manrope", "Rubik", "Quicksand", "Mulish", "Ubuntu", "Merriweather", "Playfair Display", "Lora",
-]);
 /** Fuentes del sistema: no hace falta descargarlas. */
 const SYSTEM_FONTS: Record<string, string> = {
   arial: "Arial, Helvetica, sans-serif",
@@ -63,12 +68,14 @@ const SYSTEM_FONTS: Record<string, string> = {
   "courier new": "'Courier New', monospace",
 };
 
-/** Nombre de fuente seguro para CSS (sin comillas ni símbolos) y con mayúsculas como en Google Fonts. */
+/**
+ * Nombre de fuente seguro para CSS (sin comillas ni símbolos). El panel solo deja elegir las fuentes
+ * de theme.fonts (server/src/tenancy/config.ts): las que no son del sistema son de Google Fonts.
+ */
 function fontName(raw?: string) {
   const v = (raw ?? "").trim().replace(/\s+/g, " ");
   if (!v || v.length > 40 || !/^[A-Za-z0-9 -]+$/.test(v)) return null;
-  const known = [...GOOGLE_FONTS].find((f) => f.toLowerCase() === v.toLowerCase());
-  return known ?? v;
+  return v;
 }
 
 function loadGoogleFont(name: string) {
@@ -108,7 +115,7 @@ function applyTheme(theme: TenantTheme | undefined) {
   const font = fontName(theme?.font);
   if (font) {
     const system = SYSTEM_FONTS[font.toLowerCase()];
-    if (!system && GOOGLE_FONTS.has(font)) loadGoogleFont(font);
+    if (!system) loadGoogleFont(font);
     const stack = system ?? `'${font}', ui-sans-serif, system-ui, sans-serif`;
     both.push(`--font-sans:${stack}`, `--default-font-family:${stack}`);
   } else {
@@ -132,15 +139,24 @@ function applyTheme(theme: TenantTheme | undefined) {
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Omit<Branding, "reload">>({
-    id: null, name: DEFAULT_NAME, address: null, phone: null, logo: defaultLogo, primary: null, tenantMissing: false, loaded: false,
+  const [state, setState] = useState<Omit<Branding, "reload" | "hasFeature">>({
+    id: null, name: DEFAULT_NAME, address: null, phone: null, logo: defaultLogo, primary: null,
+    plan: null, planLabel: null, features: null, limits: {}, central: false, tenantMissing: false, loaded: false,
   });
 
   const load = async () => {
     try {
       const res = await fetch(`${(import.meta.env.VITE_API_URL as string | undefined) ?? ""}/tenancy/me`, { cache: "no-cache" });
-      if (!res.ok) throw new Error(String(res.status));
-      const me = (await res.json()) as { id: string; name?: string; address?: string; phone?: string; theme?: TenantTheme };
+      if (!res.ok) {
+        // Dominio principal: TENANCY_TENANT_NOT_IDENTIFIED. Subdominio que no existe: TENANCY_TENANT_NOT_FOUND
+        const code = ((await res.json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
+        setState((s) => ({ ...s, central: code === "TENANCY_TENANT_NOT_IDENTIFIED", tenantMissing: true, loaded: true }));
+        return;
+      }
+      const me = (await res.json()) as {
+        id: string; name?: string; address?: string; phone?: string; theme?: TenantTheme;
+        plan?: string | null; planLabel?: string | null; features?: string[]; limits?: Record<string, number | null>;
+      };
       setState({
         id: me.id,
         name: me.name || DEFAULT_NAME,
@@ -148,6 +164,11 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         phone: me.phone ?? null,
         logo: me.theme?.logo || defaultLogo,
         primary: me.theme?.primary ?? null,
+        plan: me.plan ?? null,
+        planLabel: me.planLabel ?? null,
+        features: Array.isArray(me.features) ? me.features : null,
+        limits: me.limits ?? {},
+        central: false,
         tenantMissing: false,
         loaded: true,
       });
@@ -161,7 +182,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     void load();
   }, []);
 
-  return <Ctx.Provider value={{ ...state, reload: load }}>{children}</Ctx.Provider>;
+  const hasFeature = (feature: string) => state.features === null || state.features.includes(feature);
+  return <Ctx.Provider value={{ ...state, hasFeature, reload: load }}>{children}</Ctx.Provider>;
 }
 
 export function useBranding() {
