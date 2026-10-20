@@ -36,6 +36,7 @@ type ReportSummary = {
   operational: {
     attentions: number;
     delivered: number;
+    delivered_previous?: number;
     pending_delivery: number;
     new_patients: number;
     by_day: { day: string; count: number; income: number }[];
@@ -110,6 +111,7 @@ function ReportsPage() {
       paidPrevious: fin.collected_previous ?? 0,
       debt: fin.debt,
       delivered: op.delivered,
+      deliveredPrevious: op.delivered_previous ?? 0,
       pending: op.pending_delivery,
       studies: op.attentions,
       commissions: fin.commissions,
@@ -159,11 +161,12 @@ function ReportsPage() {
       ["Por cobrar", formatMoney(data.debt)],
       ["Comisiones", formatMoney(data.commissions)],
       ["Pagos a terceros", formatMoney(data.tppTotal)],
-      ["Utilidad estimada (ventas - comisiones - terceros)", formatMoney(data.netFinancial)],
+      ["Utilidad estimada (ventas - comisiones - terceros - gastos de caja)", formatMoney(data.netFinancial)],
       ["Depósitos", formatMoney(data.depTotal)],
       ["Caja ingresos", formatMoney(data.cashIn)],
       ["Caja gastos", formatMoney(data.cashOut)],
-      ["Estudios entregados / pendientes", `${data.delivered} / ${data.pending}`],
+      [`Estudios entregados en el período${data.deliveredPrevious ? ` (${data.deliveredPrevious} de días anteriores)` : ""}`, String(data.delivered)],
+      ["Estudios pendientes de entrega al cierre", String(data.pending)],
     ]);
     table("Cobros por forma de pago", ["Forma de pago", "Monto"], data.byMethod.map(([m, v]) => [methodLabel(m), formatMoney(v)]));
     table("Atenciones por día", ["Fecha", "Atenciones", "Ventas"], data.byDay.map(([d, v]) => [dmy(d), v.count, formatMoney(v.income)]));
@@ -171,7 +174,7 @@ function ReportsPage() {
     table("Comisiones por doctor", ["Doctor", "Atenciones", "Total"], raw.financial.commissions_by_doctor.map((r) => [r.doctor, r.count, formatMoney(r.total)]));
     const end = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
     doc.setFontSize(8);
-    doc.text("Ventas: cada atención el día en que se registró. Cobrado: cada pago el día en que se recibió.", 14, Math.min(end + 8, 287));
+    doc.text("Ventas: el día en que se registró la atención. Cobrado: el día del pago. Entregados: el día de la entrega.", 14, Math.min(end + 8, 287));
     doc.save(`reporte_${from}_${to}.pdf`);
   };
 
@@ -252,21 +255,28 @@ function ReportsPage() {
         <HeroCard
           title="Utilidad estimada"
           value={formatMoney(data?.netFinancial)}
-          hint="Ventas − comisiones − pagos a terceros"
+          hint="Ventas − comisiones − pagos a terceros − gastos de caja chica"
           icon={<Wallet className="h-4 w-4" />}
           accent="from-violet-500/20 to-violet-500/5"
         />
       </div>
 
       <p className="text-xs text-muted-foreground">
-        <b>Ventas</b> cuenta cada atención el día en que se <b>registró</b>; <b>Cobrado</b> cuenta cada pago el día en que se <b>recibió</b>.
+        <b>Ventas</b> cuenta cada atención el día en que se <b>registró</b>; <b>Cobrado</b> cuenta cada pago el día en que se <b>recibió</b>;
+        <b> Entregados</b> cuenta cada estudio el día en que se <b>entregó</b>.
         Una atención registrada el 14 y cobrada el 16 suma en Ventas el 14 y en Cobrado el 16.
       </p>
 
       {/* Secondary KPIs */}
       <div className="grid gap-3 md:grid-cols-4 lg:grid-cols-7">
-        <MiniStat icon={<Activity className="h-3.5 w-3.5" />} label="Estudios entregados" value={data?.delivered ?? 0} tone="ok" />
-        <MiniStat icon={<Activity className="h-3.5 w-3.5" />} label="Estudios pendientes" value={data?.pending ?? 0} tone={data?.pending ? "warn" : "muted"} />
+        <MiniStat
+          icon={<Activity className="h-3.5 w-3.5" />}
+          label="Estudios entregados"
+          value={data?.delivered ?? 0}
+          tone="ok"
+          hint={data?.deliveredPrevious ? `${data.deliveredPrevious} de días anteriores` : undefined}
+        />
+        <MiniStat icon={<Activity className="h-3.5 w-3.5" />} label="Pendientes de entrega" value={data?.pending ?? 0} tone={data?.pending ? "warn" : "muted"} />
         <MiniStat icon={<Users className="h-3.5 w-3.5" />} label="Comisiones" value={formatMoney(data?.commissions)} />
         <MiniStat icon={<Wallet className="h-3.5 w-3.5" />} label="Pagos a terceros" value={formatMoney(data?.tppTotal)} />
         <MiniStat icon={<Landmark className="h-3.5 w-3.5" />} label="Depósitos" value={formatMoney(data?.depTotal)} />
@@ -401,12 +411,13 @@ function HeroCard({ title, value, hint, icon, accent }: { title: string; value: 
   );
 }
 
-function MiniStat({ icon, label, value, tone }: { icon: any; label: string; value: any; tone?: "ok" | "warn" | "muted" }) {
+function MiniStat({ icon, label, value, tone, hint }: { icon: any; label: string; value: any; tone?: "ok" | "warn" | "muted"; hint?: string }) {
   const color = tone === "ok" ? "text-emerald-600 dark:text-emerald-400" : tone === "warn" ? "text-amber-600 dark:text-amber-400" : "";
   return (
     <div className="rounded-lg border bg-card p-3">
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{icon}<span>{label}</span></div>
       <div className={`text-lg font-semibold mt-1 tabular-nums ${color}`}>{value}</div>
+      {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
     </div>
   );
 }

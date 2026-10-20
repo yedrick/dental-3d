@@ -110,10 +110,9 @@ async function buildSummary(from: string, to: string) {
   const [
     [ps], byDay, byStudy, byMethod, byDoctor, [com], [cash], [tpp], [dep], [newPatients],
     [noDoctor], [noUser], [cashNoUser], [deliveredBefore], [paymentBeforeService], [futureDeposits], [futurePayments],
-    [zeroPrices], [noPrice], [overpaid], [pays],
+    [zeroPrices], [noPrice], [overpaid], [pays], [deliv], [pendingEnd],
   ] = await limited([
     () => q.query(`SELECT COUNT(*) AS n, SUM(${TOTAL}) AS total, SUM(ps.amount_paid) AS paid,
-                    SUM(ps.delivered_at IS NOT NULL) AS delivered,
                     SUM(ps.with_invoice = 1) AS invoice_n, SUM(CASE WHEN ps.with_invoice = 1 THEN ${TOTAL} ELSE 0 END) AS invoice_total
                FROM patient_studies ps WHERE ps.created_at >= ? AND ps.created_at < ?`, range),
     () => q.query(`SELECT ${LOCAL_DAY("ps.created_at")} AS day, COUNT(*) AS count, SUM(${TOTAL}) AS income
@@ -152,6 +151,12 @@ async function buildSummary(from: string, to: string) {
     () => q.query(`SELECT SUM(pay.amount) AS total, SUM(CASE WHEN ps.created_at < ? THEN pay.amount ELSE 0 END) AS previous
                FROM payments pay JOIN patient_studies ps ON ps.id = pay.patient_study_id
               WHERE pay.paid_at >= ? AND pay.paid_at < ?`, [start, start, end]),
+    // Entregas del período por la fecha de ENTREGA (aunque la atención sea de otro día)
+    () => q.query(`SELECT COUNT(*) AS n, SUM(created_at < ?) AS previous
+               FROM patient_studies WHERE delivered_at >= ? AND delivered_at < ?`, [start, start, end]),
+    // Pendientes al cierre del período: registradas hasta ese día y sin entregar todavía en ese momento
+    () => q.query(`SELECT COUNT(*) AS n FROM patient_studies
+              WHERE created_at < ? AND (delivered_at IS NULL OR delivered_at >= ?)`, [end, end]),
   ]);
 
   const total = num(ps.total);
@@ -165,8 +170,11 @@ async function buildSummary(from: string, to: string) {
     period: { from, to },
     operational: {
       attentions: num(ps.n),
-      delivered: num(ps.delivered),
-      pending_delivery: num(ps.n) - num(ps.delivered),
+      // Entregados en el período (por fecha de entrega); previous = de atenciones de días anteriores
+      delivered: num(deliv.n),
+      delivered_previous: num(deliv.previous),
+      // Sin entregar al cierre del período (incluye las de días anteriores)
+      pending_delivery: num(pendingEnd.n),
       new_patients: num(newPatients.n),
       by_day: money(byDay, ["count", "income"]),
       by_study: money(byStudy, ["count", "income"]),
@@ -187,8 +195,8 @@ async function buildSummary(from: string, to: string) {
       cash_out: num(cash.expense),
       third_party: thirdParty,
       deposits: num(dep.total),
-      // mismo cálculo que el reporte actual: ventas − comisiones − pagos a terceros
-      net: Number((total - commissions - thirdParty).toFixed(2)),
+      // ventas − comisiones − pagos a terceros − gastos de caja chica
+      net: Number((total - commissions - thirdParty - num(cash.expense)).toFixed(2)),
       by_method: money(byMethod, ["amount"]),
     },
     control: {
