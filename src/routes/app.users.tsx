@@ -1,25 +1,36 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useId, useState } from "react";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, tokenStore } from "@/lib/api";
+import { formatDate } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Eye, EyeOff, Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
-import { useAuth, type AppRole } from "@/lib/auth";
-import { adminCreateUser, adminUpdateUser, adminDeleteUser, adminImpersonate } from "@/lib/users-admin.functions";
+import { Pencil, Trash2, UserPlus, Search, ShieldCheck, LogIn, CheckCircle2, XCircle } from "lucide-react";
+import { useAuth, ROLES, type AppRole } from "@/lib/auth";
+import { TableSkeletonRows } from "@/components/table-skeleton";
 
-const ROLES: AppRole[] = ["ADMIN", "SUBADMIN", "RECEPCION", "CAJA", "CONTABILIDAD", "DOCTOR", "AUDITOR"];
+/** Reglas de la API: ≥10 caracteres, mayúscula, minúscula, número y símbolo. */
+function passwordProblem(pw: string): string | null {
+  if (pw.length < 10) return "La contraseña debe tener al menos 10 caracteres";
+  if (!/[A-Z]/.test(pw)) return "La contraseña debe tener una mayúscula";
+  if (!/[a-z]/.test(pw)) return "La contraseña debe tener una minúscula";
+  if (!/[0-9]/.test(pw)) return "La contraseña debe tener un número";
+  if (!/[^A-Za-z0-9]/.test(pw)) return "La contraseña debe tener un símbolo";
+  return null;
+}
 
 const ROLE_STYLES: Record<AppRole, string> = {
   ADMIN: "bg-primary/15 text-primary border-primary/30",
@@ -40,50 +51,47 @@ type Row = {
   username: string;
   created_at: string;
   approved: boolean;
-  role: AppRole | null;
+  active: boolean;
+  roles: AppRole[];
+  /** Ficha de doctor enlazada (usuarios DOCTOR) */
+  doctor_id?: string | null;
 };
 
 function UsersPage() {
-  const { user, hasRole, can } = useAuth();
-  const isAdmin = hasRole("ADMIN");
-  const canCreate = isAdmin || can("users.create");
-  const canEdit = isAdmin || can("users.edit");
-  const canDelete = isAdmin || can("users.delete");
-  const canApprove = isAdmin || can("users.approve");
-  const canImpersonate = isAdmin || can("users.impersonate");
+  const { user, can, setSessionToken } = useAuth();
+  // Los permisos los controla la API; aquí solo se ocultan los botones
+  const canCreate = can("users.create");
+  const canEdit = can("users.edit") || can("users.manage_roles");
+  const canDelete = can("users.delete");
+  const canApprove = can("users.approve");
+  const canImpersonate = can("users.impersonate");
   const qc = useQueryClient();
 
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
-  const impersonateFn = useServerFn(adminImpersonate);
-  const deleteUserFn = useServerFn(adminDeleteUser);
 
   const impersonate = async (u: Row) => {
     if (!confirm(`¿Ingresar como ${u.full_name} (${u.email})?\n\nTu sesión actual se guardará para poder volver.`)) return;
     try {
-      const { data: sess } = await supabase.auth.getSession();
-      if (sess.session?.refresh_token) {
-        sessionStorage.setItem("impersonation_return", JSON.stringify({
-          refresh_token: sess.session.refresh_token,
-          admin_email: user?.email,
-        }));
-      }
-      const { token_hash } = await impersonateFn({ data: { user_id: u.id } });
-      const { error } = await supabase.auth.verifyOtp({ token_hash, type: "magiclink" });
-      if (error) throw error;
+      const res = await apiPost<{ token: string; user: { full_name: string }; expires_in: number }>(`/api/users/${u.id}/impersonate`);
+      // Se guarda el token del ADMIN para "Volver a mi sesión"
+      tokenStore.setAdmin(tokenStore.get()!);
+      await setSessionToken(res.token);
       toast.success(`Ahora eres ${u.full_name}`);
       window.location.href = "/app";
-    } catch (e: any) {
-      sessionStorage.removeItem("impersonation_return");
+    } catch (e) {
       toast.error(translateError(e) || "No se pudo cambiar de usuario");
     }
   };
 
   const toggleApproved = async (u: Row) => {
     const next = !u.approved;
-    const { error } = await supabase.from("profiles").update({ approved: next }).eq("id", u.id);
-    if (error) return toast.error(translateError(error));
+    try {
+      await apiPost(`/api/users/${u.id}/approve`, { approved: next });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success(next ? `${u.full_name} aprobado — ya puede iniciar sesión` : `${u.full_name} deshabilitado`);
     refresh();
   };
@@ -93,15 +101,8 @@ function UsersPage() {
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["users_admin"],
-    queryFn: async (): Promise<Row[]> => {
-      const [{ data: profiles }, { data: roles }] = await Promise.all([
-        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-        supabase.from("user_roles").select("*"),
-      ]);
-      const roleByUser = new Map<string, AppRole>();
-      (roles ?? []).forEach((r: any) => roleByUser.set(r.user_id, r.role));
-      return (profiles ?? []).map((p: any) => ({ ...p, role: roleByUser.get(p.id) ?? null }));
-    },
+    queryFn: () => apiGet<Row[]>("/api/users"),
+    staleTime: STALE.master,
   });
 
   const filtered = data.filter((u) => {
@@ -111,7 +112,7 @@ function UsersPage() {
       u.full_name?.toLowerCase().includes(s) ||
       u.email?.toLowerCase().includes(s) ||
       u.username?.toLowerCase().includes(s) ||
-      u.role?.toLowerCase().includes(s)
+      u.roles.some((r) => r.toLowerCase().includes(s))
     );
   });
 
@@ -129,6 +130,7 @@ function UsersPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="Buscar usuarios"
             placeholder="Buscar por nombre, email, usuario o rol…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -164,9 +166,7 @@ function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading && (
-              <TableRow><TableCell colSpan={6} className="text-muted-foreground py-8 text-center">Cargando…</TableCell></TableRow>
-            )}
+            {isLoading && <TableSkeletonRows cols={6} />}
             {!isLoading && filtered.map((u) => (
               <TableRow key={u.id} className="hover:bg-muted/40">
                 <TableCell>
@@ -182,8 +182,10 @@ function UsersPage() {
                 </TableCell>
                 <TableCell className="text-sm">{u.email}</TableCell>
                 <TableCell>
-                  {u.role ? (
-                    <Badge variant="outline" className={ROLE_STYLES[u.role]}>{u.role}</Badge>
+                  {u.roles.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {u.roles.map((r) => <Badge key={r} variant="outline" className={ROLE_STYLES[r]}>{r}</Badge>)}
+                    </div>
                   ) : (
                     <Badge variant="outline" className="text-muted-foreground">Sin rol</Badge>
                   )}
@@ -198,9 +200,12 @@ function UsersPage() {
                       <XCircle className="h-3 w-3" /> Pendiente
                     </Badge>
                   )}
+                  {!u.active && (
+                    <Badge variant="outline" className="ml-1 text-muted-foreground">Inactivo</Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {new Date(u.created_at).toLocaleDateString()}
+                  {formatDate(u.created_at)}
                 </TableCell>
                 <TableCell className="text-right">
                   {(canApprove || canEdit || canDelete || canImpersonate) && (
@@ -210,25 +215,26 @@ function UsersPage() {
                           size="sm"
                           variant={u.approved ? "ghost" : "default"}
                           title={u.approved ? "Deshabilitar acceso" : "Aprobar acceso"}
+                          aria-label={`${u.approved ? "Deshabilitar acceso de" : "Aprobar acceso de"} ${u.full_name}`}
                           onClick={() => toggleApproved(u)}
                         >
                           {u.approved ? <XCircle className="h-4 w-4" /> : <><CheckCircle2 className="h-4 w-4 mr-1" />Aprobar</>}
                         </Button>
                       )}
                       {canImpersonate && u.id !== user?.id && (
-                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" onClick={() => impersonate(u)}>
+                        <Button size="sm" variant="ghost" title="Ingresar como este usuario" aria-label={`Ingresar como ${u.full_name}`} onClick={() => impersonate(u)}>
                           <LogIn className="h-4 w-4" />
                         </Button>
                       )}
                       {canEdit && (
-                        <Button size="sm" variant="ghost" onClick={() => setEditing(u)}>
+                        <Button size="sm" variant="ghost" title="Editar" aria-label={`Editar a ${u.full_name}`} onClick={() => setEditing(u)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                       )}
                       {canDelete && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id}>
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={u.id === user?.id} title="Eliminar" aria-label={`Eliminar a ${u.full_name}`}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
@@ -246,11 +252,10 @@ function UsersPage() {
                               className="bg-destructive hover:bg-destructive/90"
                               onClick={async () => {
                                 try {
-                                  const result = await deleteUserFn({ data: { user_id: u.id } });
-                                  if (!result.ok) throw new Error(result.error);
+                                  await apiDelete(`/api/users/${u.id}`);
                                   toast.success("Usuario eliminado");
                                   refresh();
-                                } catch (e: any) { toast.error(translateError(e)); }
+                                } catch (e) { toast.error(translateError(e)); }
                               }}
                             >Eliminar</AlertDialogAction>
                           </AlertDialogFooter>
@@ -292,38 +297,61 @@ function UserFormDialog({
   initial?: Row;
   onDone: () => void;
 }) {
-  const create = useServerFn(adminCreateUser);
-  const update = useServerFn(adminUpdateUser);
+  const { can } = useAuth();
+  // En edición: los datos requieren users.edit y los roles users.manage_roles
+  const uid = useId(); // ids para unir cada etiqueta con su campo
+  const canEditData = mode === "create" || can("users.edit");
+  const canEditRoles = mode === "create" || can("users.manage_roles");
   const [full_name, setFullName] = useState(initial?.full_name ?? "");
   const [username, setUsername] = useState(initial?.username ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [role, setRole] = useState<AppRole>(initial?.role ?? "RECEPCION");
+  const [roles, setRoles] = useState<AppRole[]>(initial?.roles.length ? initial.roles : ["RECEPCION"]);
+  const [active, setActive] = useState(initial?.active ?? true);
+  // Usuario DOCTOR: su ficha de doctor (ve solo sus pacientes, atenciones y comisiones)
+  const [doctorId, setDoctorId] = useState<string>(initial?.doctor_id ?? "");
+  const { data: doctors = [] } = useQuery({
+    queryKey: ["doctors"],
+    queryFn: () => apiGet<{ id: string; full_name: string; status: boolean }[]>("/api/doctors"),
+    staleTime: STALE.master,
+    enabled: roles.includes("DOCTOR"),
+  });
+  const toggleRole = (r: AppRole, on: boolean) =>
+    setRoles((prev) => (on ? [...prev, r] : prev.filter((x) => x !== r)));
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     setSaving(true);
     try {
+      if (roles.length === 0) throw new Error("Asigna al menos un rol");
+      if (password) {
+        const problem = passwordProblem(password);
+        if (problem) throw new Error(problem);
+      }
       if (mode === "create") {
-        if (password.length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres");
-        await create({ data: { email, password, full_name, username, role } });
+        if (!password) throw new Error("La contraseña es requerida");
+        await apiPost("/api/users", { email, username, full_name, password, roles, doctor_id: doctorId || null });
         toast.success("Usuario creado");
       } else {
-        await update({
-          data: {
-            user_id: initial!.id,
-            email: email !== initial!.email ? email : undefined,
-            password: password || undefined,
-            full_name,
-            username,
-            role,
-          },
-        });
+        const u = initial!;
+        // Solo se envían los campos que cambiaron
+        const changes: Record<string, unknown> = {};
+        if (canEditData) {
+          if (email !== u.email) changes.email = email;
+          if (username !== u.username) changes.username = username;
+          if (full_name !== u.full_name) changes.full_name = full_name;
+          if (password) changes.password = password;
+          if (active !== u.active) changes.active = active;
+          if ((doctorId || null) !== (u.doctor_id ?? null)) changes.doctor_id = doctorId || null;
+        }
+        const rolesChanged =
+          canEditRoles && (roles.length !== u.roles.length || roles.some((r) => !u.roles.includes(r)));
+        if (Object.keys(changes).length > 0) await apiPatch(`/api/users/${u.id}`, changes);
+        if (rolesChanged) await apiPut(`/api/users/${u.id}/roles`, { roles });
         toast.success("Usuario actualizado");
       }
       onDone();
-    } catch (e: any) {
+    } catch (e) {
       toast.error(translateError(e));
     } finally {
       setSaving(false);
@@ -344,50 +372,70 @@ function UserFormDialog({
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Nombre completo</Label>
-            <Input value={full_name} onChange={(e) => setFullName(e.target.value)} />
+            <Label htmlFor={`${uid}-name`}>Nombre completo</Label>
+            <Input id={`${uid}-name`} value={full_name} disabled={!canEditData} onChange={(e) => setFullName(e.target.value)} />
           </div>
           <div>
-            <Label>Usuario</Label>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+            <Label htmlFor={`${uid}-user`}>Usuario</Label>
+            <Input id={`${uid}-user`} value={username} disabled={!canEditData} onChange={(e) => setUsername(e.target.value)} />
           </div>
         </div>
         <div>
-          <Label>Email</Label>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Label htmlFor={`${uid}-email`}>Email</Label>
+          <Input id={`${uid}-email`} type="email" value={email} disabled={!canEditData} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
-          <Label>{mode === "create" ? "Contraseña" : "Nueva contraseña (opcional)"}</Label>
-          <div className="relative">
-            <Input
-              type={showPw ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "edit" ? "Dejar vacío para no cambiar" : "Mínimo 8 caracteres"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+          <Label htmlFor={`${uid}-pw`}>{mode === "create" ? "Contraseña" : "Nueva contraseña (opcional)"}</Label>
+          <PasswordInput
+            id={`${uid}-pw`}
+            autoComplete="new-password"
+            value={password}
+            disabled={!canEditData}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={mode === "edit" ? "Dejar vacío para no cambiar" : "Mín. 10: mayúscula, minúscula, número y símbolo"}
+          />
+        </div>
+        <div>
+          <Label id={`${uid}-roles`}>Roles</Label>
+          <div role="group" aria-labelledby={`${uid}-roles`} className="mt-1 grid grid-cols-2 gap-2 rounded-md border p-2">
+            {ROLES.map((r) => (
+              <label key={r} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={roles.includes(r)}
+                  disabled={!canEditRoles}
+                  onCheckedChange={(v) => toggleRole(r, !!v)}
+                />
+                {r}
+              </label>
+            ))}
           </div>
         </div>
-        <div>
-          <Label>Rol</Label>
-          <Select value={role} onValueChange={(v) => setRole(v as AppRole)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        {roles.includes("DOCTOR") && (
+          <div>
+            <Label htmlFor={`${uid}-doctor`}>Ficha de doctor</Label>
+            <Select value={doctorId || "none"} onValueChange={(v) => setDoctorId(v === "none" ? "" : v)} disabled={!canEditData}>
+              <SelectTrigger id={`${uid}-doctor`}><SelectValue placeholder="Sin enlazar" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin enlazar</SelectItem>
+                {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Con el rol DOCTOR, este usuario ve solo los pacientes, atenciones y comisiones de esta ficha. Sin ficha no ve ninguno.
+            </p>
+          </div>
+        )}
+        {mode === "edit" && (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={active} disabled={!canEditData} onCheckedChange={(v) => setActive(!!v)} />
+            Usuario activo
+          </label>
+        )}
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onDone}>Cancelar</Button>
-        <Button onClick={submit} disabled={saving || !full_name || !email || !username}>
+        <Button onClick={submit} disabled={saving || !full_name || !email || !username || roles.length === 0}>
           {saving ? "Guardando…" : mode === "create" ? "Crear usuario" : "Guardar cambios"}
         </Button>
       </DialogFooter>

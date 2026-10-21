@@ -1,62 +1,55 @@
 import { translateError } from "@/lib/translate-error";
-import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useIsFetching, useIsMutating } from "@tanstack/react-query";
+import { createFileRoute, Outlet, useNavigate, Link, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
+import { tokenStore } from "@/lib/api";
+import { useBranding } from "@/lib/branding";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
-import logoAsset from "@/assets/logo-3d.png.asset.json";
+import { SetupAccount } from "@/components/setup-account";
+import { PlanLocked } from "@/components/plan-locked";
+import { moduleFor } from "@/lib/plan";
 
 export const Route = createFileRoute("/app")({
   ssr: false,
   component: AppLayout,
 });
 
-function GlobalLoader() {
-  const fetching = useIsFetching();
-  const mutating = useIsMutating();
-  const active = fetching + mutating > 0;
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    if (!active) { setShow(false); return; }
-    const t = setTimeout(() => setShow(true), 400);
-    return () => clearTimeout(t);
-  }, [active]);
-  if (!show) return null;
-  return (
-    <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur">
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-      <span>Actualizando…</span>
-    </div>
-  );
-}
-
-
-
 function ImpersonationBanner() {
-  const { user } = useAuth();
-  const [info, setInfo] = useState<{ admin_email?: string } | null>(null);
-  useEffect(() => {
-    const raw = sessionStorage.getItem("impersonation_return");
-    if (raw) { try { setInfo(JSON.parse(raw)); } catch { setInfo(null); } }
-  }, [user?.id]);
-  if (!info) return null;
+  const { user, impersonatedBy, setSessionToken, signOut } = useAuth();
+  if (!impersonatedBy) return null;
+  // Entrada desde el panel de la plataforma (tenancy-node): no hay una sesión propia a la cual volver
+  if (impersonatedBy.startsWith("platform:")) {
+    return (
+      <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
+        <div>
+          <span className="font-semibold text-amber-800">Acceso desde el panel de la plataforma:</span>{" "}
+          estás como <b>{user?.full_name}</b>. La sesión dura 1 hora y todo queda registrado.
+        </div>
+        <Button size="sm" variant="outline" onClick={async () => { await signOut(); window.location.href = "/auth"; }}>
+          <LogOut className="mr-1 h-3.5 w-3.5" /> Cerrar sesión
+        </Button>
+      </div>
+    );
+  }
   const back = async () => {
+    const adminToken = tokenStore.getAdmin();
+    tokenStore.clearAdmin();
+    if (!adminToken) {
+      toast.error("No se encontró tu sesión original. Vuelve a iniciar sesión.");
+      tokenStore.clear();
+      window.location.href = "/auth";
+      return;
+    }
     try {
-      const raw = sessionStorage.getItem("impersonation_return");
-      if (!raw) return;
-      const { refresh_token } = JSON.parse(raw);
-      const { error } = await supabase.auth.refreshSession({ refresh_token });
-      if (error) throw error;
-      sessionStorage.removeItem("impersonation_return");
+      await setSessionToken(adminToken);
       toast.success("Sesión restaurada");
       window.location.href = "/app/users";
-    } catch (e: any) {
+    } catch (e) {
       toast.error(translateError(e) || "No se pudo restaurar la sesión");
     }
   };
@@ -64,8 +57,7 @@ function ImpersonationBanner() {
     <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
       <div>
         <span className="font-semibold text-amber-800">Modo suplantación:</span>{" "}
-        estás como <b>{user?.email}</b>
-        {info.admin_email && <> · admin: {info.admin_email}</>}
+        estás como <b>{user?.full_name}</b> ({user?.email}). Todo lo que hagas queda registrado a tu nombre.
       </div>
       <Button size="sm" variant="outline" onClick={back}>
         <LogOut className="mr-1 h-3.5 w-3.5" /> Volver a mi sesión
@@ -76,18 +68,32 @@ function ImpersonationBanner() {
 
 function AppLayout() {
   const { user, loading } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [user, loading, navigate]);
   if (loading || !user) return (
-    <div className="grid min-h-screen place-items-center gap-3 text-sm text-muted-foreground">
-      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      <div>Cargando…</div>
+    <div className="grid min-h-screen place-items-center bg-muted/30" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-4">
+        <img src={branding.logo} alt="" className="h-16 w-16 animate-pulse rounded-xl object-contain" />
+        <div className="text-sm font-semibold">{branding.name}</div>
+        <div className="h-1 w-40 overflow-hidden rounded-full bg-primary/15">
+          <div className="loader-bar h-full w-2/5 rounded-full bg-primary" />
+        </div>
+        <span className="sr-only">Cargando…</span>
+      </div>
     </div>
   );
 
+  // Cuenta ADMIN por defecto de una sucursal nueva: primero se activa
+  if (user.must_change_password) return <SetupAccount />;
+
+  // Módulo que el plan no incluye (entró por enlace): la API también lo rechaza
+  const locked = moduleFor(pathname);
+  const blocked = locked && branding.loaded && !branding.hasFeature(locked.feature) ? locked : null;
+
   return (
     <SidebarProvider>
-      <GlobalLoader />
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <div className="flex flex-1 flex-col">
@@ -95,8 +101,8 @@ function AppLayout() {
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <SidebarTrigger aria-label="Alternar menú lateral" />
             <Link to="/app" className="flex min-w-0 items-center gap-2">
-              <img src={logoAsset.url} alt="" className="h-7 w-7 shrink-0" />
-              <span className="truncate text-sm font-semibold">3 Dental Imagen</span>
+              <img src={branding.logo} alt="" className="h-7 w-7 shrink-0 object-contain" />
+              <span className="truncate text-sm font-semibold">{branding.name}</span>
             </Link>
             <div className="ml-auto flex items-center gap-1">
               <NotificationBell />
@@ -107,7 +113,7 @@ function AppLayout() {
           </header>
 
           <main className="flex-1 bg-muted/30 p-3 sm:p-4 md:p-6">
-            <Outlet />
+            {blocked ? <PlanLocked label={blocked.label} /> : <Outlet />}
           </main>
         </div>
       </div>

@@ -1,14 +1,17 @@
 import { translateError } from "@/lib/translate-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiGetAll, apiPost, type Paged } from "@/lib/api";
+import { type PaymentMethod } from "@/lib/payments";
+import { PaymentMethodSelect } from "@/components/payment-method-select";
+import { ChargeAllDialog } from "@/components/charge-all-dialog";
 import { useAuth } from "@/lib/auth";
-import { useList, formatMoney, formatDate } from "@/lib/data";
+import { formatMoney, formatDate } from "@/lib/data";
+import { STALE } from "@/lib/query-config";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -20,115 +23,102 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/app/delivery")({ component: DeliveryPage });
 
 function DeliveryPage() {
-  const { can, user } = useAuth();
+  const { can } = useAuth();
   const canCharge = can("attention.charge");
   const canDeliver = can("attention.deliver");
   const qc = useQueryClient();
-  const { data: rows = [] } = useList<any>("patient_studies");
-  const { data: patients = [] } = useList<any>("patients", "full_name", true);
-  const { data: studies = [] } = useList<any>("studies", "name", true);
-  const patMap = new Map((patients as any[]).map((p) => [p.id, p]));
-  const stMap = new Map((studies as any[]).map((s) => [s.id, s.name]));
+  // Solo lo pendiente: con saldo, o sin entregar (antes se bajaba toda la tabla)
+  const { data: debtRows = [] } = useQuery({
+    queryKey: ["attentions", "all", { status: "debt" }],
+    queryFn: () => apiGetAll<any>("/api/attentions", { status: "debt" }),
+    staleTime: STALE.ops,
+  });
+  const { data: pendingRows = [] } = useQuery({
+    queryKey: ["attentions", "all", { status: "pending_delivery" }],
+    queryFn: () => apiGetAll<any>("/api/attentions", { status: "pending_delivery" }),
+    staleTime: STALE.ops,
+  });
 
   const [q, setQ] = useState("");
-  const enriched = useMemo(() => (rows as any[]).map((r) => {
-    const total = Number(r.price ?? 0) + Number(r.invoice_surcharge ?? 0) - Number(r.discount ?? 0);
-    const paid = Number(r.amount_paid ?? 0);
-    const debt = Math.max(0, total - paid);
-    return { ...r, total, paid, debt, patient: patMap.get(r.patient_id), study_name: stMap.get(r.study_id) };
-  }), [rows, patMap, stMap]);
+  // Las filas de atenciones no traen el celular: para buscar por número se consulta a pacientes
+  const phoneQ = /\d{3,}/.test(q) ? q.trim() : "";
+  const { data: phoneIds } = useQuery({
+    queryKey: ["patients", "search", phoneQ, "ids"],
+    queryFn: async () => new Set((await apiGet<Paged<any>>("/api/patients", { q: phoneQ, limit: 100 })).data.map((p) => p.id as string)),
+    enabled: phoneQ.length > 0,
+    staleTime: STALE.master,
+  });
+
+  const enrich = (r: any) => ({
+    ...r,
+    total: Number(r.total ?? 0),
+    paid: Number(r.amount_paid ?? 0),
+    debt: Math.max(0, Number(r.debt ?? 0)),
+    patient: { id: r.patient_id, full_name: r.patient_name, phone: r.patient_phone ?? null },
+  });
+  const debtEnriched = useMemo(() => (debtRows as any[]).map(enrich), [debtRows]);
+  const pendingEnriched = useMemo(() => (pendingRows as any[]).map(enrich), [pendingRows]);
 
   const filterFn = (r: any) => {
     if (!q.trim()) return true;
     const s = q.toLowerCase();
-    return (r.patient?.full_name ?? "").toLowerCase().includes(s) || (r.patient?.phone ?? "").includes(q);
+    return (r.patient?.full_name ?? "").toLowerCase().includes(s)
+      || (r.patient?.phone ?? "").includes(q)
+      || !!phoneIds?.has(r.patient_id);
   };
-  const pendingDelivery = enriched.filter((r) => !r.delivered_at && !r.is_voucher).filter(filterFn);
-  const pendingPayment = enriched.filter((r) => r.debt > 0.009).filter(filterFn);
+  const pendingDelivery = pendingEnriched.filter((r) => !r.delivered_at && !r.is_voucher).filter(filterFn);
+  const pendingPayment = debtEnriched.filter((r) => r.debt > 0.009).filter(filterFn);
+  const patMap = new Map(pendingPayment.map((r) => [r.patient_id, r.patient]));
 
   // ---- Charge dialog ----
-  const [charge, setCharge] = useState<{ row: any; amount: string } | null>(null);
+  const [charge, setCharge] = useState<{ row: any; amount: string; method: PaymentMethod } | null>(null);
   const doCharge = async () => {
     if (!charge) return;
-    const amt = Number(charge.amount || 0);
+    const amt = Math.round(Number(charge.amount || 0) * 100) / 100;
     if (amt <= 0) return toast.error("Monto inválido");
     if (amt > charge.row.debt + 0.001) return toast.error("Excede la deuda");
-    const before = charge.row.debt;
-    const newPaid = Number((charge.row.paid + amt).toFixed(2));
-    const { error } = await supabase.from("patient_studies")
-      .update({ amount_paid: newPaid })
-      .eq("id", charge.row.id);
-    if (error) return toast.error(translateError(error));
-    await supabase.rpc("log_audit_event", {
-      _action: "CHARGE",
-      _table_name: "patient_studies",
-      _record_id: charge.row.id,
-      _data: {
-        patient_id: charge.row.patient_id,
-        patient_name: charge.row.patient?.full_name,
-        study_id: charge.row.study_id,
-        amount_charged: amt,
-        balance_before: Math.round(before * 100) / 100,
-        balance_after: Math.round((before - amt) * 100) / 100,
-      } as any,
-    });
+    try {
+      // La API valida el saldo y registra la auditoría
+      await apiPost(`/api/attentions/${charge.row.id}/charge`, { amount: amt, payment_method: charge.method });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Cobro registrado");
     setCharge(null);
-    qc.invalidateQueries();
+    await qc.invalidateQueries(); // el botón sigue bloqueado hasta ver el saldo nuevo
   };
 
   const deliver = async (row: any) => {
     if (row.debt > 0.009 && !confirm(`Aún debe ${formatMoney(row.debt)}. ¿Entregar de todos modos?`)) return;
-    const { error } = await supabase.from("patient_studies")
-      .update({ delivered_at: new Date().toISOString(), delivered_by: user!.id })
-      .eq("id", row.id);
-    if (error) return toast.error(translateError(error));
-    await supabase.rpc("log_audit_event", {
-      _action: "DELIVER",
-      _table_name: "patient_studies",
-      _record_id: row.id,
-      _data: {
-        patient_id: row.patient_id,
-        patient_name: row.patient?.full_name,
-        study_id: row.study_id,
-        balance_before: Math.round(row.debt * 100) / 100,
-        balance_after: Math.round(row.debt * 100) / 100,
-        total: Math.round(row.total * 100) / 100,
-      } as any,
-    });
+    try {
+      await apiPost("/api/attentions/deliver", { ids: [row.id] });
+    } catch (e) {
+      return toast.error(translateError(e));
+    }
     toast.success("Estudio entregado");
-    qc.invalidateQueries();
+    await qc.invalidateQueries();
   };
 
-  const chargeAll = async (patientId: string) => {
-    const patientRows = enriched.filter((r) => r.patient_id === patientId && r.debt > 0.009);
-    const totalDebt = patientRows.reduce((s, r) => s + r.debt, 0);
-    for (const r of patientRows) {
-      await supabase.from("patient_studies").update({ amount_paid: Number(r.total.toFixed(2)) }).eq("id", r.id);
+  // "Cobrar todo": primero se confirma (monto y forma de pago) en ChargeAllDialog
+  const [chargeAllTarget, setChargeAllTarget] = useState<{ patientId: string; name: string; debt: number } | null>(null);
+  const chargeAll = async (method: PaymentMethod) => {
+    if (!chargeAllTarget) return;
+    const patientId = chargeAllTarget.patientId;
+    try {
+      await apiPost("/api/attentions/charge-all", { patient_id: patientId, payment_method: method });
+    } catch (e) {
+      return toast.error(translateError(e));
     }
-    await supabase.rpc("log_audit_event", {
-      _action: "CHARGE_ALL",
-      _table_name: "patient_studies",
-      _record_id: patientId,
-      _data: {
-        patient_id: patientId,
-        patient_name: patientRows[0]?.patient?.full_name,
-        items_count: patientRows.length,
-        record_ids: patientRows.map((r) => r.id),
-        amount_charged: Math.round(totalDebt * 100) / 100,
-        balance_before: Math.round(totalDebt * 100) / 100,
-        balance_after: 0,
-      } as any,
-    });
     toast.success(`Cobrado saldo total del paciente`);
-    qc.invalidateQueries();
+    setChargeAllTarget(null);
+    await qc.invalidateQueries();
   };
 
   const renderRow = (r: any) => (
     <TableRow key={r.id}>
       <TableCell>
         <div className="font-medium">{r.patient?.full_name || "-"}</div>
-        <div className="text-xs text-muted-foreground">Cel: {r.patient?.phone || "—"}</div>
+        {r.patient?.phone && <div className="text-xs text-muted-foreground">Cel: {r.patient.phone}</div>}
       </TableCell>
       <TableCell>{r.study_name}</TableCell>
       <TableCell>{formatDate(r.created_at)}</TableCell>
@@ -141,7 +131,7 @@ function DeliveryPage() {
       <TableCell className="text-right">
         <div className="flex gap-1 justify-end">
           {canCharge && r.debt > 0.009 && (
-            <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2) })}>
+            <Button size="sm" variant="outline" onClick={() => setCharge({ row: r, amount: r.debt.toFixed(2), method: "cash" })}>
               <Wallet className="h-4 w-4 mr-1" />Cobrar
             </Button>
           )}
@@ -161,7 +151,7 @@ function DeliveryPage() {
 
       <div className="mb-3 relative max-w-md">
         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        <Input aria-label="Buscar paciente por nombre o celular" placeholder="Buscar paciente por nombre o celular…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
       </div>
 
       <Tabs defaultValue="payment">
@@ -191,7 +181,7 @@ function DeliveryPage() {
                 {Array.from(new Set(pendingPayment.map((r) => r.patient_id))).map((pid) => {
                   const p = patMap.get(pid);
                   const total = pendingPayment.filter((r) => r.patient_id === pid).reduce((s, r) => s + r.debt, 0);
-                  return <Button key={pid} size="sm" variant="outline" onClick={() => chargeAll(pid)}>Cobrar todo — {p?.full_name} ({formatMoney(total)})</Button>;
+                  return <Button key={pid} size="sm" variant="outline" onClick={() => setChargeAllTarget({ patientId: pid, name: p?.full_name ?? "", debt: total })}>Cobrar todo — {p?.full_name} ({formatMoney(total)})</Button>;
                 })}
               </div>
             </div>
@@ -225,15 +215,22 @@ function DeliveryPage() {
                 <div><span className="text-muted-foreground">Estudio:</span> {charge.row.study_name}</div>
                 <div><span className="text-muted-foreground">Deuda actual:</span> <strong className="font-mono">{formatMoney(charge.row.debt)}</strong></div>
               </div>
-              <div>
-                <Label>Monto a cobrar</Label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium">Monto a cobrar</span>
                 <Input type="number" step="0.01" autoFocus value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
-              </div>
+              </label>
+              <PaymentMethodSelect value={charge.method} onChange={(m) => setCharge({ ...charge, method: m })} />
             </div>
           )}
           <DialogFooter><Button onClick={doCharge}>Registrar cobro</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChargeAllDialog
+        target={chargeAllTarget && { patientName: chargeAllTarget.name, debt: chargeAllTarget.debt }}
+        onCancel={() => setChargeAllTarget(null)}
+        onConfirm={chargeAll}
+      />
     </div>
   );
 }

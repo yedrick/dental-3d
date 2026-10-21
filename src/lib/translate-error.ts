@@ -1,5 +1,18 @@
-// Traduce mensajes de error comunes (Supabase / Postgres / red) al español.
+import { ApiError } from "./api";
+
+// Mensaje para mostrar al usuario. Los errores de la API ya vienen en español; si traen
+// detalles de validación, se muestra el primero. El resto (red, librerías) se traduce aquí.
 export function translateError(input: unknown): string {
+  if (input instanceof ApiError) {
+    // Planes de la sucursal (tenancy-node 0.11): mensajes propios en vez del texto en inglés
+    if (input.code === "TENANCY_FEATURE_NOT_IN_PLAN") return "Este módulo no está incluido en el plan de tu sucursal.";
+    if (input.code === "TENANCY_PLAN_LIMIT_REACHED") {
+      const max = (input.details as { max?: number } | undefined)?.max;
+      return `Tu plan permite ${max ?? "un número limitado de"} usuarios activos. Desactiva uno o mejora tu plan.`;
+    }
+    const first = Array.isArray(input.details) ? input.details[0] : undefined;
+    return first ? `${input.message}: ${first.message}${first.field ? ` (${first.field})` : ""}` : input.message;
+  }
   const raw =
     typeof input === "string"
       ? input
