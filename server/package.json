@@ -1,0 +1,62 @@
+{
+  "name": "ionix-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tenancy": "tenancy",
+    "db:install": "tenancy install",
+    "db:migrate": "tenancy install && tenancy migrate",
+    "tenant:create": "tenancy create",
+    "tenant:list": "tenancy list",
+    "tenant:create-admin": "tsx src/scripts/create-admin.ts",
+    "tenant:import-supabase": "tsx src/scripts/import-supabase.ts",
+    "prod:create-admin": "node dist/scripts/create-admin.js",
+    "prod:import-supabase": "node dist/scripts/import-supabase.js"
+  },
+  "dependencies": {
+    "@tenancy-node/adapter-express": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-adapter-express-0.12.0.tgz",
+    "@tenancy-node/admin-api": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-admin-api-0.12.0.tgz",
+    "@tenancy-node/admin-ui": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-admin-ui-0.12.0.tgz",
+    "@tenancy-node/cache-redis": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-cache-redis-0.12.0.tgz",
+    "@tenancy-node/cli": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-cli-0.12.0.tgz",
+    "@tenancy-node/core": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-core-0.12.0.tgz",
+    "@tenancy-node/db": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-db-0.12.0.tgz",
+    "@tenancy-node/db-mysql": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-db-mysql-0.12.0.tgz",
+    "@tenancy-node/storage-s3": "https://github.com/yedrick/tenat-node/releases/download/v0.12.0/tenancy-node-storage-s3-0.12.0.tgz",
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "ioredis": "^5.11.1",
+    "jsonwebtoken": "^9.0.3",
+    "kysely": "^0.28.17",
+    "mysql2": "^3.24.5",
+    "nodemailer": "^10.0.11",
+    "pg": "^8.23.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.19.43",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

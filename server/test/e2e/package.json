@@ -1,0 +1,13 @@
+{
+  "name": "dental3d-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Prueba web con Chrome real (playwright-core usa el Chrome instalado, no descarga navegadores)",
+  "scripts": {
+    "panel": "node panel.mjs",
+    "flujo": "node flujo.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.49.1"
+  }
+}
